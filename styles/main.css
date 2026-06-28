@@ -1,0 +1,263 @@
+/* ============================================================
+   main.css — Overlay styling for osumania-estimator tosu plugin
+   Clean, readable, compact layout for in-game overlay.
+   ============================================================ */
+
+/* ---- Reset & Base ---- */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html, body {
+  width: 480px;
+  height: 780px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  font-family: 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+  font-size: 12px;
+  color: #e0e0e0;
+  background: transparent;
+  user-select: none;
+}
+
+/* ---- Card Container ---- */
+#card {
+  width: 100%;
+  height: 100%;
+  background: rgba(18, 18, 22, 0.88);
+  border-radius: 8px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  transition: opacity 0.3s ease;
+}
+
+/* ---- Status Bar ---- */
+#status {
+  width: 100%;
+  text-align: center;
+  font-size: 11px;
+  color: #888;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 4px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  transition: color 0.3s ease;
+}
+
+#status.ready { color: #4fc3f7; }
+#status.analyzing { color: #ffb74d; }
+#status.error { color: #ef5350; }
+
+/* ---- Star Rating ---- */
+#star-rating {
+  font-size: 34px;
+  font-weight: 700;
+  line-height: 1.6;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+  padding: 6px 0;
+  transition: color 0.4s ease;
+}
+
+#star-value {
+  font-size: 13px;
+  color: #999;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin-top: -4px;
+  transition: color 0.3s ease;
+}
+
+/* Star color by difficulty tier */
+.star-easy    { color: #66bb6a; }  /* 0.00 - 2.49 */
+.star-normal  { color: #42a5f5; }  /* 2.50 - 3.99 */
+.star-hard    { color: #ffa726; }  /* 4.00 - 5.49 */
+.star-insane  { color: #ef5350; }  /* 5.50 - 6.99 */
+.star-expert  { color: #ab47bc; }  /* 7.00 - 8.99 */
+.star-extreme { color: #ffffff; }  /* 9.00+ */
+
+/* ---- Map Info ---- */
+#map-info {
+  display: flex;
+  gap: 14px;
+  font-size: 12px;
+  color: #b0b0b0;
+  padding: 6px 12px;
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 4px;
+}
+
+#map-info span {
+  white-space: nowrap;
+}
+
+#bpm::before   { content: "♫ "; color: #aaa; }
+#keys::before  { content: "⌨ "; color: #aaa; }
+#ln-ratio::before { content: "▬ "; color: #aaa; }
+
+/* ---- Pattern Breakdown ---- */
+#patterns {
+  width: 100%;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  justify-content: center;
+}
+
+#patterns .tag {
+  font-size: 10px;
+  padding: 2px 8px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #ccc;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  transition: background 0.2s ease;
+}
+
+/* ---- Custom Metrics ---- */
+#custom-metrics {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 11px;
+  color: #999;
+}
+
+#custom-metrics .metric-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 2px 6px;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 2px;
+}
+
+#custom-metrics .metric-label { color: #888; }
+#custom-metrics .metric-value { color: #ccc; font-weight: 500; }
+
+/* ---- Status overflow ---- */
+#status {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ---- Two-column grid for metrics ---- */
+.grid-row {
+  display: flex;
+  gap: 6px;
+  width: 100%;
+}
+.grid-col {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.grid-col .metric-head {
+  font-size: 10px;
+  color: #666;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  padding: 2px 4px;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+  margin-bottom: 2px;
+}
+.mrow {
+  display: flex;
+  justify-content: space-between;
+  padding: 2px 6px;
+  font-size: 11px;
+}
+.mrow span:first-child { color: #888; }
+.mrow span:last-child { color: #ccc; }
+
+/* ---- Pattern bar rows ---- */
+#patterns {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.pattern-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  padding: 2px 4px;
+}
+
+.pattern-name {
+  width: 100px;
+  color: #ccc;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  flex-shrink: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pattern-bar {
+  flex: 1;
+  height: 8px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.pattern-fill {
+  height: 100%;
+  background: rgba(100, 180, 255, 0.6);
+  border-radius: 4px;
+  transition: width 0.5s ease;
+}
+
+.pattern-bpm {
+  width: 48px;
+  text-align: right;
+  color: #888;
+  font-size: 10px;
+  flex-shrink: 0;
+}
+
+/* ---- Metric value rows ---- */
+.metric-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 2px 6px;
+  font-size: 11px;
+  color: #999;
+}
+
+.metric-row span:first-child {
+  color: #888;
+}
+
+.metric-row span:last-child {
+  color: #ccc;
+}
+
+.metric-head {
+  font-size: 10px;
+  color: #666;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  padding: 6px 6px 2px 6px;
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+  margin-top: 4px;
+}
+
+/* ---- Scrollbar (hidden) ---- */
+::-webkit-scrollbar { width: 0; height: 0; }
