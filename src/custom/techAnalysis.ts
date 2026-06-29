@@ -167,8 +167,7 @@ function divisionLabel(row: PrimitiveRow): string {
  */
 function computeRollTrillStats(
   _beatmap: ParsedBeatmap,
-  _patterns: PatternSummary,
-): RollTrillStats {
+  _patterns: PatternSummary): RollTrillStats {
   const chart = createChart(_beatmap);
   const primitives = calculatePrimitives(chart);
 
@@ -321,10 +320,7 @@ function computeRollTrillStats(
  * @param patterns  - Pattern analysis summary.
  * @returns TechMetrics with burst KPS, grace count, and roll/trill stats.
  */
-export function computeTechMetrics(
-  beatmap: ParsedBeatmap,
-  patterns: PatternSummary,
-): TechMetrics {
+export function computeTechMetrics(beatmap: ParsedBeatmap, patterns: PatternSummary, speedRate = 1) {
   if (beatmap.noteStarts.length === 0) {
     return {
       graceCount: 0,
@@ -338,7 +334,7 @@ export function computeTechMetrics(
   }
 
   const chart = createChart(beatmap);
-  const primitives = calculatePrimitives(chart);
+  const primitives = calculatePrimitives(chart, speedRate);
 
   const sfKPS = singleFingerMaxKPS(beatmap);
   const ohKPS = oneHandMaxKPS(beatmap);
@@ -356,5 +352,11 @@ export function computeTechMetrics(
     },
   };
 }
+
+
+
+
+
+
 
 

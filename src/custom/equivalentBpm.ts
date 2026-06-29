@@ -69,10 +69,7 @@ function dominantDivision(patterns: PatternSummary): number {
  * The dominant division now comes directly from the beat-grid-aware
  * clustering, so no separate primitive re-analysis is needed.
  */
-export function computeEquivalentBPM(
-  beatmap: ParsedBeatmap,
-  patterns: PatternSummary,
-): EquivalentBPM {
+export function computeEquivalentBPM(beatmap: ParsedBeatmap, patterns: PatternSummary, speedRate = 1) {
   const raw = rawBPM(beatmap);
   const div = dominantDivision(patterns);
   const patternType = dominantPatternType(patterns);
@@ -96,3 +93,9 @@ export function computeEquivalentBPM(
     patternType,
   };
 }
+
+
+
+
+
+

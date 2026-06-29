@@ -28,8 +28,7 @@ const RIGHT_COLS = new Set([2, 3]);
  * - else → Stream (single stream)
  */
 function classifyStreamType(
-  primitives: PrimitiveRow[],
-): "JumpStream" | "HandStream" | "Stream" | null {
+  primitives: PrimitiveRow[]): "JumpStream" | "HandStream" | "Stream" | null {
   if (primitives.length === 0) return null;
 
   let totalRows = 0;
@@ -120,8 +119,7 @@ function imbalanceRatio(leftCount: number, rightCount: number): number {
 function streamImbalanceForWindow(
   primitives: PrimitiveRow[],
   startIdx: number,
-  windowSize: number,
-): number {
+  windowSize: number): number {
   const end = Math.min(startIdx + windowSize, primitives.length);
   let leftNotes = 0;
   let rightNotes = 0;
@@ -238,12 +236,9 @@ function brokenStream(primitives: PrimitiveRow[]): {
  * @returns StreamMetrics with classification, density grade,
  *          multi-scale imbalance, and broken stream density.
  */
-export function computeStreamMetrics(
-  beatmap: ParsedBeatmap,
-  _density: unknown,
-): StreamMetrics {
+export function computeStreamMetrics(beatmap: ParsedBeatmap, _density: unknown, speedRate = 1) {
   const chart = createChart(beatmap);
-  const primitives = calculatePrimitives(chart);
+  const primitives = calculatePrimitives(chart, speedRate);
 
   if (!primitives.length || beatmap.noteStarts.length === 0) {
     return {
@@ -288,4 +283,10 @@ export function computeStreamMetrics(
     brokenMed: bs.med,
   };
 }
+
+
+
+
+
+
 

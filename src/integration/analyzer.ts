@@ -216,7 +216,7 @@ export function analyzeBeatmap(
   // ---- Step 3: Pattern Analysis ----
   let patterns: PatternSummary;
   try {
-    patterns = analyzePatterns(beatmap);
+    patterns = analyzePatterns(beatmap, opts.speedRate);
   } catch {
     patterns = defaultPatternSummary(beatmap.duration, beatmap.lnRatio);
   }
@@ -224,8 +224,9 @@ export function analyzeBeatmap(
   // ---- Step 4: Custom Metrics ----
   let custom: CustomMetrics;
   try {
-    custom = computeCustomMetrics(beatmap, sunny, patterns);
-  } catch {
+    custom = computeCustomMetrics(beatmap, sunny, patterns, opts.speedRate);
+  } catch (err) {
+    console.error("[CustomMetrics] failed", err);
     custom = defaultCustomMetrics(
       { perColumn: [], perHand: { left: { maxDensity: 0, medianDensity: 0 }, right: { maxDensity: 0, medianDensity: 0 } }, bothHands: { maxDensity: 0, medianDensity: 0 } },
       beatmap.lnRatio,
@@ -237,7 +238,8 @@ export function analyzeBeatmap(
   const { finalStar } = aggregateDifficulty(sunny, patterns, custom);
 
   // ---- Step 6: Build result ----
-  const metaBpm = computeBPM(beatmap);
+  const rawBpm = computeBPM(beatmap);
+  const metaBpm = Math.round(rawBpm * opts.speedRate);
 
   // Use Sunny's graph if available, otherwise fall back
   const graph: DifficultyGraph =

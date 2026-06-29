@@ -14,11 +14,14 @@ function deploy() {
     ["settings.json", "settings.json"],
     ["index.html", "index.html"],
     ["styles/main.css", "styles/main.css"],
+    // Etterna WASM + JS glue (vibro detection)
+    ["src/ett/versions/minaclac-72.3.js", "dist/minaclac-72.3.js"],
+    ["src/ett/versions/minaclac-72.3.wasm", "dist/minaclac-72.3.wasm"],
   ];
   for (const [src, dst] of files) {
     copyFileSync(src, join(deployDir, dst));
   }
-  console.log(`[deploy] → ${deployDir}/`);
+  console.log(`[deploy] -> ${deployDir}/`);
 }
 
 /** @type {esbuild.BuildOptions} */
@@ -29,7 +32,7 @@ const config = {
   platform: "browser",
   format: "iife",
   target: "es2020",
-  sourcemap: true,
+  sourcemap: false,
   minify: false,
   treeShaking: true,
   define: {

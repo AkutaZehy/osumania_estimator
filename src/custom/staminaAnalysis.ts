@@ -22,8 +22,7 @@ import type { PrimitiveRow } from "../types/primitives.js";
  */
 function buildDensityTimeSeries(
   primitives: PrimitiveRow[],
-  stepMs: number,
-): Array<[number, number]> {
+  stepMs: number): Array<[number, number]> {
   if (primitives.length === 0) return [];
 
   const startTime = primitives[0]!.time;
@@ -67,8 +66,7 @@ function buildDensityTimeSeries(
  */
 function analyzeDensitySeries(
   series: Array<[number, number]>,
-  stepMs: number,
-): StaminaMetrics {
+  stepMs: number): StaminaMetrics {
   if (series.length === 0) {
     return {
       maxDensity: 0, maxDuration: 0,
@@ -150,10 +148,7 @@ function analyzeDensitySeries(
  * @returns StaminaMetrics with maxDensity, maxDuration, medDensity,
  *          medDuration, medTotalTime.
  */
-export function computeStaminaMetrics(
-  beatmap: ParsedBeatmap,
-  _density: unknown,
-): StaminaMetrics {
+export function computeStaminaMetrics(beatmap: ParsedBeatmap, _density: unknown, speedRate = 1) {
   if (beatmap.noteStarts.length === 0) {
     return {
       maxDensity: 0,
@@ -165,7 +160,7 @@ export function computeStaminaMetrics(
   }
 
   const chart = createChart(beatmap);
-  const primitives = calculatePrimitives(chart);
+  const primitives = calculatePrimitives(chart, speedRate);
 
   if (primitives.length === 0) {
     return {
@@ -208,5 +203,11 @@ function computeSwitchFrequency(primitives: PrimitiveRow[]): number {
   }
   return maxSwitches;
 }
+
+
+
+
+
+
 
 

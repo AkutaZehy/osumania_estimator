@@ -94,12 +94,8 @@ function countInverses(patterns: PatternSummary): number {
  * @param patterns  - Pattern analysis summary.
  * @returns LNMetrics with ratio, release difficulty, and pattern counts.
  */
-export function computeLNMetrics(
-  beatmap: ParsedBeatmap,
-  sunny: SunnyResult,
-  patterns: PatternSummary,
-): LNMetrics {
-  const ratio = beatmap.lnRatio;
+export function computeLNMetrics(parsed: ParsedBeatmap, sunny: SunnyResult, patterns: PatternSummary, speedRate = 1) {
+  const ratio = parsed.lnRatio;
 
   const release = releaseDifficulty(sunny);
   const shieldCount = countShields(patterns);
@@ -114,3 +110,9 @@ export function computeLNMetrics(
     inverseCount,
   };
 }
+
+
+
+
+
+

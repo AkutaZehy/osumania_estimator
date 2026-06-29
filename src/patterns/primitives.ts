@@ -78,7 +78,7 @@ export function detectDirection(
  * Extract row-level primitives from a Chart.
  * Each returned PrimitiveRow corresponds to one TimeItem.
  */
-export function calculatePrimitives(chart: Chart): PrimitiveRow[] {
+export function calculatePrimitives(chart: Chart, speedRate: number = 1): PrimitiveRow[] {
   if (!chart.notes.length) return [];
   const firstNote = chart.notes[0]!.time;
   const firstRow = chart.notes[0]!.data;
@@ -143,8 +143,8 @@ export function calculatePrimitives(chart: Chart): PrimitiveRow[] {
     out.push({
       index,
       time: t - firstNote,
-      msPerBeat: (t - previousTime) * 4.0,
-      beatLength: beatLengthAt(chart, t),
+      msPerBeat: ((t - previousTime) * 4.0) / speedRate,
+      beatLength: beatLengthAt(chart, t) / speedRate,
       notes: currentRow.length,
       jacks,
       direction,

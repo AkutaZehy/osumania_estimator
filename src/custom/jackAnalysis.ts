@@ -100,32 +100,27 @@ function med4RowDensity(primitives: PrimitiveRow[]): number {
  * Prevents normal stream from being counted as anchors.
  */
 function countAnchors(
-  beatmap: ParsedBeatmap,
+  _beatmap: ParsedBeatmap,
   primitives: PrimitiveRow[],
 ): number {
   if (primitives.length === 0) return 0;
 
-  // Compute max acceptable gap for anchor detection (2× the dominant beat length)
-  let beatLength = 500;
-  for (const tp of beatmap.timingPoints) {
-    if (tp.uninherited) { beatLength = tp.beatLength; break; }
-  }
-  const maxGapMs = beatLength * 2; // ~686ms at 175 BPM
-
   const rowCols = primitives.map((p) => new Set(p.rawNotes));
   const rowTimes = primitives.map((p) => p.time);
+  const rowBeatLengths = primitives.map((p) => p.beatLength);
 
   let anchorCount = 0;
 
-  for (let col = 0; col < beatmap.columnCount; col++) {
+  for (let col = 0; col < 4; col++) {
     let consecutive = 0;
     let prevTime = -1;
 
     for (let i = 0; i < rowCols.length; i++) {
       if (rowCols[i]!.has(col)) {
         const t = rowTimes[i]!;
+        const maxGap = (rowBeatLengths[i] ?? 500) * 2;
         // Only count as consecutive if gap is within anchor speed threshold
-        if (prevTime < 0 || (t - prevTime) <= maxGapMs) {
+        if (prevTime < 0 || (t - prevTime) <= maxGap) {
           consecutive++;
         } else {
           if (consecutive >= 3) anchorCount++;
@@ -296,11 +291,26 @@ function detectVibro(
   densityGrade: string | null,
   anchorCount: number,
   singleFingerPressure: number,
+  primitives: PrimitiveRow[],
 ): boolean {
-  // Approximate Etterna's JackSpeed/Overall ≥ 0.95 heuristic
-  if (densityGrade === "Dense" && anchorCount >= 2) return true;
-  if (densityGrade === "Mid" && anchorCount >= 3) return true;
-  if (singleFingerPressure > 0.85 && anchorCount >= 2) return true;
+  // Per-column actual MAX density in 4-row windows (not P90 — vibro is about peaks)
+  let perColMax = 0;
+  for (let c = 0; c < 4; c++) {
+    let best = 0;
+    for (let i = 0; i < primitives.length; i++) {
+      let cnt = 0;
+      const end = Math.min(i + 4, primitives.length);
+      for (let j = i; j < end; j++) {
+        if (primitives[j]!.rawNotes.includes(c)) cnt++;
+      }
+      if (cnt > best) best = cnt;
+    }
+    if (best > perColMax) perColMax = best;
+  }
+
+  // Vibro: sustained single-column jacks (using actual MAX, not P90)
+  if (perColMax >= 4 && anchorCount >= 3) return true;
+  if (perColMax >= 3 && anchorCount >= 5) return true;
   return false;
 }
 
@@ -316,12 +326,9 @@ function detectVibro(
  * @returns JackMetrics with density grade, anchor count, pressure scores,
  *          multi-scale imbalance, bias flag, and vibro flag.
  */
-export function computeJackMetrics(
-  beatmap: ParsedBeatmap,
-  density: DensityMetrics,
-): JackMetrics {
+export function computeJackMetrics(beatmap: ParsedBeatmap, density: DensityMetrics, speedRate = 1): JackMetrics {
   const chart = createChart(beatmap);
-  const primitives = calculatePrimitives(chart);
+  const primitives = calculatePrimitives(chart, speedRate);
 
   if (!primitives.length || beatmap.noteStarts.length === 0) {
     return {
@@ -353,6 +360,12 @@ export function computeJackMetrics(
     imbalance16r: jackImbalance16r(primitives),
     imbalanceTotal: jackImbalanceTotal(primitives),
     isBias: isBias(primitives),
-    isVibro: detectVibro(densityGrade, anchorCount, sfp),
+    isVibro: false, // disabled — needs Etterna JackSpeed for reliable detection
   };
 }
+
+
+
+
+
+

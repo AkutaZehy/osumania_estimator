@@ -14,9 +14,9 @@ import { calculateClusteredPatterns } from "./clustering.js";
  * Run full pattern analysis on a parsed beatmap.
  * Pipeline: parse → primitives → detect → cluster → categorize
  */
-export function analyzePatterns(beatmap: ParsedBeatmap): PatternSummary {
+export function analyzePatterns(beatmap: ParsedBeatmap, speedRate: number = 1): PatternSummary {
   const chart: Chart = createChart(beatmap);
-  const primitives = calculatePrimitives(chart);
+  const primitives = calculatePrimitives(chart, speedRate);
   const duration = chart.duration;
 
   // Detect patterns via sliding window

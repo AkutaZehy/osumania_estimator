@@ -65,7 +65,13 @@ export function showResult(result: DifficultyResult): void {
     const top = topClusters[0]!;
     const effBpm = top.bpm || 0;
     const color = starColor(finalStar);
-    setText("star-rating", `${effBpm} ${clusterName(top)}`);
+    if (j.isVibro) {
+      setText("star-rating", "VIBRO");
+      const se = el("star-rating"); if (se) se.style.color = "#ff4444";
+    } else {
+      setText("star-rating", `${effBpm} ${clusterName(top)}`);
+      const se = el("star-rating"); if (se) se.style.color = color;
+    }
     const se = el("star-rating"); if (se) se.style.color = color;
   } else {
     setText("star-rating", "\u2605 --");
@@ -127,7 +133,7 @@ export function showResult(result: DifficultyResult): void {
     mrow("Finger", j.singleFingerPressure.toFixed(2)),
     mrow("Hand", j.singleHandPressure.toFixed(2)),
     mrow("Imbal 4r/16r/T", jackImbal),
-    ...(j.isVibro ? [mrow("Vibro", "YES")] : []),
+    ...(j.isVibro ? [mrow("Vibro", "ETT")] : []),
   ];
   r.push(col("JACK", ...jackItems));
   const streamImbal = `${s.imbalance4r.toFixed(2)}/${s.imbalance16r.toFixed(2)}/${s.imbalanceTotal.toFixed(2)}`;

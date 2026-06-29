@@ -284,7 +284,7 @@ export function CoreStream(xs: PrimitiveRow[]): number {
 export function CoreJacks(xs: PrimitiveRow[]): number {
   if (!xs.length) return 0;
   const x0 = xs[0]!;
-  return x0.jacks > 1 && x0.msPerBeat < 2000 ? 1 : 0;
+  return x0.jacks >= 1 && x0.msPerBeat < 2000 ? 1 : 0;
 }
 
 export function CoreChordstream(xs: PrimitiveRow[]): number {

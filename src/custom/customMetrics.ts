@@ -37,27 +37,28 @@ export function computeCustomMetrics(
   parsed: ParsedBeatmap,
   sunny: SunnyResult,
   patterns: PatternSummary,
+  speedRate: number = 1,
 ): CustomMetrics {
   // Density metrics (used by multiple sub-modules).
   const density = computeDensityMetrics(parsed);
 
   // Equivalent BPM based on pattern type and note division.
-  const equivalentBPM = computeEquivalentBPM(parsed, patterns);
+  const equivalentBPM = computeEquivalentBPM(parsed, patterns, speedRate);
 
   // Jack-specific analysis.
-  const jack = computeJackMetrics(parsed, density);
+  const jack = computeJackMetrics(parsed, density, speedRate);
 
   // Stream-specific analysis.
-  const stream = computeStreamMetrics(parsed, density);
+  const stream = computeStreamMetrics(parsed, density, speedRate);
 
   // Tech-specific analysis (bursts, graces, rolls/trills).
-  const tech = computeTechMetrics(parsed, patterns);
+  const tech = computeTechMetrics(parsed, patterns, speedRate);
 
   // Stamina analysis (stretches above median density).
-  const stamina = computeStaminaMetrics(parsed, density);
+  const stamina = computeStaminaMetrics(parsed, density, speedRate);
 
   // LN-specific analysis (ratio, release, patterns).
-  const ln = computeLNMetrics(parsed, sunny, patterns);
+  const ln = computeLNMetrics(parsed, sunny, patterns, speedRate);
 
   return {
     density,

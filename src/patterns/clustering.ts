@@ -73,6 +73,8 @@ interface ClassifiedPattern {
   division: number;
   /** Specific sub-pattern type for this speed band (computed from rows, not inherited) */
   specificType: string | null;
+  /** Average beatLength of rows in this speed band (for correct BPM display with BPM changes) */
+  avgBeatLength: number;
   start: number;
   end: number;
   mixed: boolean;
@@ -127,14 +129,20 @@ function classifyPatterns(
         if (hasHand) bandSpecific = "HandStream";
         else if (hasJump) bandSpecific = "JumpStream";
       } else if (p.pattern === "Jacks") {
-        if (hasHand) bandSpecific = "ChordJacks";
-        else if (hasJump) bandSpecific = "MiniJacks";
+        if (hasJump) bandSpecific = "ChordJacks";
+        else bandSpecific = "MiniJacks";
       }
+
+      // Compute average beatLength of rows at this speed (for correct BPM with variable BPM)
+      const avgBL = speedRows.length > 0
+        ? speedRows.reduce((s, r) => s + r.beatLength, 0) / speedRows.length
+        : beatLength;
 
       const item: ClassifiedPattern = {
         source: p,
         division: div,
         specificType: bandSpecific,
+        avgBeatLength: avgBL,
         start,
         end,
         mixed: p.mixed,
@@ -172,7 +180,9 @@ function buildGroups(classified: ClassifiedPattern[]): Map<string, ClusterGroup>
   const groups = new Map<string, ClusterGroup>();
 
   for (const item of classified) {
-    const key = `${item.source.pattern}@@${item.division}@@${item.mixed ? 1 : 0}`;
+    // Include BPM in key to separate different BPM sections (round to nearest integer)
+    const bpmKey = Math.round((60000 / item.avgBeatLength) * item.division / 4);
+    const key = `${item.source.pattern}@@${item.division}@@${item.mixed ? 1 : 0}@@${bpmKey}`;
     if (!groups.has(key)) {
       groups.set(key, {
         pattern: item.source.pattern,
@@ -234,9 +244,13 @@ function buildClusterOutput(
   );
 
   const division = group.division;
-  const rawBPM = beatLength > 0 ? 60000 / beatLength : 120;
-  const bpm = Math.round(rawBPM * division / 4);
-  const timingMs = Math.round(beatLength / division);
+  // Use actual average beatLength from rows (round BPM to nearest 5 for stable clustering)
+  const avgBL = group.items.length > 0
+    ? group.items.reduce((s, m) => s + m.avgBeatLength, 0) / group.items.length
+    : beatLength;
+  const rawBPM = 60000 / avgBL;
+  const bpm = Math.round(rawBPM * division / 4 / 5) * 5; // round to nearest 5
+  const timingMs = Math.round(avgBL / division);
 
   return {
     pattern: group.pattern,
