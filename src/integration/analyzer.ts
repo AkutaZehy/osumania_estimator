@@ -103,8 +103,15 @@ function defaultCustomMetrics(
       ratio: lnRatio,
       releaseDifficulty: 0,
       shieldCount: 0,
+      antiShieldCount: 0,
       columnLockCount: 0,
       inverseCount: 0,
+      asyncReleaseCount: 0,
+      releaseCount: 0,
+      tapLNCount: 0,
+      overlayCount: 0,
+      totalLN: 0,
+      strictLNRatio: 0,
     },
   };
 }

@@ -107,14 +107,26 @@ export interface StaminaMetrics {
 export interface LNMetrics {
   /** LN ratio */
   ratio: number;
+  /** LN ratio excluding tap LNs (treated as rice) */
+  strictLNRatio: number;
   /** Release difficulty (adapted from Sunny Rbar) */
   releaseDifficulty: number;
-  /** Shield patterns detected */
+  /** Shield patterns detected (normal→LN head) */
   shieldCount: number;
+  /** Anti-Shield patterns detected (LN tail→normal) */
+  antiShieldCount: number;
   /** Column lock patterns detected */
   columnLockCount: number;
   /** Inverse patterns detected (alternating LN releases) */
   inverseCount: number;
+  /** A: different head col, same tail time pairs */
+  asyncReleaseCount: number;
+  /** R: same head col, different tail time pairs */
+  releaseCount: number;
+  /** Tap LN count: short LNs <= 16th note duration */
+  tapLNCount: number;
+  /** Total LN count (for overlay percentage) */
+  totalLN: number;
 }
 
 /** Complete custom metrics result */

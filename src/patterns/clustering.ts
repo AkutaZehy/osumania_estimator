@@ -96,6 +96,21 @@ function classifyPatterns(
 
   for (const p of patterns) {
     totalPatterns++;
+    // LN patterns (Coordination/Density/Wildcard) don't participate in speed clustering
+    const isLN = p.pattern === "Coordination" || p.pattern === "Density" || p.pattern === "Wildcard";
+    if (isLN) {
+      classified.push({
+        source: p,
+        division: 0,
+        specificType: p.specificType ?? null,
+        avgBeatLength: beatLength,
+        start: p.start,
+        end: p.end,
+        mixed: p.mixed,
+      });
+      continue;
+    }
+
     // Find primitive rows within the pattern's time range
     const rows = primitives.filter((r) => r.time >= p.start && r.time < p.end);
     if (rows.length === 0) continue;

@@ -76,10 +76,13 @@ Shown when LN ratio > 1% or patterns detected.
 
 | Field | Meaning |
 |-------|---------|
-| Ratio | LN percentage |
-| Shields | Normal note -> LN head on same column within 1/4 beat |
-| ColLock | Adjacent same-hand hits >= 3 at 90+ BPM while LN held |
-| Inverse | Alternating LN releases with consistent gap timing |
+| Ratio | `60% (45%)` — all LN / excluding Tap LN |
+| Overlay | `585 (12%)` — overlapping LN pairs / % of total LN |
+| Tap LN | Short LNs (<=16th note) |
+| Shield/R | `12/8` — Shield (normal->LN head) / Anti-Shield (LN tail->normal) |
+| ColLock | Held LN + adjacent column hits >= 2 at 90+ BPM within 3 beats |
+| A/R | `62/15` — Attack (different start, same tail) / Release (same start, different tail) |
+| Inverse | Alternating LN tail->head with consistent gaps (>=2 col bodies)
 
 ### JACK Panel
 

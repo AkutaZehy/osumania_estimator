@@ -609,26 +609,29 @@ function CoordinationColumnLock(xs: PrimitiveRow[]): number {
   if (xs.length < 3) return 0;
   const x0 = xs[0]!;
   const split = x0.leftHandKeys;
-  const lnCol =
-    x0.lnHeads.length ? x0.lnHeads[0] : null;
+  const lnCol = x0.lnHeads.length ? x0.lnHeads[0] : null;
   if (lnCol == null) return 0;
 
   const adjCols = [lnCol - 1, lnCol + 1].filter(
-    (c) =>
-      c >= 0 &&
-      c < x0.keys &&
-      isSameHandAdjacent(lnCol, c, split),
+    (c) => c >= 0 && c < x0.keys && isSameHandAdjacent(lnCol, c, split),
   );
   if (!adjCols.length) return 0;
 
+  // Time-based window: 3 beats (min LN length for uncomfortable LN), not 8 primitive rows
+  const windowMs = x0.beatLength * 3;
+  const limitTime = x0.time + windowMs;
+
   for (const adj of adjCols) {
     const hits: number[] = [];
-    for (const row of xs.slice(0, 8)) {
-      if (row.lnBodies.includes(lnCol) && row.normalNotes.includes(adj)) {
+    for (const row of xs) {
+      if (row.time > limitTime) break;
+      if (!row.lnBodies.includes(lnCol)) continue;
+      // Count any playable note on adjacent column (normal, LN head, tap LN)
+      if (row.rawNotes.includes(adj)) {
         hits.push(row.time);
       }
     }
-    if (hits.length < 3) continue;
+    if (hits.length < 2) continue;
 
     const bpms: number[] = [];
     for (let i = 0; i < hits.length - 1; i += 1) {

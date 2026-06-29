@@ -1,6 +1,5 @@
 // ============================================================
-// LN Analysis — Long Note ratio, release difficulty,
-// and LN-specific pattern detection (shield, column lock, inverse).
+// LN Analysis — Long Note metrics
 // ============================================================
 
 import type { LNMetrics } from "../types/custom.js";
@@ -8,111 +7,117 @@ import type { ParsedBeatmap } from "../types/beatmap.js";
 import type { SunnyResult } from "../types/algorithm.js";
 import type { PatternSummary } from "../types/patterns.js";
 
-/**
- * Compute release difficulty from Sunny Rework Rbar values.
- * Rbar ≤ 1, where lower values = harder to release.
- * We invert and average to get a difficulty score.
- */
-function releaseDifficulty(sunny: SunnyResult): number {
-  if (!sunny.bars || sunny.bars.length === 0) return 0;
+interface LN { col: number; start: number; end: number }
 
-  let sum = 0;
-  let count = 0;
-
-  for (const bar of sunny.bars) {
-    // rbar ≤ 1; lower = harder.
-    // Convert: difficulty = 1 - rbar (so higher = harder).
-    sum += 1 - bar.rbar;
-    count++;
+function getLNs(p: ParsedBeatmap): LN[] {
+  const out: LN[] = [];
+  for (let i = 0; i < p.noteTypes.length; i++) {
+    if ((p.noteTypes[i]! & 128) !== 0) out.push({ col: p.columns[i]!, start: p.noteStarts[i]!, end: p.noteEnds[i]! });
   }
-
-  if (count === 0) return 0;
-
-  const avg = sum / count;
-  return Math.round(avg * 10000) / 10000;
+  return out;
 }
 
-/**
- * Count shield patterns from PatternSummary clusters.
- * Looks for "Shield" in specific type names.
- */
-function countShields(patterns: PatternSummary): number {
-  let count = 0;
-  for (const cluster of patterns.clusters) {
-    for (const [name] of cluster.specificTypes) {
-      if (name === "Shield") {
-        count++;
+function relDiff(s: SunnyResult): number {
+  if (!s.bars?.length) return 0;
+  let sum = 0, n = 0;
+  for (const b of s.bars) { sum += 1 - b.rbar; n++; }
+  return n ? Math.round((sum/n)*10000)/10000 : 0;
+}
+
+function tapLN(p: ParsedBeatmap): number {
+  let bl = 500;
+  for (const tp of p.timingPoints) { if (tp.uninherited) { bl = tp.beatLength; break; } }
+  const max = bl/4; let c = 0;
+  for (let i = 0; i < p.noteTypes.length; i++) {
+    if ((p.noteTypes[i]!&128) && p.noteEnds[i]!-p.noteStarts[i]! <= max) c++;
+  }
+  return c;
+}
+
+function releaseTypes(lns: LN[]): { a: number; r: number } {
+  // A (Attack): different start, same tail (tail-time grouping, count cross-start pairs)
+  const tailMap = new Map<number, LN[]>();
+  for (const l of lns) { const g = tailMap.get(l.end)??[]; g.push(l); tailMap.set(l.end, g); }
+  let a = 0;
+  for (const g of tailMap.values()) {
+    for (let i = 0; i < g.length; i++) {
+      for (let j = i + 1; j < g.length; j++) {
+        if (g[i]!.start !== g[j]!.start) a++;
       }
     }
   }
-  return count;
-}
 
-/**
- * Count column lock patterns from PatternSummary clusters.
- * Looks for "Column Lock" in specific type names.
- */
-function countColumnLocks(patterns: PatternSummary): number {
-  let count = 0;
-  for (const cluster of patterns.clusters) {
-    for (const [name] of cluster.specificTypes) {
-      if (name === "Column Lock") {
-        count++;
+  // R (Release): same start, different tail (start-time grouping, count cross-tail pairs)
+  const startMap = new Map<number, LN[]>();
+  for (const l of lns) { const g = startMap.get(l.start)??[]; g.push(l); startMap.set(l.start, g); }
+  let r = 0;
+  for (const g of startMap.values()) {
+    for (let i = 0; i < g.length; i++) {
+      for (let j = i + 1; j < g.length; j++) {
+        if (g[i]!.end !== g[j]!.end) r++;
       }
     }
   }
-  return count;
+  return { a, r };
 }
 
-/**
- * Count inverse patterns from PatternSummary clusters.
- * Looks for "Inverse" in specific type names.
- */
-function countInverses(patterns: PatternSummary): number {
-  let count = 0;
-  for (const cluster of patterns.clusters) {
-    for (const [name] of cluster.specificTypes) {
-      if (name === "Inverse") {
-        count++;
+function overlays(lns: LN[]): number {
+  const ev: Array<{t:number; d:1|-1}> = [];
+  for (const l of lns) { ev.push({t:l.start,d:1},{t:l.end,d:-1}); }
+  // Starts before ends at same time → head-to-tail (end==next start) NOT counted
+  ev.sort((a,b)=>a.t-b.t||a.d-b.d);
+  let act=0, cnt=0, lastStartT=-1;
+  for (const e of ev) {
+    if (e.d===1) {
+      // Skip simultaneous starts (chords) — only count first
+      if (e.t !== lastStartT) { cnt += Math.min(1,act); lastStartT = e.t; }
+      act++;
+    } else { act--; }
+  }
+  return cnt;
+}
+
+export function computeLNMetrics(p: ParsedBeatmap, s: SunnyResult, pt: PatternSummary, _sr=1) {
+  const lns = getLNs(p);
+  const {a,r} = releaseTypes(lns);
+
+  // Anti-shield: LN tail → normal on same column within 0.25 beats
+  let antiShields = 0;
+  let beatLength = 500;
+  for (const tp of p.timingPoints) { if (tp.uninherited) { beatLength = tp.beatLength; break; } }
+  const limit = beatLength * 0.25;
+  for (let i = 0; i < p.columns.length; i++) {
+    if ((p.noteTypes[i]! & 128) === 0) continue; // skip non-LN
+    const endTime = p.noteEnds[i]!;
+    const col = p.columns[i]!;
+    for (let j = 0; j < p.columns.length; j++) {
+      if (i === j) continue;
+      if ((p.noteTypes[j]! & 128) !== 0) continue; // only normal notes
+      if (p.columns[j]! === col && p.noteStarts[j]! > endTime && p.noteStarts[j]! - endTime <= limit) {
+        antiShields++;
+        break; // one anti-shield per tail
       }
     }
   }
-  return count;
-}
 
-/**
- * Compute LN-specific metrics for a parsed 4K beatmap.
- *
- * Release difficulty is derived from Sunny Rework's Rbar strain values:
- *   difficulty = 1 - average(rbar)  (higher = harder releases)
- *
- * Shield, column lock, and inverse counts come from PatternSummary
- * cluster detection data.
- *
- * @param beatmap   - Parsed beatmap data.
- * @param sunny     - Sunny Rework algorithm result.
- * @param patterns  - Pattern analysis summary.
- * @returns LNMetrics with ratio, release difficulty, and pattern counts.
- */
-export function computeLNMetrics(parsed: ParsedBeatmap, sunny: SunnyResult, patterns: PatternSummary, speedRate = 1) {
-  const ratio = parsed.lnRatio;
-
-  const release = releaseDifficulty(sunny);
-  const shieldCount = countShields(patterns);
-  const columnLockCount = countColumnLocks(patterns);
-  const inverseCount = countInverses(patterns);
+  // Strict LN ratio: exclude tap LNs from LN count
+  const tapCount = tapLN(p);
+  const totalLN = lns.length;
+  const strictLN = totalLN - tapCount;
+  const totalNotes = p.noteStarts.length;
 
   return {
-    ratio,
-    releaseDifficulty: release,
-    shieldCount,
-    columnLockCount,
-    inverseCount,
+    ratio: p.lnRatio,
+    strictLNRatio: totalNotes > 0 ? strictLN / totalNotes : 0,
+    releaseDifficulty: relDiff(s),
+    shieldCount: pt._lnCounts?.shields ?? 0,
+    antiShieldCount: antiShields,
+    columnLockCount: pt._lnCounts?.columnLocks ?? 0,
+    inverseCount: pt._lnCounts?.inverses ?? 0,
+    asyncReleaseCount: a,
+    releaseCount: r,
+    tapLNCount: tapCount,
+    overlayCount: overlays(lns),
+    totalLN: lns.length,
   };
 }
-
-
-
-
-
-

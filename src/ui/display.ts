@@ -115,10 +115,16 @@ export function showResult(result: DifficultyResult): void {
   ];
   if (d.perColumn.length === 4) bpmItems.push(mrow("Cols", d.perColumn.map((c) => `${c.maxDensity.toFixed(1)}`).join(" | ")));
   r.push(col("BPM / DENSITY", ...bpmItems));
-  if (ln.ratio > 0.01 || ln.shieldCount > 0 || ln.columnLockCount > 0 || ln.inverseCount > 0) {
-    const lnItems = [mrow("Ratio", `${(ln.ratio * 100).toFixed(0)}%`)];
-    if (ln.shieldCount > 0) lnItems.push(mrow("Shields", `${ln.shieldCount}`));
+  if (ln.ratio > 0.01 || ln.shieldCount > 0 || ln.columnLockCount > 0 || ln.inverseCount > 0 || ln.asyncReleaseCount > 0 || ln.releaseCount > 0 || ln.tapLNCount > 0 || ln.overlayCount > 0) {
+    const lnItems = [mrow("Ratio", `${(ln.ratio * 100).toFixed(0)}% (${(ln.strictLNRatio * 100).toFixed(0)}%)`)];
+    if (ln.overlayCount > 0) {
+      const overlayPct = ln.totalLN > 0 ? (ln.overlayCount / ln.totalLN * 100).toFixed(0) : "0";
+      lnItems.push(mrow("Overlay", `${ln.overlayCount} (${overlayPct}%)`));
+    }
+    if (ln.tapLNCount > 0) lnItems.push(mrow("Tap LN", `${ln.tapLNCount}`));
+    if (ln.shieldCount > 0 || ln.antiShieldCount > 0) lnItems.push(mrow("Shield/R", `${ln.shieldCount}/${ln.antiShieldCount}`));
     if (ln.columnLockCount > 0) lnItems.push(mrow("ColLock", `${ln.columnLockCount}`));
+    if (ln.asyncReleaseCount > 0 || ln.releaseCount > 0) lnItems.push(mrow("A/R", `${ln.asyncReleaseCount}/${ln.releaseCount}`));
     if (ln.inverseCount > 0) lnItems.push(mrow("Inverse", `${ln.inverseCount}`));
     r.push(col("LONG NOTE", ...lnItems));
   }

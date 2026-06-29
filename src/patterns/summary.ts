@@ -35,12 +35,12 @@ export function analyzePatterns(beatmap: ParsedBeatmap, speedRate: number = 1): 
   // Compute LN ratio and HB row ratio for mode detection
   const lnRatio = beatmap.lnRatio;
 
-  // Cluster patterns by beat-grid division (replaces old BPM clustering)
+  // Cluster patterns by beat-grid division
   const modeTag = resolveModeTag(lnRatio, 0);
   const clusters = calculateClusteredPatterns(foundPatterns, primitives, { beatLength, modeTag });
 
-  // Filter: keep clusters with valid division (div > 0 filters grace leftovers)
-  const filtered = clusters.filter((c) => c.division > 0);
+  // Filter: keep clusters with valid division (>= 0 for LN patterns)
+  const filtered = clusters.filter((c) => c.division >= 0);
 
   // Sort by amount descending, prune duplicates
   filtered.sort((a, b) => b.amount - a.amount);
@@ -72,7 +72,15 @@ export function analyzePatterns(beatmap: ParsedBeatmap, speedRate: number = 1): 
     modeTag,
     svAmount,
     duration,
-    importantClusters: kept, // already deduplicated by (pattern × division)
+    importantClusters: kept,
+    // Pass raw LN pattern counts for accurate display
+    _lnCounts: {
+      shields: foundPatterns.filter((p) => p.specificType === "Shield").length,
+      antiShields: 0, // counted from parsed data in lnAnalysis
+      columnLocks: foundPatterns.filter((p) => p.specificType === "ColumnLock").length,
+      inverses: foundPatterns.filter((p) => p.specificType === "Inverse").length,
+      releases: foundPatterns.filter((p) => p.specificType === "Release").length,
+    },
   };
 }
 

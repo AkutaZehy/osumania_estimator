@@ -33,9 +33,7 @@ export function createChart(beatmap: ParsedBeatmap): Chart {
     const isLN = (type & 128) !== 0;
     row[col] = isLN ? NoteType.HOLDHEAD : NoteType.NORMAL;
 
-    // Handle LN bodies and tails at intermediate times
-    // (Simple version: we mark tails only. Full body tracking is in patternOsuParser
-    // but for Sunny Rework and basic pattern detection this suffices.)
+    // Handle LN tails
     if (isLN && endTime > startTime) {
       if (!timeMap.has(endTime)) {
         timeMap.set(endTime, new Array<NoteType>(keys).fill(NoteType.NOTHING));
@@ -43,6 +41,24 @@ export function createChart(beatmap: ParsedBeatmap): Chart {
       const tailRow = timeMap.get(endTime)!;
       if (tailRow[col] === NoteType.NOTHING) {
         tailRow[col] = NoteType.HOLDTAIL;
+      }
+    }
+  }
+
+  // Insert LN body markers: for each LN, mark HOLDBODY at all intermediate time points
+  for (let i = 0; i < noteCount; i++) {
+    const startTime = beatmap.noteStarts[i]!;
+    const endTime = beatmap.noteEnds[i]!;
+    const type = beatmap.noteTypes[i]!;
+    const col = beatmap.columns[i]!;
+    if ((type & 128) !== 0 && endTime > startTime) {
+      for (const t of timeMap.keys()) {
+        if (t > startTime && t < endTime) {
+          const bodyRow = timeMap.get(t)!;
+          if (bodyRow[col] === NoteType.NOTHING) {
+            bodyRow[col] = NoteType.HOLDBODY;
+          }
+        }
       }
     }
   }
