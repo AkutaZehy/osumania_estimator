@@ -36,7 +36,7 @@ const config = {
   minify: false,
   treeShaking: true,
   define: {
-    __VERSION__: JSON.stringify("0.1.0"),
+    __VERSION__: JSON.stringify("1.0.0"),
     __DEV__: JSON.stringify(isWatch),
   },
 };
