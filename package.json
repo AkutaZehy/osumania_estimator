@@ -1,6 +1,6 @@
 {
   "name": "osumania-estimator",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "osu!mania 4K key analysis and difficulty estimation plugin for tosu",
   "private": true,
   "type": "module",
