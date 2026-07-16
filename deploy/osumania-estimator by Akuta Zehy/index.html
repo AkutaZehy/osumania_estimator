@@ -25,9 +25,37 @@
     </div>
     <!-- Pattern breakdown -->
     <div id="patterns"></div>
+    <!-- Structure grid (pattern detail cards) -->
+    <div id="structure-grid" style="display:none"></div>
+    <!-- Segment table -->
+    <div id="segment-table" style="display:none">
+      <div class="segment-header">SEGMENTS</div>
+      <div id="segment-body"></div>
+    </div>
     <!-- Custom metrics -->
     <div id="custom-metrics"></div>
   </div>
-  <script src="dist/index.js"></script>
+  <!-- Section bar (timeline) — outside #card so it shows during gameplay -->
+  <div id="section-bar" style="display:none">
+    <div id="time-axis"></div>
+    <div id="measure-bar-wrapper">
+      <div id="measure-bar"></div>
+    </div>
+    <div id="playhead"></div>
+  </div>
+  <!-- In-game bar (hidden by default, shown during gameplay) -->
+  <div id="ingame-bar" style="display:none">
+    <div class="ingame-track">
+      <div class="ingame-progress" id="ig-progress"></div>
+      <div class="ingame-label" id="ig-label"></div>
+      <div class="ingame-subtype" id="ig-subtype"></div>
+    </div>
+    <div class="ingame-info">
+      <span id="ig-measures"></span>
+      <span id="ig-time"></span>
+      <span id="ig-density"></span>
+    </div>
+  </div>
+  <script type="module" src="dist/index.js"></script>
 </body>
 </html>

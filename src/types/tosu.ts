@@ -18,6 +18,12 @@ export interface TosuStateMessage {
     title?: string;
     version?: string;
     mapper?: string;
+    time?: {
+      live?: number;
+      firstObject?: number;
+      lastObject?: number;
+      mp3Length?: number;
+    };
     [key: string]: unknown;
   };
   play?: {

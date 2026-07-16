@@ -11,8 +11,8 @@
 }
 
 html, body {
-  width: 480px;
-  height: 780px;
+  width: 640px;
+  min-height: 400px;
   overflow-y: auto;
   overflow-x: hidden;
   font-family: 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
@@ -25,7 +25,7 @@ html, body {
 /* ---- Card Container ---- */
 #card {
   width: 100%;
-  height: 100%;
+  min-height: 400px;
   background: rgba(18, 18, 22, 0.88);
   border-radius: 8px;
   padding: 16px;
@@ -98,9 +98,9 @@ html, body {
   white-space: nowrap;
 }
 
-#bpm::before   { content: "♫ "; color: #aaa; }
-#keys::before  { content: "⌨ "; color: #aaa; }
-#ln-ratio::before { content: "▬ "; color: #aaa; }
+#bpm::before   { content: ""; }
+#keys::before  { content: " | "; color: #555; }
+#ln-ratio::before { content: " | "; color: #555; }
 
 /* ---- Pattern Breakdown ---- */
 #patterns {
@@ -261,3 +261,410 @@ html, body {
 
 /* ---- Scrollbar (hidden) ---- */
 ::-webkit-scrollbar { width: 0; height: 0; }
+
+/* ============================================================
+   Section Bar — Timeline with colored measure blocks
+   ============================================================ */
+
+#section-bar {
+  width: 100%;
+  position: relative;
+  background: rgba(18, 18, 22, 0.6);
+  border-radius: 6px;
+  padding: 8px 14px;
+  margin-top: 4px;
+}
+
+#time-axis {
+  position: relative;
+  height: 14px;
+  margin-bottom: 2px;
+  font-size: 9px;
+  color: #aaa;
+}
+
+.time-tick {
+  position: absolute;
+  transform: translateX(-50%);
+  text-shadow: 0 0 3px rgba(0,0,0,0.7);
+}
+
+#measure-bar-wrapper {
+  position: relative;
+  overflow: hidden;
+  border-radius: 3px;
+}
+
+#measure-bar {
+  display: flex;
+  height: 24px;
+  background: #0a0a12;
+}
+
+.measure-block {
+  flex: 1;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 8px;
+  font-weight: 600;
+  border-right: 1px solid rgba(255,255,255,0.05);
+  transition: filter 0.15s ease;
+}
+
+.measure-block:hover {
+  filter: brightness(1.3);
+}
+
+/* Category colors — base (fallback) */
+.c-stream { background: #1a5276; }
+.c-jack   { background: #922b21; }
+.c-ln     { background: #6c3483; }
+.c-tech   { background: #27ae60; }
+.c-break  { background: #2c2c2c; }
+
+/* Stream sub-type colors */
+.c-stream-single { background: #2980b9; }   /* 乱/Single/Bulk — light blue */
+.c-stream-bulk   { background: #2980b9; }   /* 乱/Single/Bulk — light blue */
+.c-stream-js     { background: #1a5276; }   /* JumpStream — current blue */
+.c-stream-hs     { background: #1a5276; }   /* HandStream — current blue */
+.c-stream-brokenjs { background: #1f618d; } /* BrokenJS — between */
+
+/* Jack sub-type colors */
+.c-jack-cj-low   { background: #d35400; }  /* Low CJ — orange (易误判stream) */
+.c-jack-cj-high  { background: #922b21; }  /* High CJ — red (明显jack) */
+.c-jack-minijack { background: #27ae60; }  /* MiniJack — green (jacky tech) */
+
+/* Anomaly dots */
+.anomaly-dot {
+  position: absolute;
+  top: 1px;
+  right: 1px;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+}
+
+.dot-grace  { background: #f1c40f; }
+.dot-broken { background: #e74c3c; }
+.dot-mixed  { background: #95a5a6; }
+
+/* Pattern label overlay */
+.pattern-label {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  background: rgba(0,0,0,0.8);
+  padding: 1px 6px;
+  border-radius: 2px;
+  font-size: 9px;
+  font-weight: 700;
+  white-space: nowrap;
+  pointer-events: none;
+  z-index: 2;
+}
+
+/* ============================================================
+   Structure Grid — Pattern detail cards
+   ============================================================ */
+
+#structure-grid {
+  width: 100%;
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.struct-card {
+  background: rgba(18, 18, 22, 0.6);
+  border-radius: 4px;
+  padding: 8px;
+  font-size: 10px;
+  border: 1px solid rgba(255,255,255,0.06);
+}
+
+.struct-card .head {
+  font-weight: 600;
+  margin-bottom: 4px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.struct-card .dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+}
+
+.struct-card .bpm-badge {
+  font-size: 8px;
+  padding: 1px 3px;
+  border-radius: 2px;
+  background: rgba(255,255,255,0.08);
+  color: #888;
+}
+
+.struct-card .beats {
+  display: flex;
+  gap: 2px;
+  margin: 4px 0;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.struct-card .beat {
+  width: 16px;
+  height: 20px;
+  border-radius: 2px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 9px;
+  font-weight: 700;
+}
+
+.struct-card .beat.chord { background: var(--pc); }
+.struct-card .beat.single { background: #333; }
+.struct-card .beat.break-beat { background: #1a1a2e; border: 1px dashed #444; }
+
+.struct-card .bulk-display {
+  font-size: 16px;
+  font-weight: 700;
+  color: #3498db;
+  padding: 0 6px;
+}
+
+.struct-card .stat-line {
+  font-size: 8px;
+  color: #666;
+  margin-top: 3px;
+  line-height: 1.5;
+}
+
+.struct-card .stat-val { color: #aaa; font-weight: 600; }
+
+.struct-card .detail-list {
+  font-size: 8px;
+  color: #555;
+  margin-top: 4px;
+  border-top: 1px solid rgba(255,255,255,0.06);
+  padding-top: 4px;
+  line-height: 1.5;
+}
+
+.struct-card .detail-list .item {
+  display: flex;
+  justify-content: space-between;
+}
+
+.struct-card .detail-list .label { color: #666; }
+.struct-card .detail-list .value { color: #aaa; }
+
+/* Anomaly tags */
+.tag {
+  font-size: 7px;
+  padding: 1px 3px;
+  border-radius: 2px;
+}
+
+.tag-grace  { background: #f1c40f; color: #000; }
+.tag-broken { background: #e74c3c; color: #fff; }
+.tag-mixed  { background: #95a5a6; color: #fff; }
+
+/* ============================================================
+   Segment Table
+   ============================================================ */
+
+#segment-table {
+  width: 100%;
+  margin-top: 4px;
+}
+
+.segment-header {
+  font-size: 9px;
+  color: #666;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  padding: 4px 6px;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+  margin-bottom: 4px;
+}
+
+.seg-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 6px;
+  font-size: 9px;
+  border-bottom: 1px solid rgba(255,255,255,0.03);
+}
+
+.seg-row .seg-time {
+  width: 70px;
+  color: #666;
+  font-family: monospace;
+}
+
+.seg-row .seg-measures {
+  width: 50px;
+  color: #888;
+}
+
+.seg-row .seg-bpm {
+  width: 40px;
+  color: #aaa;
+  font-weight: 600;
+}
+
+.seg-row .seg-category {
+  padding: 1px 5px;
+  border-radius: 2px;
+  font-size: 8px;
+  font-weight: 600;
+  color: #fff;
+}
+
+.seg-row .seg-pattern {
+  flex: 1;
+  color: #ccc;
+  font-weight: 500;
+}
+
+.seg-row .seg-anchor {
+  color: #888;
+  font-size: 8px;
+}
+
+.seg-row .seg-anomaly {
+  color: #888;
+  font-size: 8px;
+}
+
+/* ============================================================
+   In-Game Bar — compact progress bar during gameplay
+   ============================================================ */
+
+#ingame-bar {
+  position: fixed;
+  bottom: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(10, 10, 18, 0.92);
+  border-radius: 6px;
+  padding: 10px 16px 8px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  min-width: 360px;
+}
+
+.ingame-track {
+  position: relative;
+  height: 18px;
+  background: #0a0a12;
+  border-radius: 3px;
+  overflow: visible;
+}
+
+.ingame-progress {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 0%;
+  background: rgba(255, 255, 255, 0.06);
+  border-right: 2px solid rgba(255, 255, 255, 0.7);
+  border-radius: 3px 0 0 3px;
+  transition: width 0.1s linear;
+}
+
+.ingame-label {
+  position: absolute;
+  top: -18px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+  color: #ccc;
+}
+
+.ingame-subtype {
+  position: absolute;
+  top: -30px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 9px;
+  color: #888;
+  white-space: nowrap;
+  font-family: monospace;
+}
+
+.ingame-info {
+  display: flex;
+  justify-content: space-between;
+  font-size: 9px;
+  color: #555;
+  margin-top: 6px;
+}
+
+/* ============================================================
+   Playing mode — hide main card, show section bar at top
+   ============================================================ */
+
+body.playing #card {
+  display: none;
+}
+
+body.playing #ingame-bar {
+  display: none !important;
+}
+
+body.playing #section-bar {
+  display: block !important;
+  position: fixed;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 640px;
+  z-index: 100;
+}
+
+/* ============================================================
+   Section bar playhead + playback highlight
+   ============================================================ */
+
+#playhead {
+  position: absolute;
+  top: 20px;
+  width: 2px;
+  height: 30px;
+  margin-left: -1px;
+  background: rgba(255, 255, 255, 0.9);
+  box-shadow: 0 0 6px rgba(255, 255, 255, 0.5);
+  pointer-events: none;
+  z-index: 3;
+  left: 0%;
+  transition: left 0.08s linear;
+}
+
+#playhead::after {
+  content: "";
+  position: absolute;
+  top: -4px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 7px;
+  height: 7px;
+  background: rgba(255, 255, 255, 0.9);
+  border-radius: 50%;
+  box-shadow: 0 0 4px rgba(255, 255, 255, 0.4);
+}
+
+.measure-block.active {
+  filter: brightness(1.8) saturate(1.3);
+  box-shadow: inset 0 0 8px rgba(255, 255, 255, 0.3);
+  z-index: 1;
+}

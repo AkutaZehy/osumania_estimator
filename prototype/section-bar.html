@@ -1,0 +1,834 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Full Interface v4</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    background: #0a0a12; color: #e0e0e0; padding: 16px;
+  }
+  .container { max-width: 1200px; margin: 0 auto; }
+  h2 { color: #555; font-size: 11px; margin: 20px 0 8px; letter-spacing: 1px; }
+
+  .header {
+    background: #12121e; border-radius: 6px; padding: 16px;
+    margin-bottom: 16px; border: 1px solid #222;
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  .header .title { font-size: 16px; color: #aaa; }
+  .header .star { font-size: 28px; font-weight: 700; margin: 4px 0; }
+  .header .meta { font-size: 12px; color: #666; }
+  .header .meta span { margin-right: 16px; }
+
+  .section-bar {
+    background: #12121e; border-radius: 6px; padding: 12px;
+    margin-bottom: 16px; border: 1px solid #222;
+  }
+  .time-axis {
+    position: relative; height: 16px; margin-bottom: 2px;
+    font-size: 9px; color: #444;
+  }
+  .time-tick { position: absolute; transform: translateX(-50%); }
+  .measure-bar-wrapper {
+    position: relative; overflow: hidden; border-radius: 3px;
+  }
+  .measure-bar {
+    display: flex; height: 28px; background: #0a0a12;
+  }
+  .measure-block {
+    flex: 1; position: relative;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 9px; font-weight: 600;
+    border-right: 1px solid rgba(255,255,255,0.05);
+  }
+  .measure-block:hover { filter: brightness(1.3); }
+
+  /* 4种大类颜色 */
+  .c-stream { background: #1a5276; }
+  .c-jack   { background: #922b21; }
+  .c-ln     { background: #6c3483; }
+  .c-tech   { background: #566573; }
+  .c-break  { background: #2c2c2c; }
+
+  /* LN子类型颜色 */
+  .ln-reverse  { background: #9b59b6; }
+  .ln-releasehell { background: #e74c3c; }
+  .ln-density  { background: #3498db; }
+  .ln-ouroboros { background: #1abc9c; }
+  .ln-unknown  { background: #7f8c8d; }
+
+  .anomaly-dot {
+    position: absolute; top: 1px; right: 1px;
+    width: 4px; height: 4px; border-radius: 50%;
+  }
+  .dot-grace  { background: #f1c40f; }
+  .dot-broken { background: #e74c3c; }
+  .dot-mixed  { background: #95a5a6; }
+  .pattern-label {
+    position: absolute; top: 50%; transform: translateY(-50%);
+    background: rgba(0,0,0,0.8); padding: 1px 6px;
+    border-radius: 2px; font-size: 10px; font-weight: 700;
+    white-space: nowrap; pointer-events: none; z-index: 2;
+  }
+
+  .struct-grid {
+    display: grid; grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+  }
+  .struct-card {
+    background: #12121e; border-radius: 4px; padding: 10px;
+    font-size: 10px; border: 1px solid #222;
+  }
+  .struct-card .head {
+    font-weight: 600; margin-bottom: 6px;
+    display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+  }
+  .struct-card .dot { width: 6px; height: 6px; border-radius: 50%; }
+  .struct-card .bpm-badge {
+    font-size: 9px; padding: 1px 4px; border-radius: 2px;
+    background: #222; color: #888;
+  }
+  .struct-card .beats {
+    display: flex; gap: 3px; margin: 6px 0; flex-wrap: wrap;
+    align-items: center;
+  }
+  .struct-card .beat {
+    width: 18px; height: 22px; border-radius: 2px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 10px; font-weight: 700;
+  }
+  .struct-card .beat.chord { background: var(--pc); }
+  .struct-card .beat.single { background: #333; }
+  .struct-card .beat.ln { background: #6c3483; }
+  .struct-card .beat.break { background: #1a1a2e; border: 1px dashed #444; }
+  .struct-card .bulk-display {
+    font-size: 18px; font-weight: 700; color: #3498db;
+    padding: 0 8px;
+  }
+  .struct-card .stat-line {
+    font-size: 9px; color: #666; margin-top: 4px;
+    line-height: 1.6;
+  }
+  .struct-card .stat-val { color: #aaa; font-weight: 600; }
+  .struct-card .detail-list {
+    font-size: 9px; color: #555; margin-top: 6px;
+    border-top: 1px solid #222; padding-top: 6px;
+    line-height: 1.5;
+  }
+  .struct-card .detail-list .item {
+    display: flex; justify-content: space-between;
+  }
+  .struct-card .detail-list .label { color: #666; }
+  .struct-card .detail-list .value { color: #aaa; }
+  .tag { font-size: 8px; padding: 1px 4px; border-radius: 2px; }
+  .tag-grace  { background: #f1c40f; color: #000; }
+  .tag-broken { background: #e74c3c; color: #fff; }
+  .tag-mixed  { background: #95a5a6; color: #fff; }
+  .tag-tech   { background: #566573; color: #fff; }
+
+  .segment-table {
+    width: 100%; border-collapse: collapse; font-size: 10px;
+  }
+  .segment-table th {
+    text-align: left; padding: 6px 8px;
+    background: #12121e; color: #666;
+    border-bottom: 1px solid #222;
+  }
+  .segment-table td {
+    padding: 6px 8px;
+    border-bottom: 1px solid #1a1a2e;
+    color: #888;
+  }
+  .segment-table td.val { color: #fff; font-weight: 600; }
+  .segment-table .pat-tag {
+    display: inline-block; padding: 1px 6px;
+    border-radius: 2px; font-size: 9px; font-weight: 600;
+  }
+
+  .ingame-section {
+    position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+    background: rgba(10,10,18,0.9); border-radius: 6px; padding: 12px 20px;
+    border: 1px solid #333; min-width: 400px;
+  }
+  .ingame-bar {
+    position: relative; height: 20px; background: #1a1a2e;
+    border-radius: 3px; overflow: visible;
+  }
+  .ingame-progress {
+    position: absolute; left: 0; top: 0; bottom: 0;
+    background: rgba(255,255,255,0.05); border-right: 2px solid #fff;
+  }
+  .ingame-lbl {
+    position: absolute; top: -18px; transform: translateX(-50%);
+    font-size: 11px; font-weight: 700; white-space: nowrap;
+  }
+  .ingame-st {
+    position: absolute; top: -30px; transform: translateX(-50%);
+    font-size: 10px; color: #888; white-space: nowrap;
+    font-family: monospace;
+  }
+  .ingame-tm {
+    position: absolute; bottom: -16px; transform: translateX(-50%);
+    font-size: 9px; color: #666;
+  }
+  .ingame-info {
+    display: flex; justify-content: space-between;
+    font-size: 9px; color: #555; margin-top: 8px;
+  }
+
+  /* LN body bar */
+  .ln-body-bar {
+    height: 8px; border-radius: 2px; margin: 2px 0;
+  }
+  /* Tech direction arrows */
+  .tech-dir { display: flex; gap: 2px; align-items: center; }
+  .tech-dir .arrow { font-size: 12px; color: #888; }
+  .tech-dir .turn { color: #f39c12; font-weight: 700; }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <div class="header">
+    <div>
+      <div class="title">xi - Freedom Dive [FOUR DIMENSIONS]</div>
+      <div class="star" style="color:#e74c3c">224 ChordJack 3121</div>
+      <div class="meta">
+        <span>Sunny: 7.82</span><span>224 BPM</span><span>LN 15%</span><span>2:24</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="section-bar">
+    <div class="time-axis" id="timeAxis"></div>
+    <div class="measure-bar-wrapper" id="barWrapper">
+      <div class="measure-bar" id="measureBar"></div>
+    </div>
+  </div>
+
+  <div class="section-bar">
+    <h2>STRUCTURE DETAIL</h2>
+    <div class="struct-grid" id="structGrid"></div>
+  </div>
+
+  <div class="section-bar">
+    <h2>SEGMENT TABLE</h2>
+    <table class="segment-table">
+      <thead>
+        <tr>
+          <th>Time</th>
+          <th>Measures</th>
+          <th>BPM</th>
+          <th>Category</th>
+          <th>Pattern</th>
+          <th>Anchor</th>
+          <th>Anomaly</th>
+        </tr>
+      </thead>
+      <tbody id="segBody"></tbody>
+    </table>
+  </div>
+
+</div>
+
+<div class="ingame-section">
+  <div class="ingame-bar">
+    <div class="ingame-progress" id="igProg" style="width:0%">
+      <div class="ingame-st" id="igSt">3 1 2 1</div>
+      <div class="ingame-lbl" id="igLbl" style="color:#922b21">Jack 224</div>
+      <div class="ingame-tm" id="igTm">0:00</div>
+    </div>
+  </div>
+  <div class="ingame-info">
+    <span id="igMeasures">M1/32</span>
+    <span id="igDensity">6.2 n/s</span>
+  </div>
+</div>
+
+<script>
+// ── 大类 ──
+// Stream: stream, JS, HS, Broken JS
+// Jack: minijack, chordjack
+// LN: 所有LN类型（标签只标LN，不标子类型）
+// Tech: 混杂，无法归类
+// Break: 稀疏/无音符（不显示在Structure Grid）
+
+// LN子类型
+const LN_TYPES = {
+  reverse:    { name: 'LN Reverse',  color: '#9b59b6', threshold: '≥2列有LN body' },
+  releasehell:{ name: 'Release Hell',color: '#e74c3c', threshold: 'Overlay≥30% & A/R≥20%' },
+  density:    { name: 'Density',     color: '#3498db', threshold: 'TapLN≥40% 或 JS/HS/DS/DCS/LCS≥50%' },
+  ouroboros:  { name: 'Ouroboros',   color: '#1abc9c', threshold: '首尾衔接≥30%' },
+  unknown:    { name: 'Unknown',     color: '#7f8c8d', threshold: '无法分类' },
+};
+
+// Tech子类型
+const TECH_TYPES = {
+  speedy: { name: 'Speedy', color: '#3498db' },  // rolls/trills为主
+  jacky:  { name: 'Jacky',  color: '#e74c3c' },  // minijack/anchor为主
+};
+
+// 模拟数据
+const measures = [
+  // Stream Single (2)
+  ...Array(2).fill({ cat:'stream', sub:'single', n:null, structure:null, anchors:[], anomalies:[], bpm:224, lnType:null }),
+  // JS (4) — JumpStream，显示结构数字
+  { cat:'stream', sub:'js', structure:[2,1,2,1], anchors:[], anomalies:[], bpm:224, lnType:null },
+  { cat:'stream', sub:'js', structure:[2,1,2,1], anchors:[], anomalies:[], bpm:224, lnType:null },
+  { cat:'stream', sub:'js', structure:[2,1,2,1], anchors:[], anomalies:[], bpm:224, lnType:null },
+  { cat:'stream', sub:'js', structure:[2,1,2,1], anchors:[], anomalies:[], bpm:224, lnType:null },
+  // HS (4) — HandStream，显示结构数字
+  { cat:'stream', sub:'hs', structure:[3,1,1,1], anchors:[], anomalies:[], bpm:224, lnType:null },
+  { cat:'stream', sub:'hs', structure:[3,1,1,1], anchors:[], anomalies:[], bpm:224, lnType:null },
+  { cat:'stream', sub:'hs', structure:[3,1,1,1], anchors:[], anomalies:[], bpm:224, lnType:null },
+  { cat:'stream', sub:'hs', structure:[3,1,1,1], anchors:[], anomalies:[], bpm:224, lnType:null },
+  // LN Segment 1 (6 measures) — LN Reverse为主
+  { cat:'ln', sub:'ln', structure:null, anchors:[], anomalies:[], bpm:224, lnType:'reverse',
+    metrics: { inverse:63, overlay:15, ar:12, tapLN:20, ouroboros:8 } },
+  { cat:'ln', sub:'ln', structure:null, anchors:[], anomalies:[], bpm:224, lnType:'reverse',
+    metrics: { inverse:71, overlay:12, ar:10, tapLN:18, ouroboros:5 } },
+  { cat:'ln', sub:'ln', structure:null, anchors:[], anomalies:['grace'], bpm:224, lnType:'reverse',
+    metrics: { inverse:58, overlay:18, ar:15, tapLN:22, ouroboros:10 } },
+  { cat:'ln', sub:'ln', structure:null, anchors:[], anomalies:[], bpm:224, lnType:'density',
+    metrics: { inverse:15, overlay:20, ar:18, tapLN:52, ouroboros:12 } },
+  { cat:'ln', sub:'ln', structure:null, anchors:[], anomalies:[], bpm:224, lnType:'reverse',
+    metrics: { inverse:67, overlay:14, ar:11, tapLN:19, ouroboros:7 } },
+  { cat:'ln', sub:'ln', structure:null, anchors:[], anomalies:[], bpm:224, lnType:'reverse',
+    metrics: { inverse:60, overlay:16, ar:13, tapLN:21, ouroboros:9 } },
+  // Jack (4)
+  { cat:'jack', sub:'chordjack', structure:[3,1,2,1], anchors:[3,4], anomalies:[], bpm:224, lnType:null },
+  { cat:'jack', sub:'chordjack', structure:[3,2,2,1], anchors:[3,5], anomalies:['grace'], bpm:224, lnType:null },
+  { cat:'jack', sub:'chordjack', structure:[3,1,2,1], anchors:[3,3], anomalies:[], bpm:224, lnType:null },
+  { cat:'jack', sub:'chordjack', structure:[3,1,2,1], anchors:[3], anomalies:[], bpm:224, lnType:null },
+  // LN Segment 2 (6 measures) — Release Hell为主
+  { cat:'ln', sub:'ln', structure:null, anchors:[], anomalies:[], bpm:224, lnType:'releasehell',
+    metrics: { inverse:18, overlay:42, ar:35, tapLN:25, ouroboros:10 } },
+  { cat:'ln', sub:'ln', structure:null, anchors:[], anomalies:[], bpm:224, lnType:'releasehell',
+    metrics: { inverse:15, overlay:45, ar:38, tapLN:22, ouroboros:8 } },
+  { cat:'ln', sub:'ln', structure:null, anchors:[], anomalies:[], bpm:224, lnType:'reverse',
+    metrics: { inverse:55, overlay:20, ar:15, tapLN:18, ouroboros:12 } },
+  { cat:'ln', sub:'ln', structure:null, anchors:[], anomalies:[], bpm:224, lnType:'releasehell',
+    metrics: { inverse:12, overlay:48, ar:40, tapLN:28, ouroboros:11 } },
+  { cat:'ln', sub:'ln', structure:null, anchors:[], anomalies:[], bpm:224, lnType:'reverse',
+    metrics: { inverse:58, overlay:22, ar:18, tapLN:20, ouroboros:10 } },
+  { cat:'ln', sub:'ln', structure:null, anchors:[], anomalies:[], bpm:224, lnType:'releasehell',
+    metrics: { inverse:16, overlay:44, ar:36, tapLN:24, ouroboros:9 } },
+  // Break (2) — 稀疏段落，不显示在Structure Grid
+  { cat:'break', sub:'break', structure:null, anchors:[], anomalies:[], bpm:224, lnType:null },
+  { cat:'break', sub:'break', structure:null, anchors:[], anomalies:[], bpm:224, lnType:null },
+  // Broken JS (2) — 断裂的JumpStream
+  { cat:'stream', sub:'brokenjs', structure:[2,1,0,1], anchors:[], anomalies:['broken'], bpm:224, lnType:null },
+  { cat:'stream', sub:'brokenjs', structure:[2,0,2,1], anchors:[], anomalies:['broken'], bpm:224, lnType:null },
+  // Tech Speedy (2) — rolls/trills
+  { cat:'tech', sub:'speedy', structure:null, anchors:[], anomalies:[], bpm:224, lnType:null,
+    directions: ['→','→','→','↓','→','→','↓','↓','→','→','→','→','→','↓','→','→'],
+    turns: [3,7,13],
+    divisions: '16th' },
+  { cat:'tech', sub:'speedy', structure:null, anchors:[], anomalies:[], bpm:224, lnType:null,
+    directions: ['→','→','↓','↓','→','→','→','→','↓','→','→','→','→','→','→','→'],
+    turns: [2],
+    divisions: '16th' },
+  // Tech Jacky (2) — minijack/anchor
+  { cat:'tech', sub:'jacky', structure:[2,1,1,1], anchors:[3], anomalies:[], bpm:224, lnType:null },
+  { cat:'tech', sub:'jacky', structure:[2,1,1,1], anchors:[3,4], anomalies:['broken'], bpm:224, lnType:null },
+  // LN Segment 3 (4 measures) — LN Reverse为主（再次跨段）
+  { cat:'ln', sub:'ln', structure:null, anchors:[], anomalies:[], bpm:224, lnType:'reverse',
+    metrics: { inverse:72, overlay:10, ar:8, tapLN:15, ouroboros:5 } },
+  { cat:'ln', sub:'ln', structure:null, anchors:[], anomalies:[], bpm:224, lnType:'reverse',
+    metrics: { inverse:68, overlay:12, ar:9, tapLN:16, ouroboros:6 } },
+  { cat:'ln', sub:'ln', structure:null, anchors:[], anomalies:[], bpm:224, lnType:'reverse',
+    metrics: { inverse:75, overlay:8, ar:6, tapLN:14, ouroboros:4 } },
+  { cat:'ln', sub:'ln', structure:null, anchors:[], anomalies:[], bpm:224, lnType:'ouroboros',
+    metrics: { inverse:18, overlay:15, ar:12, tapLN:20, ouroboros:35 } },
+  // Stream Bulk (4)
+  { cat:'stream', sub:'bulk', n:4, structure:null, anchors:[], anomalies:[], bpm:224, lnType:null },
+  { cat:'stream', sub:'bulk', n:5, structure:null, anchors:[], anomalies:[], bpm:224, lnType:null },
+  { cat:'stream', sub:'bulk', n:4, structure:null, anchors:[], anomalies:[], bpm:224, lnType:null },
+  { cat:'stream', sub:'bulk', n:6, structure:null, anchors:[], anomalies:[], bpm:224, lnType:null },
+];
+
+const catColors = { stream:'#1a5276', jack:'#922b21', ln:'#6c3483', tech:'#566573', break:'#333' };
+const totalBeats = measures.length * 4;
+const totalSec = (totalBeats / 224) * 60;
+
+function median(arr) {
+  if (!arr.length) return 0;
+  const s = [...arr].sort((a,b)=>a-b);
+  const m = Math.floor(s.length/2);
+  return s.length%2 ? s[m] : (s[m-1]+s[m])/2;
+}
+
+// 稀疏类型检测算法
+function isBreak(chunk) {
+  // Break: 极稀疏或无音符
+  // 条件：密度 < 0.5 notes/beat 或 全部是break类型
+  // 注意：Tech和LN不算Break，即使密度低
+  if(chunk.every(m => m.cat === 'break')) return true;
+  
+  // 如果包含Tech或LN，不算Break
+  if(chunk.some(m => m.cat === 'tech' || m.cat === 'ln')) return false;
+  
+  const totalNotes = chunk.reduce((sum, m) => {
+    if (m.structure) return sum + m.structure.reduce((a,b)=>a+b, 0);
+    return sum + 1; // 有音符
+  }, 0);
+  const avgNotesPerBeat = totalNotes / (chunk.length * 4);
+  return avgNotesPerBeat < 0.5;
+}
+
+function isBrokenJS(chunk) {
+  // Broken JS: 有JS结构但有断裂
+  // 条件：结构中包含0，密度0.5-1.5 notes/beat，整体呈现JS模式
+  const hasZero = chunk.some(m => m.structure && m.structure.includes(0));
+  const totalNotes = chunk.reduce((sum, m) => {
+    if (m.structure) return sum + m.structure.reduce((a,b)=>a+b, 0);
+    return sum;
+  }, 0);
+  const avgNotesPerBeat = totalNotes / (chunk.length * 4);
+  const isJS = chunk.every(m => m.sub === 'js' || m.sub === 'brokenjs');
+  return hasZero && avgNotesPerBeat >= 0.5 && avgNotesPerBeat <= 1.5 && isJS;
+}
+
+function isTech(chunk) {
+  // Tech: 有结构但混合
+  // Speedy: 有方向变化（turns）
+  // Jacky: 有anchor
+  const speedys = chunk.filter(m => m.sub === 'speedy');
+  const jackys = chunk.filter(m => m.sub === 'jacky');
+  return speedys.length > 0 || jackys.length > 0;
+}
+
+// 时间轴
+const ta = document.getElementById('timeAxis');
+for (let i=0;i<=8;i++) {
+  const t = document.createElement('div');
+  t.className='time-tick';
+  t.style.left=`${(i/8)*100}%`;
+  const sec=(i/8)*totalSec;
+  t.textContent=`${Math.floor(sec/60)}:${String(Math.floor(sec%60)).padStart(2,'0')}`;
+  ta.appendChild(t);
+}
+
+// 小节条
+const bar = document.getElementById('measureBar');
+measures.forEach((m,i)=>{
+  const b=document.createElement('div');
+  b.className=`measure-block c-${m.cat}`;
+  b.title=`M${i+1}: ${m.cat}${m.lnType?' '+LN_TYPES[m.lnType].name:''}${m.sub==='speedy'?' Speedy Tech':m.sub==='jacky'?' Jacky Tech':''}`;
+  m.anomalies.forEach((a,j)=>{
+    const dot=document.createElement('div');
+    dot.className=`anomaly-dot dot-${a}`;
+    if(j>0)dot.style.top=`${1+j*5}px`;
+    b.appendChild(dot);
+  });
+  bar.appendChild(b);
+});
+
+// 键型标签
+const wrapper = document.getElementById('barWrapper');
+let ss=0, sp=measures[0].cat;
+for (let i=1;i<=measures.length;i++) {
+  if(i>=measures.length||measures[i].cat!==sp){
+    if(i-ss>=2){
+      const lbl=document.createElement('div');
+      lbl.className='pattern-label';
+      lbl.style.left=`${((ss+i)/2/measures.length)*100}%`;
+      lbl.style.transform='translate(-50%,-50%)';
+      const chunk=measures.slice(ss,i);
+
+      if(sp==='stream'){
+        const bulks=chunk.filter(m=>m.sub==='bulk');
+        const jss=chunk.filter(m=>m.sub==='js');
+        const hss=chunk.filter(m=>m.sub==='hs');
+        const brokenjss=chunk.filter(m=>m.sub==='brokenjs');
+        if(isBreak(chunk)){
+          lbl.textContent='B';
+          lbl.style.background='rgba(44,44,44,0.8)';
+        } else if(isBrokenJS(chunk)){
+          lbl.textContent='S';
+        } else if(bulks.length>0){
+          lbl.textContent='S';
+        } else if(jss.length>hss.length){
+          lbl.textContent='S';
+        } else if(hss.length>0){
+          lbl.textContent='S';
+        } else {
+          lbl.textContent='S';
+        }
+      } else if(sp==='jack'){
+        lbl.textContent='J';
+      } else if(sp==='ln'){
+        lbl.textContent='L';
+      } else if(sp==='tech'){
+        lbl.textContent='T';
+      } else {
+        lbl.textContent='?';
+      }
+      wrapper.appendChild(lbl);
+    }
+    if(i<measures.length){ss=i;sp=measures[i].cat;}
+  }
+}
+
+// 结构详情（跳过Break段落）
+const grid=document.getElementById('structGrid');
+let segStart=0;
+for(let segEnd=1;segEnd<=measures.length;segEnd++){
+  if(segEnd>=measures.length||measures[segEnd].cat!==measures[segStart].cat){
+    const chunk=measures.slice(segStart,segEnd);
+    const m=chunk[0];
+    const color=catColors[m.cat];
+
+    // 跳过Break段落，不显示在Structure Grid
+    if(m.cat==='break' || isBreak(chunk)){
+      segStart=segEnd;
+      continue;
+    }
+
+    const card=document.createElement('div');
+    card.className='struct-card';
+
+    const anomCnt={grace:0,broken:0,mixed:0};
+    chunk.forEach(mm=>mm.anomalies.forEach(a=>anomCnt[a]++));
+    const anomTags=Object.entries(anomCnt).filter(([,v])=>v>0).map(([k,v])=>{
+      const labels={grace:'G',broken:'B',mixed:'M'};
+      return `<span class="tag tag-${k}">${labels[k]}${v>1?'×'+v:''}</span>`;
+    }).join('');
+
+    const bpms=[...new Set(chunk.map(mm=>mm.bpm))];
+    const bpmStr=bpms.length===1?bpms[0]:[...new Set(bpms)].join('/');
+
+    let bodyHTML='';
+    let detailHTML='';
+
+    if(m.cat==='stream'){
+      const bulks=chunk.filter(mm=>mm.sub==='bulk');
+      const jss=chunk.filter(mm=>mm.sub==='js');
+      const hss=chunk.filter(mm=>mm.sub==='hs');
+      const brokenjss=chunk.filter(mm=>mm.sub==='brokenjs');
+      
+      if(isBrokenJS(chunk)){
+        // Broken JS：显示结构数字（包含0）
+        bodyHTML=`<div class="beats">`;
+        chunk.forEach(mm=>{
+          bodyHTML+=`<div style="display:flex;gap:2px;margin-right:3px">`;
+          (mm.structure||[]).forEach(n=>{
+            bodyHTML+=`<div class="beat ${n>=2?'chord':n===0?'break':'single'}" style="--pc:${color}">${n}</div>`;
+          });
+          bodyHTML+='</div>';
+        });
+        bodyHTML+='</div>';
+        detailHTML=`<div class="detail-list">
+          <div class="item"><span class="label">Type</span><span class="value" style="color:#f39c12">Broken JS</span></div>
+          <div class="item"><span class="label">Note</span><span class="value">Has gaps (0s)</span></div>
+        </div>`;
+      } else if(bulks.length>0){
+        const ns=bulks.map(mm=>mm.n);
+        bodyHTML=`<div class="beats"><div class="bulk-display">2+${median(ns)}</div></div>`;
+        detailHTML=`<div class="detail-list">
+          <div class="item"><span class="label">range</span><span class="value">${Math.min(...ns)}-${Math.max(...ns)}</span></div>
+          <div class="item"><span class="label">bulk/single</span><span class="value">${bulks.length}/${chunk.length-bulks.length}</span></div>
+        </div>`;
+      } else if(jss.length>0 || hss.length>0){
+        // JS/HS：显示结构数字
+        bodyHTML=`<div class="beats">`;
+        chunk.forEach(mm=>{
+          bodyHTML+=`<div style="display:flex;gap:2px;margin-right:3px">`;
+          (mm.structure||[]).forEach(n=>{
+            bodyHTML+=`<div class="beat ${n>=2?'chord':'single'}" style="--pc:${color}">${n}</div>`;
+          });
+          bodyHTML+='</div>';
+        });
+        bodyHTML+='</div>';
+        const typeStr=jss.length>hss.length?'JS':'HS';
+        detailHTML=`<div class="detail-list">
+          <div class="item"><span class="label">Type</span><span class="value">${typeStr}</span></div>
+        </div>`;
+      } else {
+        bodyHTML=`<div class="beats"><div class="bulk-display" style="color:#555">Single</div></div>`;
+      }
+    } else if(m.cat==='jack'){
+      const allAnchors=chunk.flatMap(mm=>mm.anchors||[]);
+      const cjs=chunk.filter(mm=>mm.sub==='chordjack');
+      const mjs=chunk.filter(mm=>mm.sub==='minijack');
+
+      bodyHTML=`<div class="beats">`;
+      chunk.forEach(mm=>{
+        bodyHTML+=`<div style="display:flex;gap:2px;margin-right:3px">`;
+        mm.structure.forEach(n=>{
+          bodyHTML+=`<div class="beat ${n>=2?'chord':'single'}" style="--pc:${color}">${n}</div>`;
+        });
+        bodyHTML+='</div>';
+      });
+      bodyHTML+='</div>';
+
+      detailHTML=`<div class="detail-list">
+        <div class="item"><span class="label">CJ/MJ</span><span class="value">${cjs.length}/${mjs.length}</span></div>
+        ${allAnchors.length?`<div class="item"><span class="label">Anchor</span><span class="value">max:${Math.max(...allAnchors)} med:${median(allAnchors)}</span></div>`:''}
+      </div>`;
+    } else if(m.cat==='ln'){
+      // LN段落：不显示数字，只显示LN类型色块
+      const lnTypeCounts={};
+      chunk.forEach(mm=>{
+        if(mm.lnType){
+          lnTypeCounts[mm.lnType]=(lnTypeCounts[mm.lnType]||0)+1;
+        }
+      });
+
+      // 主类型
+      const mainType=Object.entries(lnTypeCounts).sort((a,b)=>b[1]-a[1])[0];
+      const mainColor=mainType?LN_TYPES[mainType[0]]?.color:'#6c3483';
+
+      // 显示LN body bar（每个小节一条横线，颜色表示类型）
+      bodyHTML=`<div class="beats" style="flex-direction:column;gap:4px">`;
+      chunk.forEach(mm=>{
+        const lnColor=mm.lnType?LN_TYPES[mm.lnType]?.color:'#6c3483';
+        bodyHTML+=`<div class="ln-body-bar" style="background:${lnColor};width:100%"></div>`;
+      });
+      bodyHTML+='</div>';
+
+      // 详情：显示每个LN子类型的**实际指标值**（不是分布占比）
+      // 计算段落的平均指标
+      const avgMetrics = { inverse:0, overlay:0, ar:0, tapLN:0, ouroboros:0 };
+      let metricCount = 0;
+      chunk.forEach(mm => {
+        if (mm.metrics) {
+          avgMetrics.inverse += mm.metrics.inverse;
+          avgMetrics.overlay += mm.metrics.overlay;
+          avgMetrics.ar += mm.metrics.ar;
+          avgMetrics.tapLN += mm.metrics.tapLN;
+          avgMetrics.ouroboros += mm.metrics.ouroboros;
+          metricCount++;
+        }
+      });
+      if (metricCount > 0) {
+        avgMetrics.inverse = Math.round(avgMetrics.inverse / metricCount);
+        avgMetrics.overlay = Math.round(avgMetrics.overlay / metricCount);
+        avgMetrics.ar = Math.round(avgMetrics.ar / metricCount);
+        avgMetrics.tapLN = Math.round(avgMetrics.tapLN / metricCount);
+        avgMetrics.ouroboros = Math.round(avgMetrics.ouroboros / metricCount);
+      }
+
+      // 根据阈值判断哪些子类型被触发
+      const triggeredTypes = [];
+      if (avgMetrics.inverse >= 20) triggeredTypes.push({ key:'reverse', value:avgMetrics.inverse });
+      if (avgMetrics.overlay >= 30 && avgMetrics.ar >= 20) triggeredTypes.push({ key:'releasehell', value:`Ov${avgMetrics.overlay}/AR${avgMetrics.ar}` });
+      if (avgMetrics.tapLN >= 40) triggeredTypes.push({ key:'density', value:avgMetrics.tapLN });
+      if (avgMetrics.ouroboros >= 30) triggeredTypes.push({ key:'ouroboros', value:avgMetrics.ouroboros });
+
+      detailHTML=`<div class="detail-list">
+        <div class="item"><span class="label">LN Subtypes</span><span class="value"></span></div>
+        ${triggeredTypes.map(t => `
+          <div class="item">
+            <span class="label" style="color:${LN_TYPES[t.key]?.color}">${LN_TYPES[t.key]?.name||t.key}</span>
+            <span class="value">${t.value}%</span>
+          </div>
+        `).join('')}
+        ${triggeredTypes.length === 0 ? `<div class="item"><span class="label" style="color:#7f8c8d">Unknown</span><span class="value">-</span></div>` : ''}
+      </div>`;
+    } else {
+      // Tech段落
+      const speedys=chunk.filter(mm=>mm.sub==='speedy');
+      const jackys=chunk.filter(mm=>mm.sub==='jacky');
+      const isSpeedy=speedys.length>jackys.length;
+
+      if(isSpeedy){
+        // Speedy Tech：显示方向箭头和转折
+        const allDirs=chunk.flatMap(mm=>mm.directions||[]);
+        const allTurns=chunk.flatMap(mm=>mm.turns||[]);
+        const divisions=[...new Set(chunk.map(mm=>mm.divisions))];
+
+        bodyHTML=`<div class="beats" style="flex-direction:column;gap:4px">`;
+        chunk.forEach(mm=>{
+          bodyHTML+=`<div class="tech-dir">`;
+          (mm.directions||[]).forEach((d,idx)=>{
+            const isTurn=(mm.turns||[]).includes(idx);
+            bodyHTML+=`<span class="${isTurn?'arrow turn':'arrow'}">${d}</span>`;
+          });
+          bodyHTML+=`</div>`;
+        });
+        bodyHTML+='</div>';
+
+        detailHTML=`<div class="detail-list">
+          <div class="item"><span class="label">Type</span><span class="value" style="color:#3498db">Speedy</span></div>
+          <div class="item"><span class="label">Divisions</span><span class="value">${divisions.join('/')}</span></div>
+          <div class="item"><span class="label">Turns</span><span class="value">${allTurns.length} (${((allTurns.length/allDirs.length)*100).toFixed(0)}%)</span></div>
+        </div>`;
+      } else {
+        // Jacky Tech：显示结构（类似Jack）
+        const allAnchors=chunk.flatMap(mm=>mm.anchors||[]);
+
+        bodyHTML=`<div class="beats">`;
+        chunk.forEach(mm=>{
+          bodyHTML+=`<div style="display:flex;gap:2px;margin-right:3px">`;
+          (mm.structure||[]).forEach(n=>{
+            bodyHTML+=`<div class="beat ${n>=2?'chord':'single'}" style="--pc:${color}">${n}</div>`;
+          });
+          bodyHTML+='</div>';
+        });
+        bodyHTML+='</div>';
+
+        detailHTML=`<div class="detail-list">
+          <div class="item"><span class="label">Type</span><span class="value" style="color:#e74c3c">Jacky</span></div>
+          ${allAnchors.length?`<div class="item"><span class="label">Anchor</span><span class="value">max:${Math.max(...allAnchors)} med:${median(allAnchors)}</span></div>`:''}
+        </div>`;
+      }
+    }
+
+    card.innerHTML=`
+      <div class="head">
+        <div class="dot" style="background:${color}"></div>
+        M${segStart+1}-${segEnd}
+        <span class="bpm-badge">${bpmStr} BPM</span>
+        ${anomTags}
+      </div>
+      ${bodyHTML}
+      ${detailHTML}
+    `;
+    grid.appendChild(card);
+    segStart=segEnd;
+  }
+}
+
+// 分段表（跳过Break段落）
+const segBody=document.getElementById('segBody');
+segStart=0;
+for(let segEnd=1;segEnd<=measures.length;segEnd++){
+  if(segEnd>=measures.length||measures[segEnd].cat!==measures[segStart].cat){
+    const chunk=measures.slice(segStart,segEnd);
+    const m=chunk[0];
+    const color=catColors[m.cat];
+    const catName={stream:'Stream',jack:'Jack',ln:'Long Note',tech:'Tech',break:'Break'}[m.cat];
+
+    // 跳过Break段落，不显示在Segment Table
+    if(m.cat==='break' || isBreak(chunk)){
+      segStart=segEnd;
+      continue;
+    }
+
+    const startSec=(segStart*4/224)*60;
+    const endSec=(segEnd*4/224)*60;
+    const fmtTime=s=>`${Math.floor(s/60)}:${String(Math.floor(s%60)).padStart(2,'0')}`;
+
+    // Pattern - 使用全称
+    let patternStr='-';
+    if(m.cat==='stream'){
+      const bulks=chunk.filter(mm=>mm.sub==='bulk');
+      const jss=chunk.filter(mm=>mm.sub==='js');
+      const hss=chunk.filter(mm=>mm.sub==='hs');
+      const brokenjss=chunk.filter(mm=>mm.sub==='brokenjs');
+      if(isBrokenJS(chunk)){
+        patternStr='Broken Jump Stream';
+      } else if(bulks.length>0){
+        patternStr=`Stream 2+${median(bulks.map(mm=>mm.n))}`;
+      } else if(jss.length>hss.length){
+        patternStr='Jump Stream';
+      } else if(hss.length>0){
+        patternStr='Hand Stream';
+      } else {
+        patternStr='Single Stream';
+      }
+    } else if(m.cat==='jack'){
+      const cjs=chunk.filter(mm=>mm.sub==='chordjack');
+      patternStr=cjs.length>0?'Chord Jack':'Mini Jack';
+    } else if(m.cat==='ln'){
+      // 计算段落的平均指标
+      const avgMetrics = { inverse:0, overlay:0, ar:0, tapLN:0, ouroboros:0 };
+      let metricCount = 0;
+      chunk.forEach(mm => {
+        if (mm.metrics) {
+          avgMetrics.inverse += mm.metrics.inverse;
+          avgMetrics.overlay += mm.metrics.overlay;
+          avgMetrics.ar += mm.metrics.ar;
+          avgMetrics.tapLN += mm.metrics.tapLN;
+          avgMetrics.ouroboros += mm.metrics.ouroboros;
+          metricCount++;
+        }
+      });
+      if (metricCount > 0) {
+        avgMetrics.inverse = Math.round(avgMetrics.inverse / metricCount);
+        avgMetrics.overlay = Math.round(avgMetrics.overlay / metricCount);
+        avgMetrics.ar = Math.round(avgMetrics.ar / metricCount);
+        avgMetrics.tapLN = Math.round(avgMetrics.tapLN / metricCount);
+        avgMetrics.ouroboros = Math.round(avgMetrics.ouroboros / metricCount);
+      }
+
+      // 根据阈值判断触发的子类型 - 使用全称
+      const triggeredTypes = [];
+      if (avgMetrics.inverse >= 20) triggeredTypes.push(`LN Reverse ${avgMetrics.inverse}%`);
+      if (avgMetrics.overlay >= 30 && avgMetrics.ar >= 20) triggeredTypes.push(`Release Hell Ov${avgMetrics.overlay}/AR${avgMetrics.ar}`);
+      if (avgMetrics.tapLN >= 40) triggeredTypes.push(`Density Tap${avgMetrics.tapLN}%`);
+      if (avgMetrics.ouroboros >= 30) triggeredTypes.push(`Ouroboros ${avgMetrics.ouroboros}%`);
+      patternStr = triggeredTypes.length > 0 ? triggeredTypes.join(' ') : 'Unknown LN';
+    } else {
+      // Tech: 显示Speedy/Jacky
+      const speedys=chunk.filter(mm=>mm.sub==='speedy');
+      const jackys=chunk.filter(mm=>mm.sub==='jacky');
+      patternStr=speedys.length>jackys.length?'Speedy Tech':'Jacky Tech';
+    }
+
+    // Anchor
+    const allAnchors=chunk.flatMap(mm=>mm.anchors||[]);
+    const anchorStr=allAnchors.length>0?`max:${Math.max(...allAnchors)} med:${median(allAnchors)}`:'-';
+
+    // Anomaly
+    const anomCnt={grace:0,broken:0,mixed:0};
+    chunk.forEach(mm=>mm.anomalies.forEach(a=>anomCnt[a]++));
+    const anomStr=Object.entries(anomCnt).filter(([,v])=>v>0).map(([k,v])=>`${k}:${v}`).join(' ')||'-';
+
+    const tr=document.createElement('tr');
+    tr.innerHTML=`
+      <td>${fmtTime(startSec)}-${fmtTime(endSec)}</td>
+      <td>M${segStart+1}-${segEnd}</td>
+      <td class="val">${m.bpm}</td>
+      <td><span class="pat-tag" style="background:${color}">${catName}</span></td>
+      <td class="val">${patternStr}</td>
+      <td>${anchorStr}</td>
+      <td>${anomStr}</td>
+    `;
+    segBody.appendChild(tr);
+    segStart=segEnd;
+  }
+}
+
+// 游戏内
+let prog=0;
+setInterval(()=>{
+  prog=(prog+0.1)%100;
+  document.getElementById('igProg').style.width=prog+'%';
+  const idx=Math.min(Math.floor(prog/100*measures.length),measures.length-1);
+  const m=measures[idx];
+  const catName={stream:'Stream',jack:'Jack',ln:'Long Note',tech:'Tech',break:'Break'}[m.cat];
+  let st='-';
+  if(m.cat==='stream') {
+    if(m.sub==='single') st='Single';
+    else if(m.sub==='js') st='Jump Stream';
+    else if(m.sub==='hs') st='Hand Stream';
+    else if(m.sub==='brokenjs') st='Broken JS';
+    else if(m.sub==='bulk') st=`Stream 2+${m.n}`;
+    else st='Stream';
+  }
+  else if(m.cat==='jack') {
+    if(m.sub==='chordjack') st='Chord Jack';
+    else if(m.sub==='minijack') st='Mini Jack';
+    else st='Jack';
+  }
+  else if(m.cat==='ln') st=LN_TYPES[m.lnType]?.name||'Long Note';
+  else if(m.cat==='tech') st=m.sub==='speedy'?'Speedy Tech':'Jacky Tech';
+  else if(m.cat==='break') st='Break';
+
+  document.getElementById('igLbl').textContent=`${catName} ${m.bpm}`;
+  document.getElementById('igLbl').style.color=catColors[m.cat];
+  document.getElementById('igSt').textContent=st;
+  const sec=prog/100*totalSec;
+  document.getElementById('igTm').textContent=`${Math.floor(sec/60)}:${String(Math.floor(sec%60)).padStart(2,'0')}`;
+  document.getElementById('igMeasures').textContent=`M${idx+1}/${measures.length}`;
+  const density=m.structure?m.structure.reduce((a,b)=>a+b,0)/4:1;
+  document.getElementById('igDensity').textContent=`${density.toFixed(1)} n/s`;
+},100);
+</script>
+</body>
+</html>

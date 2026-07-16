@@ -5,6 +5,8 @@
 import type { PatternSummary } from "./patterns.js";
 import type { CustomMetrics } from "./custom.js";
 import type { SunnyResult, DifficultyGraph } from "./algorithm.js";
+import type { SectionAnalysis } from "../custom/sectionAnalysis.js";
+import type { GridAnalysisResult } from "../custom/gridAnalysis.js";
 
 /** Complete analysis result for a beatmap */
 export interface DifficultyResult {
@@ -18,6 +20,10 @@ export interface DifficultyResult {
   custom: CustomMetrics;
   /** Combined difficulty graph for UI rendering */
   graph: DifficultyGraph;
+  /** Section analysis (per-measure + per-segment pattern breakdown) */
+  sectionAnalysis: SectionAnalysis | null;
+  /** Grid-based cell analysis (new key type system) */
+  gridAnalysis: GridAnalysisResult | null;
   /** Beatmap metadata for display */
   meta: {
     title: string;

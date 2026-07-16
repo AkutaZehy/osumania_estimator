@@ -1,78 +1,27 @@
-{
-  "name": "osumania-estimator",
-  "version": "0.1.0",
-  "groups": [
-    {
-      "name": "Algorithm",
-      "description": "Estimator algorithm and connection settings",
-      "settings": [
-        {
-          "key": "algorithm",
-          "label": "Estimator Algorithm",
-          "type": "select",
-          "options": ["Sunny", "Custom", "Blended"],
-          "default": "Blended",
-          "description": "Which algorithm to use for star rating estimation"
-        },
-        {
-          "key": "wsEndpoint",
-          "label": "WebSocket Endpoint",
-          "type": "text",
-          "default": "ws://localhost:24050/ws",
-          "description": "tosu WebSocket endpoint for live data"
-        }
-      ]
-    },
-    {
-      "name": "Display",
-      "description": "Overlay display options",
-      "settings": [
-        {
-          "key": "opacity",
-          "label": "Overlay Opacity",
-          "type": "slider",
-          "min": 0.1,
-          "max": 1.0,
-          "step": 0.05,
-          "default": 0.85,
-          "description": "Background opacity of the overlay card"
-        },
-        {
-          "key": "showGraph",
-          "label": "Show Difficulty Graph",
-          "type": "boolean",
-          "default": true,
-          "description": "Display the difficulty curve graph"
-        },
-        {
-          "key": "showPatterns",
-          "label": "Show Pattern Breakdown",
-          "type": "boolean",
-          "default": true,
-          "description": "Display detected pattern types"
-        },
-        {
-          "key": "showCustomMetrics",
-          "label": "Show Custom Metrics",
-          "type": "boolean",
-          "default": true,
-          "description": "Display custom density and stamina metrics"
-        }
-      ]
-    },
-    {
-      "name": "Theme",
-      "description": "Visual theme settings",
-      "settings": [
-        {
-          "key": "theme",
-          "label": "Theme",
-          "type": "select",
-          "options": ["dark", "light"],
-          "default": "dark",
-          "description": "Dark or light overlay theme"
-        }
-      ]
-    }
-  ]
-}
+[
+  {
+    "uniqueID": "viewMode",
+    "type": "options",
+    "title": "View Mode",
+    "value": "simple",
+    "options": [
+      { "label": "Simple", "value": "simple" },
+      { "label": "Detailed", "value": "detailed" }
+    ],
+    "description": "(Experimental) Simple: section bar only. Detailed: show grid & segment table."
+  },
+  {
+    "uniqueID": "showPatterns",
+    "type": "checkbox",
+    "title": "Show Pattern Breakdown",
+    "value": true,
+    "description": "Display detected pattern types and bars."
+  },
+  {
+    "uniqueID": "showCustomMetrics",
+    "type": "checkbox",
+    "title": "Show Custom Metrics",
+    "value": true,
+    "description": "Display density, jack, stream, tech, stamina panels."
+  }
+]

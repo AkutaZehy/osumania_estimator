@@ -4,20 +4,24 @@
 // ============================================================
 
 import { WebSocketManager } from "./tosu/websocket.js";
+import TosuSocketManager from "./tosu/socket.js";
 import { analyzeBeatmap } from "./integration/analyzer.js";
-import { showLoading, showResult, showError, showWaiting } from "./ui/display.js";
+import { showLoading, showResult, showError, showWaiting, updateGameState, updateInGameBar, onSettingsUpdate } from "./ui/display.js";
 import { isVibroMap } from "./ett/vibro.js";
 import type { TosuStateMessage } from "./types/tosu.js";
 
 // ---- Config ----
 const WS_ENDPOINT = "ws://localhost:24050/websocket/v2";
 const FETCH_ENDPOINT = "http://localhost:24050/files/beatmap/file";
+const SETTINGS_ENDPOINT = "http://localhost:24050/api/counters/settings/osumania-estimator%20by%20Akuta%20Zehy";
 
 // ---- State ----
 let lastMd5 = "";
 let lastModSig = "";
 let isAnalyzing = false;
 let analysisId = 0;
+let totalDurationMs = 0;
+let abortController: AbortController | null = null;
 
 // ---- Fetch .osu file from tosu ----
 async function fetchBeatmap(): Promise<string> {
@@ -127,6 +131,11 @@ async function onBeatmapChange(msg: TosuStateMessage): Promise<void> {
 
   showLoading();
 
+  // Cancel previous analysis immediately
+  if (abortController) abortController.abort();
+  abortController = new AbortController();
+  const signal = abortController.signal;
+
   // Cancel previous analysis if still running
   const myId = ++analysisId;
   isAnalyzing = true;
@@ -151,7 +160,7 @@ async function onBeatmapChange(msg: TosuStateMessage): Promise<void> {
         in: false,
         ho: false,
       },
-    });
+    }, signal);
 
     // Check again after analysis (which can be slow)
     if (myId !== analysisId) return;
@@ -161,6 +170,11 @@ async function onBeatmapChange(msg: TosuStateMessage): Promise<void> {
     if (isVibro) result.custom.jack.isVibro = true;
 
     showResult(result);
+    // Determine total duration from section analysis or grid cells
+    const sa = result.sectionAnalysis;
+    const ga2 = result.gridAnalysis;
+    totalDurationMs = sa?.totalDuration
+      ?? (ga2 && ga2.cells.length > 0 ? ga2.cells[ga2.cells.length - 1]!.endTime - ga2.cells[0]!.startTime : 0);
   } catch (err) {
     if (myId !== analysisId) return;
     const message = err instanceof Error ? err.message : "Unknown error";
@@ -170,11 +184,68 @@ async function onBeatmapChange(msg: TosuStateMessage): Promise<void> {
   }
 }
 
+// ---- State change handler (every WS message) ----
+function onStateChange(msg: TosuStateMessage): void {
+  const stateName = msg.state?.name ?? "";
+  updateGameState(stateName);
+
+  // No analysis data yet — nothing to highlight
+  if (totalDurationMs <= 0) return;
+
+  // Use beatmap.time.live — available during gameplay AND preview (matches PP by Belikhun / ManiaMapAnalyser)
+  const liveTime = msg.beatmap?.time?.live;
+  if (liveTime != null && Number.isFinite(liveTime)) {
+    const progress = Math.max(0, Math.min(1, liveTime / totalDurationMs));
+    updateInGameBar(progress);
+  }
+}
+
 // ---- Boot ----
 function boot(): void {
   showWaiting();
 
-  const ws = new WebSocketManager(WS_ENDPOINT, onBeatmapChange);
+  // Fetch settings via HTTP polling (works regardless of how overlay is opened)
+  let lastSettingsStr = "";
+  async function pollSettings(): Promise<void> {
+    try {
+      const res = await fetch(SETTINGS_ENDPOINT);
+      if (!res.ok) return;
+      const data = await res.json() as { values?: Record<string, unknown> };
+      if (data?.values) {
+        const current = JSON.stringify(data.values);
+        if (current !== lastSettingsStr) {
+          lastSettingsStr = current;
+          onSettingsUpdate(data.values);
+        }
+      }
+    } catch { /* tosu not available */ }
+  }
+
+  // Also try WebSocket commands for real-time updates
+  try {
+    const tosuSocket = new TosuSocketManager("127.0.0.1:24050");
+    tosuSocket.commands((data: { command: string; message: unknown }) => {
+      try {
+        const { command, message } = data;
+        if (command === "getSettings" && typeof message === "object" && message !== null && !Array.isArray(message)) {
+          onSettingsUpdate(message as Record<string, unknown>);
+          lastSettingsStr = JSON.stringify(message);
+        }
+      } catch (err) {
+        console.error("[settings] Error handling command:", err);
+      }
+    });
+    if (typeof window !== "undefined" && window.COUNTER_PATH) {
+      tosuSocket.sendCommand("getSettings", encodeURI(window.COUNTER_PATH));
+    }
+  } catch { /* socket.js not available */ }
+
+  // Poll settings every 2 seconds (catches dashboard changes)
+  pollSettings();
+  setInterval(pollSettings, 2000);
+
+  // Initialize game data WebSocket
+  const ws = new WebSocketManager(WS_ENDPOINT, onBeatmapChange, onStateChange);
   ws.connect();
 }
 

@@ -14,6 +14,7 @@ function deploy() {
     ["settings.json", "settings.json"],
     ["index.html", "index.html"],
     ["styles/main.css", "styles/main.css"],
+    ["src/tosu/socket.js", "dist/socket.js"],
     // Etterna WASM + JS glue (vibro detection)
     ["src/ett/versions/minaclac-72.3.js", "dist/minaclac-72.3.js"],
     ["src/ett/versions/minaclac-72.3.wasm", "dist/minaclac-72.3.wasm"],

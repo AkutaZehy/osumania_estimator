@@ -5,17 +5,20 @@
 import type { TosuStateMessage } from "../types/tosu.js";
 
 export type BeatmapChangeHandler = (msg: TosuStateMessage) => void;
+export type StateChangeHandler = (msg: TosuStateMessage) => void;
 
 export class WebSocketManager {
   private ws: WebSocket | null = null;
   private endpoint: string;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private onBeatmapChange: BeatmapChangeHandler;
+  private onStateChange: StateChangeHandler;
   private lastBeatmapMd5 = "";
 
-  constructor(endpoint: string, onBeatmapChange: BeatmapChangeHandler) {
+  constructor(endpoint: string, onBeatmapChange: BeatmapChangeHandler, onStateChange: StateChangeHandler) {
     this.endpoint = endpoint;
     this.onBeatmapChange = onBeatmapChange;
+    this.onStateChange = onStateChange;
   }
 
   connect(): void {
@@ -62,6 +65,9 @@ export class WebSocketManager {
       const msg = JSON.parse(data) as TosuStateMessage;
       // Ignore error messages
       if ((msg as Record<string, unknown>).error) return;
+
+      // Always notify state changes (Playing, SongSelect, etc.)
+      this.onStateChange(msg);
 
       const beatmap = msg.beatmap;
       if (!beatmap) return;

@@ -2,5 +2,5 @@ Name: osumania-estimator
 Author: Akuta Zehy
 Usecase: ingame
 CompatibleWith: tosu
-Resolution: 480x780
+Resolution: 640x960
 Version: 1.0.0

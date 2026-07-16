@@ -17,6 +17,19 @@ import { analyzePatterns } from "../patterns/summary.js";
 import { computeDensityMetrics } from "../custom/density.js";
 import { computeCustomMetrics } from "../custom/customMetrics.js";
 import { aggregateDifficulty } from "./difficultyAggregator.js";
+import { analyzeSections } from "../custom/sectionAnalysis.js";
+import { analyzeGrid } from "../custom/gridAnalysis.js";
+
+// ---- Cancellation support ----
+// A shared AbortSignal allows the UI to cancel a running analysis mid-flight.
+// Each major step checks the signal and throws AnalysisCancelledError if aborted.
+
+export class AnalysisCancelledError extends Error {
+  constructor() {
+    super("Analysis cancelled");
+    this.name = "AnalysisCancelledError";
+  }
+}
 
 // ---- Defaults for optional / placeholder subsystems ----
 
@@ -153,6 +166,7 @@ function buildErrorResult(
       0,
     ),
     graph: { times: [], values: [] },
+    sectionAnalysis: null,
     meta,
   };
 }
@@ -173,11 +187,13 @@ function buildErrorResult(
  *
  * @param osuText  - Raw .osu file content as string.
  * @param options  - Partial AnalysisOptions (speedRate, modFlags, densityWindowMs).
+ * @param signal   - Optional AbortSignal to cancel the analysis mid-flight.
  * @returns DifficultyResult with finalStar, components, graph, and meta.
  */
 export function analyzeBeatmap(
   osuText: string,
   options?: Partial<AnalysisOptions>,
+  signal?: AbortSignal,
 ): DifficultyResult {
   // Merge options with defaults
   const opts: AnalysisOptions = { ...DEFAULT_OPTIONS, ...options };
@@ -203,6 +219,7 @@ export function analyzeBeatmap(
       "Parse failed",
     );
   }
+  signal?.throwIfAborted();
 
   // ---- Step 2: Sunny Rework ----
   let sunny: SunnyResult;
@@ -219,6 +236,7 @@ export function analyzeBeatmap(
       hitLeniency: 0,
     };
   }
+  signal?.throwIfAborted();
 
   // ---- Step 3: Pattern Analysis ----
   let patterns: PatternSummary;
@@ -227,6 +245,7 @@ export function analyzeBeatmap(
   } catch {
     patterns = defaultPatternSummary(beatmap.duration, beatmap.lnRatio);
   }
+  signal?.throwIfAborted();
 
   // ---- Step 4: Custom Metrics ----
   let custom: CustomMetrics;
@@ -244,7 +263,29 @@ export function analyzeBeatmap(
   // ---- Step 5: Aggregate ----
   const { finalStar } = aggregateDifficulty(sunny, patterns, custom);
 
-  // ---- Step 6: Build result ----
+  // ---- Step 6: Section Analysis ----
+  let sectionAnalysis;
+  try {
+    sectionAnalysis = analyzeSections(beatmap, signal);
+  } catch (err) {
+    if (err instanceof AnalysisCancelledError) throw err;
+    console.error("[SectionAnalysis] failed", err);
+    sectionAnalysis = null;
+  }
+  signal?.throwIfAborted();
+
+  // ---- Step 7: Grid Analysis (new cell-based key type system) ----
+  let gridAnalysis;
+  try {
+    gridAnalysis = analyzeGrid(beatmap, signal);
+  } catch (err) {
+    if (err instanceof AnalysisCancelledError) throw err;
+    console.error("[GridAnalysis] failed", err);
+    gridAnalysis = null;
+  }
+  signal?.throwIfAborted();
+
+  // ---- Step 8: Build result ----
   const rawBpm = computeBPM(beatmap);
   const metaBpm = Math.round(rawBpm * opts.speedRate);
 
@@ -260,6 +301,8 @@ export function analyzeBeatmap(
     patterns,
     custom,
     graph,
+    sectionAnalysis,
+    gridAnalysis,
     meta: {
       title: beatmap.metadata.title,
       artist: beatmap.metadata.artist,
