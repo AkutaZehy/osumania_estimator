@@ -32,6 +32,7 @@ export function calculateSunny(
   speedRate: number,
   modFlags: ModFlags,
   options?: { withGraph?: boolean },
+  signal?: AbortSignal,
 ): SunnyResult {
   // Handle cvtFlag compatibility — IN and HO mods
   let cvtFlag: string | null = null;
@@ -63,6 +64,8 @@ export function calculateSunny(
     parser.getObjectIntervals();
   }
 
+  signal?.throwIfAborted();
+
   // preprocessFile handles HR/EZ internally via modFlags, and IN/HO via the parser
   const preprocessed: PreprocessResult = preprocessFile(
     parser.getParsedData(),
@@ -70,6 +73,7 @@ export function calculateSunny(
     modFlags,
     parser,
   );
+  signal?.throwIfAborted();
 
   if (preprocessed.status === "Fail" || preprocessed.status === "NotMania") {
     return {

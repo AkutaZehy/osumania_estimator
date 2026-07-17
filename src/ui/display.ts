@@ -82,13 +82,26 @@ function aggregateGridGrade(ga: GridAnalysisResult | null, category: "jack" | "s
   }
   if (totalWeight === 0) return null;
 
-  // P95 (integer) and weighted mean
-  values.sort((a, b) => a - b);
-  const p95Idx = Math.min(values.length - 1, Math.ceil(values.length * 0.95) - 1);
-  const p95 = Math.round(values[p95Idx]!);
-  const mean = weightedSum / totalWeight;
+  // Jack: use P75/median with gradeJack (discrete integer format)
+  if (category === "jack") {
+    values.sort((a, b) => a - b);
+    const topIdx = Math.min(values.length - 1, Math.ceil(values.length * 0.75) - 1);
+    const topVal = Math.round(values[topIdx]!);
+    const medIdx = Math.floor(values.length * 0.5);
+    const median = values.length > 0 ? values[medIdx]! : 0;
+    return gradeJack(topVal, median);
+  }
 
-  return category === "jack" ? gradeJack(p95, mean) : gradeStream(p95, mean);
+  // Stream: use mean density (total notes / total rows) for continuous value
+  const meanDensity = weightedSum / (totalWeight * 4);
+  let name: string;
+  if (meanDensity <= 1.125) name = "Single";
+  else if (meanDensity <= 1.25) name = "Light";
+  else if (meanDensity <= 1.5) name = "Mid";
+  else if (meanDensity < 2.0) name = "Dense";
+  else if (meanDensity === 2.0) name = "Full";
+  else name = "Heavy";
+  return `${name} (${meanDensity.toFixed(2)})`;
 }
 function mrow(label: string, value: string): string {
   return `<div class="mrow"><span>${label}</span><span>${value}</span></div>`;
@@ -139,12 +152,21 @@ export function showLoading(): void {
   setHtml("patterns", ""); setHtml("custom-metrics", "");
 }
 
+/** Show a dismissable countdown / warning in the overlay. */
+export function showCountdown(msg: string): void {
+  setText("status", "⚠ Heavy map — processing will begin shortly");
+  const se = el("star-rating");
+  if (se) { se.textContent = "\u26A0"; se.style.color = "#ffb74d"; }
+  setText("star-value", msg);
+}
+
 export function showError(message: string): void {
   setText("status", message);
   setText("star-rating", "\u26A0"); setText("star-value", "");
 }
 
 export function showResult(result: DifficultyResult): void {
+  try {
   const { finalStar, meta, custom, sunny, patterns } = result;
   const d = custom.density; const j = custom.jack; const s = custom.stream;
   const t = custom.tech; const st = custom.stamina; const ln = custom.ln;
@@ -180,20 +202,29 @@ export function showResult(result: DifficultyResult): void {
     }
   }
 
-  // Sunny star
+  // Sunny star + in-game comparison
   const sunnyStar = sunny.star > 0.01 ? sunny.star : densityStar(d);
-  setText("star-value", `Sunny: ${sunnyStar.toFixed(2)}`);
+  const gs = meta.gameStar;
+  let sunnyText = `Sunny: ${sunnyStar.toFixed(2)}`;
+  if (gs != null && gs > 0 && sunnyStar > 0.01) {
+    const diff = sunnyStar - gs;
+    sunnyText += ` (${diff >= 0 ? "+" : ""}${diff.toFixed(2)})`;
+  }
+  setText("star-value", sunnyText);
 
-  setText("status", `${meta.artist} \u2014 ${meta.title} [${meta.version}]`);
-  el("status")?.setAttribute("title", `${meta.artist} \u2014 ${meta.title} [${meta.version}]`);
+  // Status/title
+  const titleText = `${meta.artist} \u2014 ${meta.title} [${meta.version}]`;
+  setText("status", titleText);
+  el("status")?.setAttribute("title", titleText);
 
   // BPM display with range from grid analysis
   if (ga && ga.bpmRange.min !== ga.bpmRange.max) {
-    setText("bpm", `${Math.round(meta.bpm)} BPM (${ga.bpmRange.min.toFixed(0)}-${ga.bpmRange.max.toFixed(0)})`);
+    setText("bpm", `${Math.round(meta.bpm)} (${ga.bpmRange.min.toFixed(0)}-${ga.bpmRange.max.toFixed(0)})`);
   } else {
-    setText("bpm", `${Math.round(meta.bpm)} BPM`);
+    setText("bpm", `${Math.round(meta.bpm)}`);
   }
-  setText("ln-ratio", `LN ${(meta.lnRatio * 100).toFixed(0)}%`);
+  setText("keys", `${meta.columnCount}K`);
+  setText("ln-ratio", `${(meta.lnRatio * 100).toFixed(0)}%`);
 
   // Key type bars (from grid analysis, replacing Interlude pattern bars)
   if (ga && ga.bpmKeyTypes.length > 0) {
@@ -233,10 +264,10 @@ export function showResult(result: DifficultyResult): void {
   r.push(`<div class="grid-row">`);
   const bpmItems = [
     mrow("BPM", `${Math.round(meta.bpm)}`),
-    mrow("Both", `max ${d.bothHands.maxDensity.toFixed(1)} / med ${d.bothHands.medianDensity.toFixed(1)}`),
-    mrow("L/R", `${d.perHand.left.maxDensity.toFixed(1)} / ${d.perHand.right.maxDensity.toFixed(1)}`),
+    mrow("Both", `avg ${d.bothHands.meanDensity.toFixed(2)} / max ${d.bothHands.maxDensity.toFixed(1)}`),
+    mrow("L/R", `${d.perHand.left.meanDensity.toFixed(1)} / ${d.perHand.right.meanDensity.toFixed(1)}`),
   ];
-  if (d.perColumn.length === 4) bpmItems.push(mrow("Cols", d.perColumn.map((c) => `${c.maxDensity.toFixed(1)}`).join(" | ")));
+  if (d.perColumn.length === 4) bpmItems.push(mrow("Cols", d.perColumn.map((c) => `${c.meanDensity.toFixed(1)}`).join(" | ")));
   r.push(col("BPM / DENSITY", ...bpmItems));
   if (ln.ratio > 0.01 || ln.shieldCount > 0 || ln.columnLockCount > 0 || ln.inverseCount > 0 || ln.asyncReleaseCount > 0 || ln.releaseCount > 0 || ln.tapLNCount > 0 || ln.overlayCount > 0) {
     const lnItems = [mrow("Ratio", `${(ln.ratio * 100).toFixed(0)}% (${(ln.strictLNRatio * 100).toFixed(0)}%)`)];
@@ -266,14 +297,21 @@ export function showResult(result: DifficultyResult): void {
   ];
   r.push(col("JACK", ...jackItems));
   const streamImbal = `${s.imbalance4r.toFixed(2)}/${s.imbalance16r.toFixed(2)}/${s.imbalanceTotal.toFixed(2)}`;
-  // Combine JS/HS display if both appear in clusters
-  let streamDisplay = s.streamType ?? "Stream";
-  const allSpecifics = new Set<string>();
-  for (const c of topClusters) {
-    for (const [name] of c.specificTypes) allSpecifics.add(name);
-  }
-  if (allSpecifics.has("JumpStream") && allSpecifics.has("HandStream")) {
-    streamDisplay = "JumpStream / HandStream";
+  // Determine stream type from grid analysis segments (stream run analysis)
+  let streamDisplay = "Stream";
+  if (ga) {
+    let hasSS = false, hasJS = false, hasHS = false;
+    for (const seg of ga.segments) {
+      if (seg.category !== "stream") continue;
+      const kt = seg.keyType;
+      if (kt.includes("Handstream") || kt === "Full Handstream" || kt === "High Handstream" || kt === "Mid Handstream" || kt === "Low Handstream") hasHS = true;
+      if (kt.includes("Jumpstream") || kt === "Full Jumpstream" || kt === "High Jumpstream" || kt === "Mid Jumpstream" || kt === "Low Jumpstream") hasJS = true;
+      if (kt === "Single Stream" || kt === "High Stream") hasSS = true;
+    }
+    if (hasJS && hasHS) streamDisplay = "JumpStream / HandStream";
+    else if (hasHS) streamDisplay = "HandStream";
+    else if (hasJS) streamDisplay = "JumpStream";
+    else if (hasSS) streamDisplay = "Stream";
   }
   const streamItems = [
     mrow("Type", streamDisplay),
@@ -286,12 +324,14 @@ export function showResult(result: DifficultyResult): void {
 
   // Row 3: Tech + Stamina
   r.push(`<div class="grid-row">`);
-  const techItems = [
-    mrow("1f KPS", t.burst.singleFingerMaxKPS.toFixed(1)),
-    mrow("1h KPS", t.burst.oneHandMaxKPS.toFixed(1)),
-    mrow("2h KPS", t.burst.bothHandsMaxKPS.toFixed(1)),
-    ...(t.graceCount > 0 ? [mrow("Graces", `${t.graceCount}`)] : []),
-  ];
+  // Interval = same-finger spacing (true physical limit, cross-hand graces don't affect it)
+  // KPS = P90 of all notes (overall density across all fingers)
+  const intv = t.burst.singleFingerInterval;
+  const kps = t.burst.bothHandsKPS;
+  const techItems: string[] = [];
+  if (intv > 0) techItems.push(mrow("Interval", `${intv}ms`));
+  if (kps > 0) techItems.push(mrow("KPS (P90)", `${Math.round(kps)}`));
+  if (t.graceCount > 0) techItems.push(mrow("Graces", `${t.graceCount}`));
   if (t.rollTrill.rolls) techItems.push(mrow("Rolls", t.rollTrill.rolls));
   if (t.rollTrill.trills) techItems.push(mrow("Trills", t.rollTrill.trills));
   r.push(col("TECH", ...techItems));
@@ -300,7 +340,7 @@ export function showResult(result: DifficultyResult): void {
     mrow("Med", `${st.medDensity.toFixed(1)}\u00d7${(st.medDuration / 1000).toFixed(1)}s`),
     mrow("Med tot", `${(st.medTotalTime / 1000).toFixed(1)}s`),
     mrow("Ratio", `${(st.stretchRatio * 100).toFixed(0)}%`),
-    mrow("Switch", `${st.switchFrequency}`),
+    mrow("Switch", `${ga?.gridSwitch ?? st.switchFrequency}`),
   ];
   r.push(col("STAMINA", ...stamItems));
   r.push(`</div>`);
@@ -309,6 +349,10 @@ export function showResult(result: DifficultyResult): void {
 
   // ---- Section Analysis ----
   renderSectionAnalysisPatched(result.sectionAnalysis, result.gridAnalysis);
+  } catch (e) {
+    console.error("[showResult]", e);
+    showError(`Display error: ${e instanceof Error ? e.message : String(e)}`);
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -596,13 +640,9 @@ export function showWaiting(): void {
 // Settings — tosu dashboard settings via WebSocket commands
 // ===========================================================================
 
-export type ViewMode = "simple" | "detailed";
-
-const CATEGORY_NAMES: Record<SegmentCategory, string> = {
+const CATEGORY_NAMES: Record<string, string> = {
   stream: "Stream", jack: "Jack", ln: "LN", tech: "Tech", break: "Break",
 };
-
-let currentViewMode: ViewMode = "simple";
 let showPatterns = true;
 let showCustomMetrics = true;
 let lastSectionAnalysis: SectionAnalysis | null = null;
@@ -611,22 +651,6 @@ let lastResult: DifficultyResult | null = null;
 /** Handle settings update from tosu dashboard (object format: { uniqueID: value }) */
 export function onSettingsUpdate(settings: Record<string, unknown>): void {
   debugLog("onSettingsUpdate received:", settings);
-
-  // viewMode is "options" type — tosu returns the option object {label, value}, not bare string
-  const rawVM = settings.viewMode;
-  let parsedVM: ViewMode | null = null;
-  if (rawVM === "simple" || rawVM === "detailed") {
-    parsedVM = rawVM;
-  } else if (typeof rawVM === "object" && rawVM !== null) {
-    const opt = rawVM as Record<string, unknown>;
-    if (opt.value === "simple" || opt.value === "detailed") {
-      parsedVM = opt.value as ViewMode;
-    }
-  }
-  if (parsedVM) {
-    currentViewMode = parsedVM;
-    debugLog("viewMode →", currentViewMode);
-  }
   if (typeof settings.showPatterns === "boolean") {
     showPatterns = settings.showPatterns;
     debugLog("showPatterns →", showPatterns);
@@ -635,22 +659,8 @@ export function onSettingsUpdate(settings: Record<string, unknown>): void {
     showCustomMetrics = settings.showCustomMetrics;
     debugLog("showCustomMetrics →", showCustomMetrics);
   }
-  applyViewMode();
   applySectionVisibility();
   resizeCard();
-}
-
-function applyViewMode(): void {
-  const isDetailed = currentViewMode === "detailed";
-  debugLog("applyViewMode: mode=%s, lastSectionAnalysis=%s (segs=%d)", isDetailed ? "detailed" : "simple", lastSectionAnalysis ? "yes" : "null", lastSectionAnalysis?.segments.length ?? 0);
-  // No guard — show/hide is safe even without analysis (null elements are no-ops)
-  if (isDetailed) {
-    show("structure-grid");
-    show("segment-table");
-  } else {
-    hide("structure-grid");
-    hide("segment-table");
-  }
 }
 
 function applySectionVisibility(): void {
@@ -800,8 +810,7 @@ function renderSectionAnalysisPatched(
   lastTotalDuration = sa?.totalDuration
     ?? (ga && ga.cells.length > 0 ? ga.cells[ga.cells.length - 1]!.endTime - ga.cells[0]!.startTime : 0);
 
-  debugLog("renderSectionAnalysisPatched: sa=%s, grid=%s, currentViewMode=%s",
-    sa ? "yes" : "null", ga ? "yes" : "null", currentViewMode);
+  debugLog("renderSectionAnalysisPatched: sa=%s, grid=%s", sa ? "yes" : "null", ga ? "yes" : "null");
 
   // Use grid analysis if available
   if (ga && ga.segments.length > 0) {
@@ -810,30 +819,14 @@ function renderSectionAnalysisPatched(
       ? ga.cells[ga.cells.length - 1]!.endTime - ga.cells[0]!.startTime
       : 0;
     renderGridSectionBar(ga.cells, ga.bpmRange);
-    renderGridStructure(ga.segments);
-    renderGridSegmentTable(ga.segments);
-    applyViewMode();
     applySectionVisibility();
     resizeCard();
     return;
   }
 
-  // Fallback: section analysis
-  if (!sa || sa.segments.length === 0) {
-    lastGridCells = null;
-    hide("section-bar");
-    hide("structure-grid");
-    hide("segment-table");
-    return;
-  }
-
-  renderSectionBar(sa);
-  renderStructureGrid(sa);
-  renderSegmentTable(sa);
-
-  // Apply current view mode (simple hides grid+table)
-  applyViewMode();
-  applySectionVisibility();
+  // Fallback: no grid or section analysis
+  lastGridCells = null;
+  hide("section-bar");
   resizeCard();
 }
 

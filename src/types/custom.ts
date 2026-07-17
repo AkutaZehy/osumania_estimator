@@ -9,14 +9,14 @@ export interface DensityMetrics {
     column: number;
     maxDensity: number;
     medianDensity: number;
+    meanDensity: number;
   }>;
   /** Per-hand density (left = cols 0-1, right = cols 2-3) */
   perHand: {
-    left: { maxDensity: number; medianDensity: number };
-    right: { maxDensity: number; medianDensity: number };
+  left: { maxDensity: number; medianDensity: number; meanDensity: number };
+  right: { maxDensity: number; medianDensity: number; meanDensity: number };
   };
-  /** Both-hands aggregate density */
-  bothHands: { maxDensity: number; medianDensity: number };
+  bothHands: { maxDensity: number; medianDensity: number; meanDensity: number };
 }
 
 /** Equivalent BPM — adjusted for dominant note division */
@@ -79,9 +79,12 @@ export interface TechMetrics {
   graceCount: number;
   rollTrill: RollTrillStats;
   burst: {
-    singleFingerMaxKPS: number;
-    oneHandMaxKPS: number;
-    bothHandsMaxKPS: number;
+singleFingerInterval: number;
+  oneHandInterval: number;
+  bothHandsInterval: number;
+  singleFingerKPS: number;
+  oneHandKPS: number;
+  bothHandsKPS: number;
   };
 }
 

@@ -10,7 +10,7 @@
 //   5. Merge key types by BPM ±10, compute percentages
 // ============================================================
 
-import type { ParsedBeatmap } from "../types/beatmap.js";
+import type { ParsedBeatmap, TimingPoint } from "../types/beatmap.js";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -33,6 +33,8 @@ export interface CellResult {
   category: CellCategory;
   /** Detected subdivision denominator (2,3,4,6,8,12), null for LN/break */
   subdivision: number | null;
+  /** True when detectSubdivision returned null (no standard subdivision found) */
+  isGrace?: boolean;
   /** rawBPM × (subdivision / 4) */
   effectiveBPM: number;
   noteCount: number;
@@ -80,6 +82,10 @@ export interface GridAnalysisResult {
   bpmKeyTypes: BPMKeyType[];
   mainKeyType: BPMKeyType;
   bpmRange: { min: number; max: number };
+  /** Per-run per-cell key type breakdown for display (e.g. "SS 34% + Low JS 33%") */
+  streamBreakdown: string;
+  /** Grid-based switch: max jack↔stream transitions in any 4-cell (16-row) window */
+  gridSwitch: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -208,7 +214,10 @@ function detectSubdivision(
     // Require at least one 1× interval match
     if (matchCount1x === 0) continue;
 
-    // For cells with 2+ non-zero intervals, check consecutive run quality
+    // For cells with 2+ non-zero intervals, check consecutive run quality.
+    // Finer subdivisions require more consecutive matches to avoid
+    // misclassifying irregular grace patterns (e.g., pairs of 50ms notes
+    // with gaps between them) as 32nd/48th note streams.
     let maxConsecutive = 0;
     let currentRun = 0;
     for (const dt of intervals) {
@@ -220,9 +229,12 @@ function detectSubdivision(
       }
     }
 
+    // Consecutive match requirements per subdivision
+    const minConsecutive = denom <= 4 ? 2 : denom <= 8 ? 3 : 4;
+
     // Accept: must have at least 1 matching interval;
-    // if 2+ intervals exist, require at least 2 consecutive
-    if (intervals.length < 2 || maxConsecutive >= 2) {
+    // if 2+ intervals exist, require enough consecutive matches
+    if (intervals.length < 2 || maxConsecutive >= minConsecutive) {
       // Prefer finer subdivisions (higher denom) as they represent faster play
       if (!best || denom > best.denom) {
         best = { denom, interval: target, count: maxConsecutive };
@@ -342,7 +354,10 @@ function detectCrossCellJacks(
     const subdivDenom = cell.subdivision ?? 4;
     if (subdivDenom > 2) continue;
 
-    const endIdx = Math.min(i + 2, cells.length);
+    // Use a 3-cell window for better jack pair statistics.
+    // 2 cells only give 4 same-column candidates at denom=2, which can
+    // miss chordjack patterns where columns don't repeat at 1-2× subInterval.
+    const endIdx = Math.min(i + 3, cells.length);
     if (endIdx - i < 2) continue;
 
     const allNotes = getNotesInRange(beatmap, cell.startTime, cells[endIdx - 1]!.endTime);
@@ -372,8 +387,13 @@ function detectCrossCellJacks(
       const sorted = notes.sort((a, b) => a.start - b.start);
       for (let j = 0; j < sorted.length - 1; j++) {
         const dt = sorted[j + 1]!.start - sorted[j]!.start;
+        // Check 1×, 2×, 3×, and 4× subInterval.
+        // Chordjack at denom=2 has same-column interval = 4× subInterval
+        // (4 notes per cell, one per column, repeated each cell).
         if (Math.abs(dt - subInterval) < tolerance ||
-            Math.abs(dt - subInterval * 2) < tolerance) {
+            Math.abs(dt - subInterval * 2) < tolerance ||
+            Math.abs(dt - subInterval * 3) < tolerance ||
+            Math.abs(dt - subInterval * 4) < tolerance) {
           jackPairs++;
         }
       }
@@ -432,10 +452,11 @@ export function gradeStream(maxWindowNotes: number, medWindowNotes: number): str
   const avgPerRow = maxWindowNotes / 4;
   const m = Number.isInteger(maxWindowNotes) ? maxWindowNotes.toString() : maxWindowNotes.toFixed(1);
   const d = medWindowNotes.toFixed(1);
-  if (avgPerRow <= 1.0) return `Single (${m}/${d})`;
+  if (avgPerRow <= 1.125) return `Single (${m}/${d})`;
   if (avgPerRow <= 1.25) return `Light (${m}/${d})`;
   if (avgPerRow <= 1.5) return `Mid (${m}/${d})`;
-  if (avgPerRow <= 2.0) return `Dense (${m}/${d})`;
+  if (avgPerRow < 2.0) return `Dense (${m}/${d})`;
+  if (avgPerRow === 2.0) return `Full (${m}/${d})`;
   return `Heavy (${m}/${d})`;
 }
 
@@ -483,16 +504,17 @@ function classifyStream(
   }
 
   if (isHS) {
+    // Only classify as handstream when consistently dense (avgPerRow ≥ 1.75 = 3121).
+    // 3111 patterns (avgPerRow = 1.5, one row with 3 notes = chord in dense JS)
+    // are common in dense jumpstream and should NOT be classified as handstream.
     if (avgPerRow >= 2.0) return { keyType: "Full Handstream", grade };
     if (avgPerRow >= 1.75) return { keyType: "High Handstream", grade };
-    if (avgPerRow >= 1.5) return { keyType: "Mid Handstream", grade };
-    return { keyType: "Low Handstream", grade };
-  } else {
-    if (avgPerRow >= 2.0) return { keyType: "Full Jumpstream", grade };
-    if (avgPerRow >= 1.5) return { keyType: "High Jumpstream", grade };
-    if (avgPerRow >= 1.25) return { keyType: "Mid Jumpstream", grade };
-    return { keyType: "Low Jumpstream", grade };
   }
+  // Jumpstream path (also covers sparse HS patterns below handstream threshold)
+  if (avgPerRow >= 2.0) return { keyType: "Full Jumpstream", grade };
+  if (avgPerRow >= 1.5) return { keyType: "High Jumpstream", grade };
+  if (avgPerRow > 1.25) return { keyType: "Mid Jumpstream", grade };
+  return { keyType: "Low Jumpstream", grade };
 }
 
 // ---------------------------------------------------------------------------
@@ -614,23 +636,34 @@ function buildGrid(
   const beatLength = 60000 / effectiveBPM;
   const rowDuration = beatLength / 4; // 1/4 beat at effective BPM
 
-  // Grid covers 4 rows → total time span = 4 × rowDuration
-  const gridStart = segmentCells[0]!.startTime;
+  // Slide a 4-row window across each cell in the segment and pick the
+  // window with the most notes (peak density). This avoids underestimating
+  // density when the first cell happens to be sparse.
+  let bestTotal = 0;
+  let bestRowNotes: number[] = [0, 0, 0, 0];
+  let bestMaxBeat = 1;
 
-  // Collect notes per grid row (all columns combined)
-  const rowNotes: number[] = [];
-  for (let row = 0; row < 4; row++) {
-    const rowStart = gridStart + row * rowDuration;
-    const rowEnd = rowStart + rowDuration;
-    const rowNotes_count = getNotesInRange(beatmap, rowStart, rowEnd).length;
-    rowNotes.push(rowNotes_count);
+  for (const cell of segmentCells) {
+    const rowNotes: number[] = [];
+    for (let row = 0; row < 4; row++) {
+      const rowStart = cell.startTime + row * rowDuration;
+      const rowEnd = rowStart + rowDuration;
+      rowNotes.push(getNotesInRange(beatmap, rowStart, rowEnd).length);
+    }
+    const total = rowNotes.reduce((a, b) => a + b, 0);
+    if (total > bestTotal) {
+      bestTotal = total;
+      bestRowNotes = rowNotes;
+      bestMaxBeat = Math.max(...rowNotes, 1);
+    }
   }
 
-  const totalNotes = rowNotes.reduce((a, b) => a + b, 0);
-  const maxBeat = Math.max(...rowNotes, 1);
-  const avgPerRow = totalNotes / 4;
-
-  return { gridNotes: totalNotes, maxBeat, avgPerRow, rowNotes };
+  return {
+    gridNotes: bestTotal,
+    maxBeat: bestMaxBeat,
+    avgPerRow: bestTotal / 4,
+    rowNotes: bestRowNotes,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -820,6 +853,200 @@ function mergeBPMKeyTypes(segments: SegmentResult[]): BPMKeyType[] {
 }
 
 // ---------------------------------------------------------------------------
+// Stream Run Analysis (replaces per-segment grid for stream cells)
+// ---------------------------------------------------------------------------
+
+interface StreamRun {
+  cells: CellResult[];
+  avgBPM: number;
+  /** Per-cell sliding-window grid results: [gridTotalNotes, maxBeat][] */
+  gridResults: Array<{ notes: number; maxBeat: number }>;
+  histogram: Map<number, number>; // gridTotalNotes → cellCount
+  totalStreamCells: number;
+}
+
+/**
+ * Collect contiguous stream cells into runs, compute sliding-window
+ * densliding-window density for each cell position.
+ */
+function analyzeStreamRuns(
+  cells: CellResult[],
+  beatmap: ParsedBeatmap,
+): StreamRun[] {
+  const runs: StreamRun[] = [];
+  let i = 0;
+  while (i < cells.length) {
+    if (cells[i]!.category !== "stream") { i++; continue; }
+
+    // Sliding-window helper
+    const cellGrid = (cell: CellResult): { notes: number; maxBeat: number } => {
+      const bpm = cell.effectiveBPM > 0 ? cell.effectiveBPM : 120;
+      const bl = 60000 / bpm, rd = bl / 4;
+      const rn = [0, 0, 0, 0];
+      for (let r = 0; r < 4; r++) {
+        const rs = cell.startTime + r * rd;
+        rn[r] = getNotesInRange(beatmap, rs, rs + rd).length;
+      }
+      return { notes: rn.reduce((a, b) => a + b, 0), maxBeat: Math.max(...rn, 1) };
+    };
+
+    const runCells: CellResult[] = [];
+    const gridResults: Array<{ notes: number; maxBeat: number }> = [];
+    // Track recent density changes: require 2+ consecutive differing cells
+    // before splitting, to avoid micro-runs from single-cell fluctuations.
+    let divergeCount = 0;
+
+    while (i < cells.length && cells[i]!.category === "stream") {
+      const cell = cells[i]!;
+      const gr = cellGrid(cell);
+
+      if (gridResults.length > 0) {
+        const prev = gridResults[gridResults.length - 1]!.notes;
+        if (Math.abs(gr.notes - prev) >= 1) {
+          divergeCount++;
+          if (divergeCount >= 2 && runCells.length >= 4) {
+            break; // sustained density change → split
+          }
+        } else {
+          divergeCount = 0; // reset on similar density
+        }
+      }
+
+      runCells.push(cell);
+      gridResults.push(gr);
+      i++;
+    }
+    if (runCells.length === 0) continue;
+
+    // Average BPM of the run
+    const bpmSum = runCells.filter(c => c.effectiveBPM > 0).map(c => c.effectiveBPM);
+    const avgBPM = bpmSum.length > 0
+      ? Math.round(bpmSum.reduce((a, b) => a + b, 0) / bpmSum.length)
+      : 120;
+
+    // Build histogram: count cells by gridTotalNotes
+    const histo = new Map<number, number>();
+    for (const g of gridResults) {
+      histo.set(g.notes, (histo.get(g.notes) ?? 0) + 1);
+    }
+
+    runs.push({
+      cells: runCells,
+      avgBPM,
+      gridResults,
+      histogram: histo,
+      totalStreamCells: runCells.length,
+    });
+  }
+  return runs;
+}
+
+/**
+ * Classify a (gridTotalNotes, maxBeat) pair into a key type string
+ * using the user's thresholds.
+ */
+function classifyStreamDensity(notes: number, maxBeat: number): string {
+  const avg = notes / 4;
+
+  // HS path (maxBeat ≥ 3)
+  // 0.625→LowHS 1.25→LowHS 1.5→MidHS 1.5~1.75→HighHS 1.75+→FullHS
+  if (maxBeat >= 3) {
+    if (avg >= 2.0) return "Full Handstream";
+    if (avg >= 1.75) return "Full Handstream";  // 1.75+ → Full HS
+    if (avg > 1.5 + 0.001) return "High Handstream"; // 1.5~1.75 → High HS (run level)
+    if (Math.abs(avg - 1.5) < 0.001) return "Mid Handstream"; // ≈1.5 → Mid HS
+    if (avg >= 1.25) return "Low Handstream";   // 1.25~1.5 → Low HS
+    // avg < 1.25: too dilute for HS, fall through to JS path
+  }
+
+  // JS / pure stream path
+  // Per-cell gridTotalNotes is integer (4,5,6,7,8 → avg=1.0,1.25,1.5,1.75,2.0),
+  // so Mid JS (1.25~1.5) and High Stream (1.125~1.25) only appear at run level.
+  // Use tolerance for floating point === comparison.
+  if (avg >= 2.0) return "Full Jumpstream";
+  if (avg >= 1.5) return "High Jumpstream";     // 1.5~2 → High JS
+  if (avg > 1.25 + 0.001) return "Mid Jumpstream"; // >1.25~1.5 → Mid JS
+  if (Math.abs(avg - 1.25) < 0.001) return "Low Jumpstream"; // ≈1.25 → Low JS
+  if (avg >= 1.125) return "High Stream";       // 1.125~1.25 → 大乱
+  return "Single Stream";                        // <1.125 → 单乱
+}
+
+/**
+ * Run-level density grade: uses the true mean density (total notes / total rows)
+ * across the entire run, giving a continuous value instead of discrete P75.
+ */
+function streamRunGrade(results: Array<{ notes: number; maxBeat: number }>): string {
+  if (results.length === 0) return "None";
+  const totalNotes = results.reduce((s, r) => s + r.notes, 0);
+  const totalRows = results.length * 4;
+  const meanDensity = totalNotes / totalRows;
+
+  let name: string;
+  if (meanDensity <= 1.125) name = "Single";
+  else if (meanDensity <= 1.25) name = "Light";
+  else if (meanDensity <= 1.5) name = "Mid";
+  else if (meanDensity < 2.0) name = "Dense";
+  else if (meanDensity === 2.0) name = "Full";
+  else name = "Heavy";
+
+  return `${name} (${meanDensity.toFixed(2)})`;
+}
+
+/**
+ * Decompose a stream run using its RUN-LEVEL mean density.
+ * Each run produces ONE entry with the key type determined by the
+ * continuous average density across the entire run (not per-cell).
+ * This avoids the SS vs Low JS tie issue and properly captures
+ * Mid JS / High Stream at mixed-density boundaries.
+ */
+function decomposeStreamRun(
+  run: StreamRun,
+  beatmap: ParsedBeatmap,
+): Array<{ keyType: string; bpm: number; cellCount: number; grade: string }> {
+  if (run.cells.length === 0) return [];
+
+  // Use MEDIAN density for classification (not mean, not P75).
+  // Mean is pulled down by filler sections; P75 is pulled up by dense tails.
+  // Median captures the "typical" cell density in the run.
+  const notesVals = run.gridResults.map((r) => r.notes).sort((a, b) => a - b);
+  const medNotes = notesVals[Math.floor(notesVals.length / 2)]!;
+
+  // Use MEDIAN maxBeat for HS detection (avoid single-cell pull)
+  const maxBeats = run.gridResults.map((r) => r.maxBeat).sort((a, b) => a - b);
+  const medianMaxBeat = maxBeats[Math.floor(maxBeats.length / 2)]!;
+
+  // Classify using P75 density
+  const kt = classifyStreamDensity(medNotes, medianMaxBeat);
+
+  // Compute BPM for display. For cells with a detected subdivision, use
+  // effectiveBPM (includes speed multiplier). For grace cells (null subdivision),
+  // the effectiveBPM = rawBPM but the actual note density may be much lower.
+  // Adjust grace cell BPM proportionally: rawBPM × (noteCount / 4).
+  // A normal 16th-note cell has noteCount=4 → no adjustment.
+  // A sparse cell with noteCount=2 (quarter chord) → BPM halved.
+  const bpmCounts = new Map<number, number>();
+  for (const cell of run.cells) {
+    let bpm = cell.effectiveBPM;
+    // Grace cells (no detected subdivision) are rhythmically irregular/sparse.
+    // Halve their BPM for display: the actual playing density is much lower
+    // than the raw BPM suggests (e.g. quarter notes at 276 BPM feel like 138).
+    if (bpm > 0 && cell.isGrace) bpm = bpm / 2;
+    if (bpm <= 0) bpm = getActiveBPM(beatmap, cell.startTime);
+    const b = Math.round(bpm);
+    bpmCounts.set(b, (bpmCounts.get(b) ?? 0) + 1);
+  }
+  let modeBPM = 0, maxCnt = 0;
+  for (const [b, c] of bpmCounts) { if (c > maxCnt) { maxCnt = c; modeBPM = b; } }
+
+  return [{
+    keyType: kt,
+    bpm: modeBPM,
+    cellCount: run.cells.length,
+    grade: streamRunGrade(run.gridResults),
+  }];
+}
+
+// ---------------------------------------------------------------------------
 // Main Analysis
 // ---------------------------------------------------------------------------
 
@@ -827,9 +1054,8 @@ function mergeBPMKeyTypes(segments: SegmentResult[]): BPMKeyType[] {
  * Run the full cell-based grid analysis on a parsed beatmap.
  */
 export function analyzeGrid(beatmap: ParsedBeatmap, signal?: AbortSignal): GridAnalysisResult | null {
-  // Skip grid analysis for maps with 5000+ notes — the experimental grid
-  // does not scale to ultra-long beatmaps (200k notes, 2-hour maps).
-  if (beatmap.noteStarts.length > 5000) return null;
+  // Skip grid analysis for extremely long maps (50000+ notes) to avoid performance issues.
+  if (beatmap.noteStarts.length > 50000) return null;
 
   // Grid layout uses the FIRST timing point's beat length.
   // Each cell then uses its own active timing point for BPM/beatLength.
@@ -900,6 +1126,7 @@ export function analyzeGrid(beatmap: ParsedBeatmap, signal?: AbortSignal): GridA
       beatIndex: beat, startTime: cellStart, endTime: cellEnd,
       category: isJack ? "jack" : "stream",
       subdivision: subdivDenom,
+      isGrace: !subdiv, // true when detectSubdivision returned null
       effectiveBPM: Math.round(effectiveBPM),
       noteCount, lnRatio,
       beatNotes: structure,
@@ -907,19 +1134,25 @@ export function analyzeGrid(beatmap: ParsedBeatmap, signal?: AbortSignal): GridA
   }
 
   // Global grace correction: if a low subdivision appears in >30% of cells,
-  // reclassify cells that were marked as "no subdivision" (grace) but have that interval
+  // re-check grace cells — only reclassify those whose intervals genuinely match
+  // the prevalent subdivision (not cells with truly irregular grace patterns).
   const graceThreshold = 0.30;
   for (const [denom, count] of globalSubdivCounts) {
     if (denom >= 6 && totalAnalyzableCells > 0 && count / totalAnalyzableCells >= graceThreshold) {
-      // This subdivision is prevalent → reclassify grace cells
       for (const cell of cells) {
         if (cell.category === "break" || cell.category === "ln") continue;
-        if (cell.subdivision !== null) continue; // already has subdivision
+        if (cell.subdivision !== null) continue;
 
-        // Re-check with this subdivision, using per-cell active timing
         const notes = getNotesInRange(beatmap, cell.startTime, cell.endTime);
         const cellBeatLength = getActiveBeatLength(beatmap, cell.startTime);
         const cellRawBPM = getActiveBPM(beatmap, cell.startTime);
+
+        // Re-run detectSubdivision — only reclassify if this cell genuinely
+        // matches the prevalent denom (grace cells with irregular intervals
+        // should stay as grace).
+        const subdiv = detectSubdivision(notes, cellBeatLength);
+        if (!subdiv || subdiv.denom !== denom) continue;
+
         const isJack = detectJack(notes, cellBeatLength, denom);
         cell.subdivision = denom;
         cell.effectiveBPM = Math.round(cellRawBPM * (denom / 4));
@@ -933,16 +1166,220 @@ export function analyzeGrid(beatmap: ParsedBeatmap, signal?: AbortSignal): GridA
   // but repeats at sub-beat intervals across cell boundaries.
   detectCrossCellJacks(cells, beatmap);
 
-  // Phase 2: Build segments
-  const segments = buildSegments(cells, beatmap);
+  // Phase 2: Build stream runs + non-stream segments
+  // Stream cells use density-run analysis; jack/ln/break use segment grid.
+  const streamRuns = analyzeStreamRuns(cells, beatmap);
+  const nonStreamSegments = buildSegments(
+    cells.filter((c) => c.category !== "stream"),
+    beatmap,
+  );
 
-  // Phase 3: BPM merge
-  const bpmKeyTypes = mergeBPMKeyTypes(segments);
+  // Convert stream runs to display segments (for structure grid / segment table)
+  const streamSegments: SegmentResult[] = streamRuns.map((run) => {
+    const first = run.cells[0]!, last = run.cells[run.cells.length - 1]!;
+    const allNotes = run.gridResults.map((r) => r.notes);
+    const allMax = run.gridResults.map((r) => r.maxBeat);
+    const avgNotes = allNotes.reduce((a, b) => a + b, 0) / allNotes.length;
+    const runGrade = streamRunGrade(run.gridResults);
+    const runTypes = decomposeStreamRun(run, beatmap);
+    return {
+      cells: run.cells,
+      category: "stream" as CellCategory,
+      effectiveBPM: run.avgBPM,
+      subdivision: 0,
+      startTime: first.startTime,
+      endTime: last.endTime,
+      startBeat: first.beatIndex,
+      endBeat: last.beatIndex,
+      gridTotalNotes: avgNotes,
+      avgPerRow: avgNotes / 4,
+      maxBeat: Math.max(...allMax),
+      grade: runGrade,
+      keyType: runTypes[0]?.keyType ?? "Stream",
+      rowNotes: [0, 0, 0, 0],
+      lnSubtype: null,
+      lnSubtypes: [],
+    };
+  });
 
-  // Phase 4: Main key type and BPM range
-  const mainKeyType = bpmKeyTypes.length > 0
-    ? bpmKeyTypes[0]!
-    : { keyType: "Unknown", bpm: firstBPM, cellCount: 0, percentage: 100 };
+  // Combine all segments for display
+  const segments = [...nonStreamSegments, ...streamSegments].sort(
+    (a, b) => a.startTime - b.startTime,
+  );
+
+  // Phase 3: Merge key type entries from both sources
+  // Non-stream segments → mergeBPMKeyTypes (existing logic)
+  const segKeyTypes = mergeBPMKeyTypes(nonStreamSegments);
+
+  // Stream runs → decomposed entries per run
+  const runEntries = streamRuns.flatMap((r) => decomposeStreamRun(r, beatmap));
+
+  // Combine: mergeBPMKeyTypes output + run entries → aggregated bpmKeyTypes
+  const combinedEntries = new Map<string, { cellCount: number; bpm: number; keyType: string }>();
+  for (const bkt of segKeyTypes) {
+    const key = `${bkt.keyType}|${bkt.bpm}`;
+    combinedEntries.set(key, { keyType: bkt.keyType, bpm: bkt.bpm, cellCount: bkt.cellCount });
+  }
+  for (const re of runEntries) {
+    const key = `${re.keyType}|${re.bpm}`;
+    const existing = combinedEntries.get(key);
+    if (existing) {
+      existing.cellCount += re.cellCount;
+    } else {
+      combinedEntries.set(key, { keyType: re.keyType, bpm: re.bpm, cellCount: re.cellCount });
+    }
+  }
+
+  const totalCells = cells.filter((c) => c.category !== "break").length;
+  const bpmKeyTypes: BPMKeyType[] = [...combinedEntries.values()]
+    .map((e) => ({
+      keyType: e.keyType,
+      bpm: e.bpm,
+      cellCount: e.cellCount,
+      percentage: totalCells > 0 ? (e.cellCount / totalCells) * 100 : 0,
+    }))
+    .sort((a, b) => b.percentage - a.percentage);
+
+  // Phase 4: BPM-aware main key type selection
+  //
+  // Principle: select the HARDER type that is still a significant part
+  // of the map (not grace). Uses effective comparison BPM:
+  //   - Jack: effBPM = BPM × 2  (90 BPM jack ≈ 180 BPM stream in difficulty)
+  //   - Stream: effBPM = BPM
+  //
+  // Step A: For each category, find its dominant eff BPM (most cells there).
+  // LN uses raw BPM (same as stream, no 2× multiplier).
+  const jackEff = new Map<number, number>();
+  const streamEff = new Map<number, number>();
+  const lnEff = new Map<number, number>();
+  const jackEntries: BPMKeyType[] = [];
+  const streamEntries: BPMKeyType[] = [];
+  const lnEntries: BPMKeyType[] = [];
+
+  for (const bkt of bpmKeyTypes) {
+    const cat = keyTypeToCategory(bkt.keyType);
+    if (cat === "break") continue;
+    const rawEff = cat === "jack" ? bkt.bpm * 2 : bkt.bpm;
+    const effKey = Math.round(rawEff / 10) * 10;
+    if (cat === "jack") {
+      jackEff.set(effKey, (jackEff.get(effKey) ?? 0) + bkt.cellCount);
+      jackEntries.push(bkt);
+    } else if (cat === "ln") {
+      lnEff.set(effKey, (lnEff.get(effKey) ?? 0) + bkt.cellCount);
+      lnEntries.push(bkt);
+    } else {
+      streamEff.set(effKey, (streamEff.get(effKey) ?? 0) + bkt.cellCount);
+      streamEntries.push(bkt);
+    }
+  }
+
+  // Helper: find dominant eff BPM for a category
+  function bestEff(m: Map<number, number>): { eff: number; cells: number } {
+    let best = { eff: 0, cells: 0 };
+    for (const [eff, cnt] of m) {
+      if (cnt > best.cells) best = { eff, cells: cnt };
+    }
+    return best;
+  }
+
+  // Compare two categories: pick the harder/significant one
+  // Threshold: harder category needs ≥50% of the easier's cells (not 30%)
+  // to prevent a small hard section from overshadowing a dominant easier section.
+  function pickWinner(a: { eff: number; cells: number }, b: { eff: number; cells: number }): "a" | "b" {
+    if (a.cells === 0 && b.cells === 0) return "a";
+    if (a.cells === 0) return "b";
+    if (b.cells === 0) return "a";
+    if (a.eff === b.eff) {
+      // Same eff → more cells wins; if within 10%, prefer harder (jack > stream > ln)
+      // which is "a" in the jack-vs-stream call order.
+      const diff = Math.abs(a.cells - b.cells) / Math.max(a.cells, b.cells);
+      if (diff < 0.10) return "a";
+      return a.cells >= b.cells ? "a" : "b";
+    }
+    if (a.eff > b.eff) return a.cells >= b.cells * 0.5 ? "a" : "b";
+    return b.cells >= a.cells * 0.5 ? "b" : "a";
+  }
+
+  const jackBest = bestEff(jackEff);
+  const streamBest = bestEff(streamEff);
+  const lnBest = bestEff(lnEff);
+
+  // Three-way elimination: jack vs stream → winner, then vs ln
+  // pickWinner returns "a" (first arg) or "b" (second arg)
+  const jsWinner = pickWinner(jackBest, streamBest);
+  const jsBest = jsWinner === "a" ? jackBest : streamBest;
+  const jsName: CellCategory = jsWinner === "a" ? "jack" : "stream";
+  const lnWinner = pickWinner(jsBest, lnBest);
+  let mainCategory: CellCategory;
+  let candidates: BPMKeyType[];
+  if (lnWinner === "b") {
+    // ln won
+    mainCategory = "ln";
+    candidates = lnEntries;
+  } else {
+    // js (jack or stream) won
+    mainCategory = jsName;
+    candidates = jsName === "jack" ? jackEntries : streamEntries;
+  }
+
+  // Step D: Difficulty weighting — when the same key type appears at
+  //         multiple BPMs (e.g. 90 jack + 180 jack, or 175 stream + 263 stream),
+  //         prefer the harder (higher BPM) variant if it has ≥ 30% share
+  //         AND is at least 1.4× faster than the next slower variant.
+  const byType = new Map<string, BPMKeyType[]>();
+  for (const c of candidates) {
+    const arr = byType.get(c.keyType) ?? [];
+    arr.push(c);
+    byType.set(c.keyType, arr);
+  }
+  const finalList: BPMKeyType[] = [];
+  for (const [, entries] of byType) {
+    if (entries.length <= 1) {
+      finalList.push(entries[0]!);
+      continue;
+    }
+    // Sort by BPM descending (hardest first)
+    entries.sort((a, b) => b.bpm - a.bpm);
+    const total = entries.reduce((s, e) => s + e.cellCount, 0);
+    const hardest = entries[0]!;
+    if (hardest.bpm >= entries[1]!.bpm * 1.4 && hardest.cellCount / total >= 0.30) {
+      finalList.push(hardest);
+    } else {
+      // Keep the variant with most cells
+      entries.sort((a, b) => b.cellCount - a.cellCount);
+      finalList.push(entries[0]!);
+    }
+  }
+  finalList.sort((a, b) => b.cellCount - a.cellCount);
+
+  // Close-call rule: when top two entries have cell counts within 10%,
+  // prefer the harder (higher density) key type.
+  // This prevents a 50/50 split from defaulting to the easier type.
+  const KEY_RANK: Record<string, number> = {
+    "Full Handstream": 12, "Full Jumpstream": 11,
+    "High Handstream": 10, "High Jumpstream": 9,
+    "Mid Handstream": 8, "Mid Jumpstream": 7,
+    "Low Handstream": 6, "Low Jumpstream": 5,
+    "Speedy Tech": 9, "Jacky Tech": 7,
+    "High Stream": 4,
+    "Single Stream": 3, "Rolls": 2, "Minitrills": 2,
+  };
+  if (finalList.length >= 2) {
+    const top = finalList[0]!, second = finalList[1]!;
+    const maxC = Math.max(top.cellCount, second.cellCount);
+    if (maxC > 0 && Math.abs(top.cellCount - second.cellCount) / maxC < 0.10) {
+      const rT = KEY_RANK[top.keyType] ?? 0;
+      const rS = KEY_RANK[second.keyType] ?? 0;
+      if (rS > rT) {
+        finalList[0] = second; // harder type wins
+        finalList[1] = top;
+      }
+    }
+  }
+
+  const mainKeyType = finalList.length > 0
+    ? finalList[0]!
+    : (bpmKeyTypes.length > 0 ? bpmKeyTypes[0]! : { keyType: "Unknown", bpm: firstBPM, cellCount: 0, percentage: 100 });
 
   const effectiveBPMs = cells
     .filter((c) => c.effectiveBPM > 0 && c.category !== "break")
@@ -952,8 +1389,71 @@ export function analyzeGrid(beatmap: ParsedBeatmap, signal?: AbortSignal): GridA
     max: effectiveBPMs.length > 0 ? Math.max(...effectiveBPMs) : firstBPM,
   };
 
-  return { cells, segments, bpmKeyTypes, mainKeyType, bpmRange };
+  // Compute stream density breakdown for custom metrics display
+  const typeCounts = new Map<string, number>();
+  for (const run of streamRuns) {
+    for (let ci = 0; ci < run.cells.length; ci++) {
+      const gr = run.gridResults[ci]!;
+      const kt = classifyStreamDensity(gr.notes, gr.maxBeat);
+      typeCounts.set(kt, (typeCounts.get(kt) ?? 0) + 1);
+    }
+  }
+  const totalSC = [...typeCounts.values()].reduce((a, b) => a + b, 0);
+  const streamBreakdown = [...typeCounts.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .filter(([_, c]) => totalSC > 0 && c / totalSC >= 0.05)
+    .map(([kt, c]) => `${kt} ${(c / totalSC * 100).toFixed(0)}%`)
+    .join(" + ") || "Stream";
+
+  // Grid-based switch: max jack↔stream transitions in a 4-cell (16-row) window.
+  // 4 cells = 16 rows → 15 adjacent row pairs (including cross-cell boundaries).
+  // For each row pair: jack = same column active in both rows.
+  let gridSwitch = 0;
+  // Collect all rows' active columns across all stream cells
+  const allRowCols: Set<number>[] = [];
+  for (const cell of cells) {
+    if (cell.category === "break" || cell.category === "ln") continue;
+    const bpm = cell.effectiveBPM > 0 ? cell.effectiveBPM : 120;
+    const rowDur = 60000 / bpm / 4;
+    for (let r = 0; r < 4; r++) {
+      const rs = cell.startTime + r * rowDur;
+      const cols = new Set<number>();
+      for (const n of getNotesInRange(beatmap, rs, rs + rowDur)) cols.add(n.col);
+      allRowCols.push(cols);
+    }
+  }
+  // Build pair types (jack/stream) for ALL consecutive row pairs
+  const pairTypes: ("jack" | "stream")[] = [];
+  for (let i = 0; i < allRowCols.length - 1; i++) {
+    const overlap = [...allRowCols[i]!].some((c) => allRowCols[i + 1]!.has(c));
+    pairTypes.push(overlap ? "jack" : "stream");
+  }
+  // Slide 15-pair window (= 16 rows = 4 cells)
+  const WINDOW_PAIRS = 15;
+  if (pairTypes.length >= WINDOW_PAIRS) {
+    for (let i = 0; i <= pairTypes.length - WINDOW_PAIRS; i++) {
+      let sw = 0;
+      for (let j = i + 1; j < i + WINDOW_PAIRS; j++) {
+        if (pairTypes[j] !== pairTypes[j - 1]) sw++;
+      }
+      if (sw > gridSwitch) gridSwitch = sw;
+    }
+  }
+
+  return { cells, segments, bpmKeyTypes, mainKeyType, bpmRange, streamBreakdown, gridSwitch };
 }
 
 // Re-export colors for display
 export { LN_TYPE_COLORS };
+export { getNotesInRange };
+
+/**
+ * Map a key type string to its parent cell category.
+ */
+function keyTypeToCategory(keyType: string): CellCategory {
+  const JACK_TYPES = new Set(["Minijack", "High Chordjack", "Jacky Tech"]);
+  const LN_TYPES = new Set(["LN Inverse", "LN Unknown", "Ouroboros"]);
+  if (JACK_TYPES.has(keyType)) return "jack";
+  if (LN_TYPES.has(keyType)) return "ln";
+  return "stream";
+}

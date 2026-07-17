@@ -1,16 +1,5 @@
 [
   {
-    "uniqueID": "viewMode",
-    "type": "options",
-    "title": "View Mode",
-    "value": "simple",
-    "options": [
-      { "label": "Simple", "value": "simple" },
-      { "label": "Detailed", "value": "detailed" }
-    ],
-    "description": "(Experimental) Simple: section bar only. Detailed: show grid & segment table."
-  },
-  {
     "uniqueID": "showPatterns",
     "type": "checkbox",
     "title": "Show Pattern Breakdown",

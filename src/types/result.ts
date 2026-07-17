@@ -33,6 +33,8 @@ export interface DifficultyResult {
     columnCount: number;
     lnRatio: number;
     bpm: number;
+    /** In-game star rating from tosu (optional, only during gameplay) */
+    gameStar?: number;
   };
 }
 

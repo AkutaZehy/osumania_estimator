@@ -6,7 +6,7 @@
 import { WebSocketManager } from "./tosu/websocket.js";
 import TosuSocketManager from "./tosu/socket.js";
 import { analyzeBeatmap } from "./integration/analyzer.js";
-import { showLoading, showResult, showError, showWaiting, updateGameState, updateInGameBar, onSettingsUpdate } from "./ui/display.js";
+import { showLoading, showResult, showError, showWaiting, showCountdown, updateGameState, updateInGameBar, onSettingsUpdate } from "./ui/display.js";
 import { isVibroMap } from "./ett/vibro.js";
 import type { TosuStateMessage } from "./types/tosu.js";
 
@@ -129,6 +129,8 @@ async function onBeatmapChange(msg: TosuStateMessage): Promise<void> {
   lastMd5 = md5;
   lastModSig = modSig;
 
+  const gameStar = (msg as any)?.beatmap?.stats?.stars?.total as number | undefined;
+
   showLoading();
 
   // Cancel previous analysis immediately
@@ -142,9 +144,29 @@ async function onBeatmapChange(msg: TosuStateMessage): Promise<void> {
 
   try {
     const osuText = await fetchBeatmap();
-
-    // Check if a newer analysis was requested while we were fetching
     if (myId !== analysisId) return;
+
+    // Quick note count from osu text (count lines after [HitObjects])
+    let noteCount = 0;
+    const hoIdx = osuText.indexOf("[HitObjects]");
+    if (hoIdx >= 0) {
+      for (const line of osuText.slice(hoIdx + 12).split("\n")) {
+        const t = line.trim();
+        if (t && !t.startsWith("//")) noteCount++;
+      }
+    }
+    // Show countdown for heavy maps (>5000 notes): N/1000 seconds
+    // Extra 5s delay for user to read the warning
+    const baseSec = Math.ceil(noteCount / 1000);
+    const countdownSec = baseSec + 5;
+    if (baseSec > 5) {
+      for (let s = countdownSec; s > 0; s--) {
+        if (myId !== analysisId) return;
+        showCountdown(`${s}s remaining (switch map to cancel)`);
+        await new Promise(r => setTimeout(r, 1000));
+      }
+      if (myId !== analysisId) return;
+    }
 
     // Run Etterna vibro check in parallel
     const vibroPromise = isVibroMap(osuText);
@@ -168,6 +190,7 @@ async function onBeatmapChange(msg: TosuStateMessage): Promise<void> {
     // Apply Etterna vibro result
     const isVibro = await vibroPromise;
     if (isVibro) result.custom.jack.isVibro = true;
+    if (gameStar != null) result.meta.gameStar = gameStar;
 
     showResult(result);
     // Determine total duration from section analysis or grid cells

@@ -35,57 +35,88 @@ function maxKPS(times: number[], windowMs: number): number {
   return (maxCount / windowMs) * 1000;
 }
 
-function singleFingerMaxKPS(beatmap: ParsedBeatmap): number {
-  const { columns, noteStarts } = beatmap;
-  const n = noteStarts.length;
-  if (n === 0) return 0;
-
-  const colTimes: number[][] = [[], [], [], []];
-  for (let i = 0; i < n; i++) {
-    const col = columns[i]!;
-    if (col >= 0 && col < 4) {
-      colTimes[col]!.push(noteStarts[i]!);
-    }
+/** P10 interval (ms) — the 10th percentile fastest spacing, ignoring chords (dt < 5ms).
+ *  Grace notes (< 50ms) don't drag this down as much as plain minimum would. */
+function p10Interval(times: number[]): number {
+  if (times.length < 2) return 0;
+  const sorted = [...times].sort((a, b) => a - b);
+  const intervals: number[] = [];
+  for (let i = 1; i < sorted.length; i++) {
+    const dt = sorted[i]! - sorted[i - 1]!;
+    if (dt >= 5) intervals.push(dt);
   }
+  if (intervals.length === 0) return 0;
+  intervals.sort((a, b) => a - b);
+  const idx = Math.min(intervals.length - 1, Math.ceil(intervals.length * 0.1) - 1);
+  return Math.round(intervals[idx]!);
+}
 
-  const windowMs = 500;
+function singleFingerInterval(beatmap: ParsedBeatmap): number {
+  const ct: number[][] = [[], [], [], []];
+  for (let i = 0; i < beatmap.noteStarts.length; i++) {
+    const c = beatmap.columns[i]!;
+    if (c >= 0 && c < 4) ct[c]!.push(beatmap.noteStarts[i]!);
+  }
+  let best = Infinity;
+  for (const t of ct) { const m = p10Interval(t); if (m > 0 && m < best) best = m; }
+  return best < Infinity ? best : 0;
+}
+function oneHandInterval(beatmap: ParsedBeatmap): number {
+  const l: number[] = [], r: number[] = [];
+  for (let i = 0; i < beatmap.noteStarts.length; i++) {
+    const c = beatmap.columns[i]!;
+    if (c === 0 || c === 1) l.push(beatmap.noteStarts[i]!);
+    else if (c === 2 || c === 3) r.push(beatmap.noteStarts[i]!);
+  }
+  const lm = p10Interval(l), rm = p10Interval(r);
+  if (lm === 0 && rm === 0) return 0;
+  if (lm === 0) return rm;
+  if (rm === 0) return lm;
+  return Math.min(lm, rm);
+}
+function bothHandsInterval(beatmap: ParsedBeatmap): number {
+  return p10Interval([...beatmap.noteStarts].sort((a, b) => a - b));
+}
+
+// ── KPS with P90 (sustained peak, not absolute max) ──
+
+/** Sliding-window note counts for a time array, returns P90 KPS. */
+function p90KPS(times: number[], windowMs: number): number {
+  if (times.length < 2) return 0;
+  const sorted = [...times].sort((a, b) => a - b);
+  const counts: number[] = [];
+  for (let i = 0; i < sorted.length; i++) {
+    const end = sorted[i]! + windowMs;
+    let cnt = 0;
+    for (let j = i; j < sorted.length && sorted[j]! < end; j++) cnt++;
+    counts.push(cnt);
+  }
+  counts.sort((a, b) => a - b);
+  const p90idx = Math.min(counts.length - 1, Math.ceil(counts.length * 0.9) - 1);
+  return Math.round(((counts[p90idx]! / windowMs) * 1000) * 100) / 100;
+}
+
+export function singleFingerKPS(beatmap: ParsedBeatmap): number {
+  const ct: number[][] = [[], [], [], []];
+  for (let i = 0; i < beatmap.noteStarts.length; i++) {
+    const c = beatmap.columns[i]!;
+    if (c >= 0 && c < 4) ct[c]!.push(beatmap.noteStarts[i]!);
+  }
   let best = 0;
-  for (const times of colTimes) {
-    const kps = maxKPS(times, windowMs);
-    if (kps > best) best = kps;
-  }
-  return Math.round(best * 100) / 100;
+  for (const t of ct) { const k = p90KPS(t, 500); if (k > best) best = k; }
+  return best;
 }
-
-function oneHandMaxKPS(beatmap: ParsedBeatmap): number {
-  const { columns, noteStarts } = beatmap;
-  const n = noteStarts.length;
-  if (n === 0) return 0;
-
-  const leftTimes: number[] = [];
-  const rightTimes: number[] = [];
-
-  for (let i = 0; i < n; i++) {
-    const col = columns[i]!;
-    if (col === 0 || col === 1) leftTimes.push(noteStarts[i]!);
-    else if (col === 2 || col === 3) rightTimes.push(noteStarts[i]!);
+export function oneHandKPS(beatmap: ParsedBeatmap): number {
+  const l: number[] = [], r: number[] = [];
+  for (let i = 0; i < beatmap.noteStarts.length; i++) {
+    const c = beatmap.columns[i]!;
+    if (c === 0 || c === 1) l.push(beatmap.noteStarts[i]!);
+    else if (c === 2 || c === 3) r.push(beatmap.noteStarts[i]!);
   }
-
-  leftTimes.sort((a, b) => a - b);
-  rightTimes.sort((a, b) => a - b);
-
-  const windowMs = 500;
-  const leftKPS = maxKPS(leftTimes, windowMs);
-  const rightKPS = maxKPS(rightTimes, windowMs);
-
-  return Math.round(Math.max(leftKPS, rightKPS) * 100) / 100;
+  return Math.max(p90KPS(l, 500), p90KPS(r, 500));
 }
-
-function bothHandsMaxKPS(beatmap: ParsedBeatmap): number {
-  const times = [...beatmap.noteStarts].sort((a, b) => a - b);
-  const windowMs = 500;
-  const kps = maxKPS(times, windowMs);
-  return Math.round(kps * 100) / 100;
+export function bothHandsKPS(beatmap: ParsedBeatmap): number {
+  return p90KPS([...beatmap.noteStarts].sort((a, b) => a - b), 500);
 }
 
 // ---------------------------------------------------------------------------
@@ -326,9 +357,12 @@ export function computeTechMetrics(beatmap: ParsedBeatmap, patterns: PatternSumm
       graceCount: 0,
       rollTrill: { rolls: "", trills: "" },
       burst: {
-        singleFingerMaxKPS: 0,
-        oneHandMaxKPS: 0,
-        bothHandsMaxKPS: 0,
+singleFingerInterval: 0,
+  oneHandInterval: 0,
+  bothHandsInterval: 0,
+  singleFingerKPS: 0,
+  oneHandKPS: 0,
+  bothHandsKPS: 0,
       },
     };
   }
@@ -336,9 +370,9 @@ export function computeTechMetrics(beatmap: ParsedBeatmap, patterns: PatternSumm
   const chart = createChart(beatmap);
   const primitives = calculatePrimitives(chart, speedRate);
 
-  const sfKPS = singleFingerMaxKPS(beatmap);
-  const ohKPS = oneHandMaxKPS(beatmap);
-  const bhKPS = bothHandsMaxKPS(beatmap);
+const sfInt = singleFingerInterval(beatmap);
+const ohInt = oneHandInterval(beatmap);
+const bhInt = bothHandsInterval(beatmap);
   const graceCount = detectGraces(primitives);
   const rollTrill = computeRollTrillStats(beatmap, patterns);
 
@@ -346,9 +380,12 @@ export function computeTechMetrics(beatmap: ParsedBeatmap, patterns: PatternSumm
     graceCount,
     rollTrill,
     burst: {
-      singleFingerMaxKPS: sfKPS,
-      oneHandMaxKPS: ohKPS,
-      bothHandsMaxKPS: bhKPS,
+singleFingerInterval: sfInt,
+  oneHandInterval: ohInt,
+  bothHandsInterval: bhInt,
+  singleFingerKPS: singleFingerKPS(beatmap),
+  oneHandKPS: oneHandKPS(beatmap),
+  bothHandsKPS: bothHandsKPS(beatmap),
     },
   };
 }

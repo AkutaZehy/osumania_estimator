@@ -1,4 +1,4 @@
-# osumania-estimator v2.0.0
+# osumania-estimator v2.1.0
 
 A tosu overlay plugin for osu!mania 4K key pattern analysis and difficulty estimation.
 

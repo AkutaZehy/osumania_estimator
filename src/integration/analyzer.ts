@@ -98,9 +98,12 @@ function defaultCustomMetrics(
       graceCount: 0,
       rollTrill: { rolls: "", trills: "" },
       burst: {
-        singleFingerMaxKPS: 0,
-        oneHandMaxKPS: 0,
-        bothHandsMaxKPS: 0,
+        singleFingerInterval: 0,
+        oneHandInterval: 0,
+        bothHandsInterval: 0,
+        singleFingerKPS: 0,
+        oneHandKPS: 0,
+        bothHandsKPS: 0,
       },
     },
     stamina: {
@@ -157,10 +160,10 @@ function buildErrorResult(
       {
         perColumn: [],
         perHand: {
-          left: { maxDensity: 0, medianDensity: 0 },
-          right: { maxDensity: 0, medianDensity: 0 },
+      left: { maxDensity: 0, medianDensity: 0, meanDensity: 0 },
+      right: { maxDensity: 0, medianDensity: 0, meanDensity: 0 },
         },
-        bothHands: { maxDensity: 0, medianDensity: 0 },
+        bothHands: { maxDensity: 0, medianDensity: 0, meanDensity: 0 },
       },
       0,
       0,
@@ -224,7 +227,7 @@ export function analyzeBeatmap(
   // ---- Step 2: Sunny Rework ----
   let sunny: SunnyResult;
   try {
-    sunny = calculateSunny(osuText, opts.speedRate, modFlags, { withGraph: true });
+    sunny = calculateSunny(osuText, opts.speedRate, modFlags, { withGraph: true }, signal);
   } catch {
     sunny = {
       star: -1,
@@ -254,7 +257,7 @@ export function analyzeBeatmap(
   } catch (err) {
     console.error("[CustomMetrics] failed", err);
     custom = defaultCustomMetrics(
-      { perColumn: [], perHand: { left: { maxDensity: 0, medianDensity: 0 }, right: { maxDensity: 0, medianDensity: 0 } }, bothHands: { maxDensity: 0, medianDensity: 0 } },
+      { perColumn: [], perHand: { left: { maxDensity: 0, medianDensity: 0, meanDensity: 0 }, right: { maxDensity: 0, medianDensity: 0, meanDensity: 0 } }, bothHands: { maxDensity: 0, medianDensity: 0, meanDensity: 0 } },
       beatmap.lnRatio,
       computeBPM(beatmap),
     );

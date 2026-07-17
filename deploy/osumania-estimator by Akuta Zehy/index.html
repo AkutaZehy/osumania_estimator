@@ -19,19 +19,16 @@
     <div id="star-value">--</div>
     <!-- Map info -->
     <div id="map-info">
-      <span id="bpm">-- BPM</span>
-      <span id="keys">4K</span>
-      <span id="ln-ratio">LN --</span>
+      <div class="mi-cell"><span class="mi-label">BPM</span><span id="bpm">--</span></div>
+      <div class="mi-cell"><span class="mi-label">Keys</span><span id="keys">4K</span></div>
+      <div class="mi-cell"><span class="mi-label">LN</span><span id="ln-ratio">--</span></div>
     </div>
     <!-- Pattern breakdown -->
     <div id="patterns"></div>
-    <!-- Structure grid (pattern detail cards) -->
+    <!-- Structure grid (hidden — kept for JS compatibility) -->
     <div id="structure-grid" style="display:none"></div>
-    <!-- Segment table -->
-    <div id="segment-table" style="display:none">
-      <div class="segment-header">SEGMENTS</div>
-      <div id="segment-body"></div>
-    </div>
+    <!-- Segment table (hidden — kept for JS compatibility) -->
+    <div id="segment-table" style="display:none"><div id="segment-body"></div></div>
     <!-- Custom metrics -->
     <div id="custom-metrics"></div>
   </div>

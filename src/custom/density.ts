@@ -14,28 +14,24 @@ import type { ParsedBeatmap } from "../types/beatmap.js";
 function computeDensityForTimes(
   startTimes: number[],
   windowMs: number,
-): { maxDensity: number; medianDensity: number } {
+): { maxDensity: number; medianDensity: number; meanDensity: number } {
   if (startTimes.length === 0) {
-    return { maxDensity: 0, medianDensity: 0 };
+    return { maxDensity: 0, medianDensity: 0, meanDensity: 0 };
   }
 
   const densities: number[] = [];
 
-  // Sample at every note start time — captures all density transitions.
   for (const t of startTimes) {
     const windowEnd = t + windowMs;
     let count = 0;
     for (const st of startTimes) {
-      if (st >= t && st < windowEnd) {
-        count++;
-      }
+      if (st >= t && st < windowEnd) count++;
     }
     densities.push(count);
   }
 
   const maxDensity = Math.max(...densities);
 
-  // Median: sort, take middle (lower-median for even-length arrays).
   const sorted = [...densities].sort((a, b) => a - b);
   const mid = Math.floor(sorted.length / 2);
   const medianDensity =
@@ -43,7 +39,9 @@ function computeDensityForTimes(
       ? (sorted[mid - 1]! + sorted[mid]!) / 2
       : sorted[mid]!;
 
-  return { maxDensity, medianDensity: medianDensity! };
+  const meanDensity = densities.reduce((a, b) => a + b, 0) / densities.length;
+
+  return { maxDensity, medianDensity, meanDensity };
 }
 
 /**
@@ -72,11 +70,11 @@ export function computeDensityMetrics(
   // Per-column density.
   const perColumn: DensityMetrics["perColumn"] = [];
   for (let col = 0; col < 4; col++) {
-    const { maxDensity, medianDensity } = computeDensityForTimes(
+    const { maxDensity, medianDensity, meanDensity } = computeDensityForTimes(
       columnTimes[col]!,
       windowMs,
     );
-    perColumn.push({ column: col, maxDensity, medianDensity });
+    perColumn.push({ column: col, maxDensity, medianDensity, meanDensity });
   }
 
   // Per-hand: left = columns 0-1, right = columns 2-3.

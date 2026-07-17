@@ -39,16 +39,15 @@ html, body {
 /* ---- Status Bar ---- */
 #status {
   width: 100%;
-  text-align: center;
-  font-size: 11px;
-  color: #888;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  padding: 4px 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: 13px;
+  color: #ddd;
+  padding: 5px 0;
   border-bottom: 1px solid rgba(255, 255, 255, 0.06);
   transition: color 0.3s ease;
 }
-
 #status.ready { color: #4fc3f7; }
 #status.analyzing { color: #ffb74d; }
 #status.error { color: #ef5350; }
@@ -86,21 +85,35 @@ html, body {
 /* ---- Map Info ---- */
 #map-info {
   display: flex;
-  gap: 14px;
   font-size: 12px;
-  color: #b0b0b0;
-  padding: 6px 12px;
-  background: rgba(255, 255, 255, 0.04);
+  padding: 0;
   border-radius: 4px;
+  overflow: hidden;
 }
-
-#map-info span {
+.mi-cell {
+  width: 100px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 4px 0;
+  background: rgba(255, 255, 255, 0.04);
+  border-right: 1px solid rgba(255,255,255,0.06);
+}
+.mi-cell:last-child { border-right: none; }
+.mi-label {
+  font-size: 9px;
+  color: #888;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+#map-info #bpm,
+#map-info #keys,
+#map-info #ln-ratio {
+  font-size: 14px;
+  font-weight: 700;
+  color: #ddd;
   white-space: nowrap;
 }
-
-#bpm::before   { content: ""; }
-#keys::before  { content: " | "; color: #555; }
-#ln-ratio::before { content: " | "; color: #555; }
 
 /* ---- Pattern Breakdown ---- */
 #patterns {
