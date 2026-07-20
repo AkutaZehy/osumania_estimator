@@ -263,9 +263,8 @@ function boot(): void {
     }
   } catch { /* socket.js not available */ }
 
-  // Poll settings periodically (catches dashboard changes)
+  // Initial settings fetch (WebSocket commands handle real-time updates thereafter)
   pollSettings();
-  setInterval(pollSettings, 30000);
 
   // Initialize game data WebSocket
   const ws = new WebSocketManager(WS_ENDPOINT, onBeatmapChange, onStateChange);
