@@ -1062,6 +1062,16 @@ export function analyzeGrid(beatmap: ParsedBeatmap, signal?: AbortSignal): GridA
   const firstBPM = getFirstBPM(beatmap);
   const firstBeatLength = getFirstBeatLength(beatmap);
   const duration = beatmap.duration;
+
+  // Align cell grid to the first uninherited timing point.
+  // In osu!, the first red line defines where beat 0 falls in the audio.
+  // Starting cells from 0 (instead of the TP time) would misalign the grid
+  // and may miss the last note by up to a beat.
+  const firstTP = beatmap.timingPoints.find((tp) => tp.uninherited);
+  const gridOffset = firstTP ? firstTP.time : beatmap.firstNote;
+
+  // duration now spans from gridOffset (first TP) to the last note end,
+  // so totalBeats directly covers the full note range.
   const totalBeats = Math.max(1, Math.ceil(duration / firstBeatLength));
 
   // Phase 1: Classify each beat cell
@@ -1075,7 +1085,7 @@ export function analyzeGrid(beatmap: ParsedBeatmap, signal?: AbortSignal): GridA
   for (let beat = 0; beat < totalBeats; beat++) {
     // Check cancellation periodically (every 50 beats)
     if (beat % 50 === 0) signal?.throwIfAborted();
-    const cellStart = beat * firstBeatLength;
+    const cellStart = gridOffset + beat * firstBeatLength;
     const cellEnd = cellStart + firstBeatLength;
 
     // Per-cell timing from the active timing point at this cell's start

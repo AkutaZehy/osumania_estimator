@@ -316,18 +316,15 @@ html, body {
 
 .measure-block {
   flex: 1;
+  min-width: 0;
   position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
   font-size: 8px;
   font-weight: 600;
-  border-right: 1px solid rgba(255,255,255,0.05);
-  transition: filter 0.15s ease;
-}
 
-.measure-block:hover {
-  filter: brightness(1.3);
+  transition: filter 0.15s ease;
 }
 
 /* Category colors — base (fallback) */
@@ -676,8 +673,4 @@ body.playing #section-bar {
   box-shadow: 0 0 4px rgba(255, 255, 255, 0.4);
 }
 
-.measure-block.active {
-  filter: brightness(1.8) saturate(1.3);
-  box-shadow: inset 0 0 8px rgba(255, 255, 255, 0.3);
-  z-index: 1;
-}
+

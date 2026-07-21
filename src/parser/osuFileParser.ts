@@ -63,7 +63,20 @@ export class OsuFileParser {
             firstNote = sortedStarts[0]!;
             lastNote = sortedStarts[sortedStarts.length - 1]!;
         }
-        const duration = lastNote - firstNote;
+        const duration = (() => {
+          // Duration spans from the first red line to the end of all notes.
+          // Using firstNote as start would cut off break/lead-in before the first note,
+          // causing the timeline to not cover the full beat structure.
+          const durStart = this.timingPoints.length > 0 ? this.timingPoints[0]![0] : firstNote;
+
+          // Find absolute last time (including LN tails)
+          let lastEnd = lastNote;
+          for (const end of this.noteEnds) {
+            if (end > lastEnd) lastEnd = end;
+          }
+
+          return Math.max(1, lastEnd - durStart);
+        })();
 
         const metadata: BeatmapMetadata = {
             title: this.metaData["Title"] ?? "",

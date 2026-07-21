@@ -685,7 +685,6 @@ let lastAnalysis: SectionAnalysis | null = null;
 let lastTotalDuration: number = 0;
 let lastGridCells: CellResult[] | null = null;
 let lastGridDuration: number = 0;
-let lastActiveCellIdx: number = -1;
 
 /** Update game state — called from index.ts when tosu state changes */
 export function updateGameState(stateName: string): void {
@@ -704,37 +703,6 @@ export function updateInGameBar(progress: number): void {
   // ---- Playhead cursor on section bar ----
   const playhead = document.getElementById("playhead");
   if (playhead) playhead.style.left = `${progress * 100}%`;
-
-  // ---- Grid highlight: highlight active cell on section bar ----
-  // Use absolute time from total duration (not grid-local) to avoid drift
-  if (lastGridCells && lastGridCells.length > 0 && lastTotalDuration > 0) {
-    const cells = lastGridCells;
-    const currentTime = progress * lastTotalDuration;
-    let activeIdx = -1;
-    for (let i = 0; i < cells.length; i++) {
-      if (currentTime >= cells[i]!.startTime && currentTime < cells[i]!.endTime) {
-        activeIdx = i;
-        break;
-      }
-    }
-
-    // Toggle active class on measure blocks
-    const blocks = document.querySelectorAll("#measure-bar .measure-block");
-    if (lastActiveCellIdx >= 0 && lastActiveCellIdx < blocks.length) {
-      blocks[lastActiveCellIdx]!.classList.remove("active");
-    }
-    if (activeIdx >= 0 && activeIdx < blocks.length) {
-      blocks[activeIdx]!.classList.add("active");
-    }
-    lastActiveCellIdx = activeIdx;
-  } else if (lastActiveCellIdx >= 0) {
-    // No grid — clear any stale highlight
-    const blocks = document.querySelectorAll("#measure-bar .measure-block");
-    if (lastActiveCellIdx < blocks.length) {
-      blocks[lastActiveCellIdx]!.classList.remove("active");
-    }
-    lastActiveCellIdx = -1;
-  }
 
   // ---- Update progress bar width ----
   const igProgress = el("ig-progress");
@@ -865,12 +833,53 @@ function renderGridSectionBar(cells: CellResult[], bpmRange: { min: number; max:
   }
   axis.innerHTML = axisHtml;
 
-  // Cell blocks
+  // Merge cells to keep DOM count reasonable for long maps.
+  // Each merged block gets the mode category of its group; ties resolve to neighbor consistency.
+  const TARGET_BLOCKS = 250;
+  const mergeFactor = total > TARGET_BLOCKS ? Math.ceil(total / TARGET_BLOCKS) : 1;
+
+  // First pass: determine winner category for each merged group
+  const winners: string[] = [];
+  for (let i = 0; i < total; i += mergeFactor) {
+    const end = Math.min(i + mergeFactor, total);
+    const freq = new Map<string, number>();
+    for (let j = i; j < end; j++) {
+      const cat = cells[j]!.category;
+      freq.set(cat, (freq.get(cat) ?? 0) + 1);
+    }
+
+    // Find max frequency; collect tied categories
+    let maxFreq = 0;
+    for (const count of freq.values()) { if (count > maxFreq) maxFreq = count; }
+    const tied: string[] = [];
+    for (const [cat, count] of freq) { if (count === maxFreq) tied.push(cat); }
+
+    let winner: string;
+    if (tied.length === 1) {
+      winner = tied[0]!;
+    } else {
+      // Tie: prefer previous winner, then next group's first cell, then first tied
+      const prevWin = winners.length > 0 ? winners[winners.length - 1] : null;
+      if (prevWin && tied.includes(prevWin)) {
+        winner = prevWin;
+      } else {
+        const nextIdx = Math.min(end, total - 1);
+        const nextCat = cells[nextIdx]?.category;
+        if (nextCat && tied.includes(nextCat)) {
+          winner = nextCat;
+        } else {
+          winner = tied[0]!;
+        }
+      }
+    }
+    winners.push(winner);
+  }
+
+  // Second pass: render merged blocks
   let blocksHtml = "";
-  for (const cell of cells) {
-    const color = GRID_CAT_COLORS[cell.category] ?? "#444";
-    const tooltip = `B${cell.beatIndex + 1}: ${cell.category} ${cell.effectiveBPM || ""}`;
-    blocksHtml += `<div class="measure-block" style="background:${color}" title="${tooltip}"></div>`;
+  for (const winner of winners) {
+    const color = GRID_CAT_COLORS[winner] ?? "#444";
+    blocksHtml += `<div class="measure-block" style="background:${color}"></div>`;
   }
   bar.innerHTML = blocksHtml;
 }
