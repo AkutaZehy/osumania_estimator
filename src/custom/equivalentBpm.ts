@@ -76,7 +76,7 @@ export function computeEquivalentBPM(beatmap: ParsedBeatmap, patterns: PatternSu
 
   let adjustedBPM = raw;
 
-  if (patternType === CorePattern.Jacks) {
+  if (patternType === CorePattern.Jack) {
     if (div <= 2) {
       adjustedBPM = raw / 2;
     }

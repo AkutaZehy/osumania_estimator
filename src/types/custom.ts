@@ -112,24 +112,42 @@ export interface LNMetrics {
   ratio: number;
   /** LN ratio excluding tap LNs (treated as rice) */
   strictLNRatio: number;
-  /** Release difficulty (adapted from Sunny Rbar) */
-  releaseDifficulty: number;
-  /** Shield patterns detected (normal→LN head) */
+
+  // — raw counts —
+  /** Shield patterns detected (normal→LN head gap ≤ 83ms) */
   shieldCount: number;
-  /** Anti-Shield patterns detected (LN tail→normal) */
-  antiShieldCount: number;
-  /** Column lock patterns detected */
+  /** Reversed Shield patterns (LN tail→normal gap ≤ 83ms) */
+  reversedShieldCount: number;
+  /** ColumnLock: LN body + same-hand neighbor note within 83ms window */
   columnLockCount: number;
-  /** Inverse patterns detected (alternating LN releases) */
+  /** Inverse: multi-column H-T-H-T alternation with consistent gap */
   inverseCount: number;
-  /** A: different head col, same tail time pairs */
-  asyncReleaseCount: number;
-  /** R: same head col, different tail time pairs */
-  releaseCount: number;
+  /** Ouroboros: same-column T→H gap < 5ms (tap LN bridge) */
+  ouroborosCount: number;
+  /** Overlap: rows with ≥2 active LN bodies (replaces Release concept) */
+  overlapCount: number;
+  /** LN heads forming 1-note-per-row stream (LN head density) */
+  lnStreamCount: number;
+  /** LN heads forming 2+ note chord pattern */
+  lnChordCount: number;
+  /** Jack patterns within LN context window */
+  wcJackCount: number;
+  /** Speed patterns within LN context window */
+  wcSpeedCount: number;
   /** Tap LN count: short LNs <= 16th note duration */
   tapLNCount: number;
   /** Total LN count (for overlay percentage) */
   totalLN: number;
+
+  // — 4 LN pool aggregate scores: CO, DE, WC, TE (@calibrate) —
+  /** Coordination Pool: shield + reversedShield + columnLock */
+  coordinationPoolScore: number;
+  /** Density Pool: lnChord + lnStream + tapLN ratio */
+  densityPoolScore: number;
+  /** Wildcard Pool: wcJack + wcSpeed */
+  wildcardPoolScore: number;
+  /** Technical Pool: inverse + ouroboros + overlap */
+  technicalPoolScore: number;
 }
 
 /** Complete custom metrics result */

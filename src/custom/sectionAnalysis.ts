@@ -17,9 +17,11 @@ import type { PatternSummary } from "../types/patterns.js";
 /** LN subtypes with thresholds */
 export const LN_SUBTYPES = {
   reverse: { name: "LN Reverse", threshold: { inverse: 20 } },
-  releasehell: { name: "Release Hell", threshold: { overlay: 30, ar: 20 } },
+  releasehell: { name: "Timing Hell", threshold: { overlay: 30, ar: 20 } },
   density: { name: "Density", threshold: { tapLN: 40 } },
   ouroboros: { name: "Ouroboros", threshold: { ouroboros: 30 } },
+  speedywc: { name: "Speedy WC", threshold: { speedyWC: 10 } },
+  jackywc: { name: "Jacky WC", threshold: { jackyWC: 10 } },
   unknown: { name: "Unknown", threshold: {} },
 } as const;
 
@@ -51,6 +53,8 @@ export interface SegmentLNMetrics {
   ar: number;
   tapLN: number;
   ouroboros: number;
+  speedyWC: number;
+  jackyWC: number;
 }
 
 /** Tech direction data */
@@ -377,7 +381,7 @@ function analyzeLNMetrics(
 ): SegmentLNMetrics {
   const lns = notes.filter((n) => n.isLN);
   if (lns.length === 0) {
-    return { inverse: 0, overlay: 0, ar: 0, tapLN: 0, ouroboros: 0 };
+    return { inverse: 0, overlay: 0, ar: 0, tapLN: 0, ouroboros: 0, speedyWC: 0, jackyWC: 0 };
   }
 
   // Tap LN: duration <= beatLength/4
@@ -426,14 +430,35 @@ function analyzeLNMetrics(
       if (i === j) continue;
       const a = lns[i]!;
       const b = lns[j]!;
-      if (Math.abs(a.end - b.start) < 5) {
+      if (Math.abs(a.end - b.start) < 21) {
         ouroborosCount++;
       }
     }
   }
   const ouroboros = lns.length > 0 ? (ouroborosCount / lns.length) * 100 : 0;
 
-  return { inverse, overlay, ar, tapLN, ouroboros };
+  // Speedy WC / Jacky WC: all notes directional/jack patterns
+  const allByTime = new Map<number, number[]>();
+  for (const n of notes) {
+    let key = n.start;
+    for (const k of allByTime.keys()) { if (Math.abs(k - n.start) <= 5) { key = k; break; } }
+    const cols = allByTime.get(key) ?? [];
+    if (!cols.includes(n.col)) cols.push(n.col);
+    allByTime.set(key, cols);
+  }
+  const sortedRows = [...allByTime.entries()].sort((a, b) => a[0] - b[0]);
+  let speedy = 0, jacky = 0;
+  for (let i = 1; i < sortedRows.length; i++) {
+    const prev = sortedRows[i - 1]![1], curr = sortedRows[i]![1];
+    if (curr.some(c => prev.includes(c))) jacky++;
+    const pMin = Math.min(...prev), pMax = Math.max(...prev);
+    const cMin = Math.min(...curr), cMax = Math.max(...curr);
+    if (cMax < pMin || cMin > pMax) speedy++;
+  }
+  const speedyWC = notes.length > 0 ? (speedy / notes.length) * 100 : 0;
+  const jackyWC = notes.length > 0 ? (jacky / notes.length) * 100 : 0;
+
+  return { inverse, overlay, ar, tapLN, ouroboros, speedyWC, jackyWC };
 }
 
 /**
@@ -454,6 +479,12 @@ function determineLNSubtype(metrics: SegmentLNMetrics): string {
   }
   if (metrics.ouroboros >= LN_SUBTYPES.ouroboros.threshold.ouroboros!) {
     return LN_SUBTYPES.ouroboros.name;
+  }
+  if (metrics.speedyWC >= LN_SUBTYPES.speedywc.threshold.speedyWC!) {
+    return LN_SUBTYPES.speedywc.name;
+  }
+  if (metrics.jackyWC >= LN_SUBTYPES.jackywc.threshold.jackyWC!) {
+    return LN_SUBTYPES.jackywc.name;
   }
   return LN_SUBTYPES.unknown.name;
 }
@@ -494,6 +525,20 @@ function determineTriggeredLNTypes(
       key: "ouroboros",
       name: LN_SUBTYPES.ouroboros.name,
       value: `${Math.round(metrics.ouroboros)}%`,
+    });
+  }
+  if (metrics.speedyWC >= LN_SUBTYPES.speedywc.threshold.speedyWC!) {
+    triggered.push({
+      key: "speedywc",
+      name: LN_SUBTYPES.speedywc.name,
+      value: `Sp${Math.round(metrics.speedyWC)}%`,
+    });
+  }
+  if (metrics.jackyWC >= LN_SUBTYPES.jackywc.threshold.jackyWC!) {
+    triggered.push({
+      key: "jackywc",
+      name: LN_SUBTYPES.jackywc.name,
+      value: `Jk${Math.round(metrics.jackyWC)}%`,
     });
   }
   return triggered;

@@ -40,11 +40,10 @@ const LN_SUBTYPE_BASE: Record<string, number> = {
 export const PATTERNS_CONFIG = {
   CORE_RATING_MULTIPLIER: {
     Stream: 1.0 / 3.0,
-    Chordstream: 0.65,
-    Jacks: 0.9,
-    Coordination: 0.75,
-    Density: 0.9,
-    Wildcard: 1.0,
+    Chord: 0.65,
+    Jack: 0.9,
+    LN: 0.85,
+    Grace: 1.2,
   },
 
   SUBTYPE_RATING_MULTIPLIER_BY_MODE: {
@@ -119,7 +118,9 @@ export const PATTERNS_CONFIG = {
   DENSITY_SPECIFIC_ORDER: ["Inverse", "JS Density", "HS Density", "DS Density", "DCS Density", "LCS Density"],
   WILDCARD_SPECIFIC_ORDER: ["SpeedyWC", "JackyWC"],
   JACKY_MIN_BPM: 90.0,
-  SHIELD_MAX_BEAT_RATIO: 0.25,
+  /** LN absolute time window = 180BPM 1/4 beat in ms — used by all LN detectors */
+  LN_TIME_WINDOW_MS: 83,
+  SHIELD_MAX_BEAT_RATIO: 0.25, // @deprecated — use LN_TIME_WINDOW_MS for LN detectors
   INVERSE_GAP_TOLERANCE_MS: 5.0,
   // Inverse detection (LN wall): only needs 2+ columns with LN bodies
 INVERSE_MIN_FILLED_LANES: 2,

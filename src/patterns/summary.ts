@@ -76,10 +76,15 @@ export function analyzePatterns(beatmap: ParsedBeatmap, speedRate: number = 1): 
     // Pass raw LN pattern counts for accurate display
     _lnCounts: {
       shields: foundPatterns.filter((p) => p.specificType === "Shield").length,
-      antiShields: 0, // counted from parsed data in lnAnalysis
+      reversedShields: 0, // counted from parsed data in lnAnalysis
       columnLocks: foundPatterns.filter((p) => p.specificType === "ColumnLock").length,
       inverses: foundPatterns.filter((p) => p.specificType === "Inverse").length,
-      releases: foundPatterns.filter((p) => p.specificType === "Release").length,
+      ouroboros: foundPatterns.filter((p) => p.specificType === "Ouroboros").length,
+      overlaps: 0, // counted from parsed data in lnAnalysis
+      lnStreams: foundPatterns.filter((p) => p.specificType === "LN_Stream").length,
+      lnChords: foundPatterns.filter((p) => p.specificType === "LN_Chord").length,
+      wcJacks: foundPatterns.filter((p) => p.specificType === "WC_Jack").length,
+      wcSpeeds: foundPatterns.filter((p) => p.specificType === "WC_Speed").length,
     },
   };
 }

@@ -527,11 +527,20 @@ interface LNMetrics {
   ar: number;
   tapLN: number;
   ouroboros: number;
+  shield: number;
+  reversedShield: number;
+  columnLock: number;
+  jsDensity: number;
+  hsDensity: number;
+  speedyWC: number;
+  jackyWC: number;
 }
 
 function analyzeLNCell(notes: NoteInfo[], beatLength: number): LNMetrics {
+  const LN_WIN = 83; // LN_TIME_WINDOW_MS
   const lns = notes.filter((n) => n.isLN);
-  if (lns.length === 0) return { inverse: 0, overlay: 0, ar: 0, tapLN: 0, ouroboros: 0 };
+  const normals = notes.filter((n) => !n.isLN);
+  if (lns.length === 0) return { inverse: 0, overlay: 0, ar: 0, tapLN: 0, ouroboros: 0, shield: 0, reversedShield: 0, columnLock: 0, jsDensity: 0, hsDensity: 0, speedyWC: 0, jackyWC: 0 };
 
   // Tap LN: ≤ beatLength/4
   const maxTap = beatLength / 4;
@@ -544,7 +553,7 @@ function analyzeLNCell(notes: NoteInfo[], beatLength: number): LNMetrics {
   const invCols = [...colBodies.values()].filter((v) => v >= 2).length;
   const inverse = (invCols / lns.length) * 100;
 
-  // Overlay
+  // Overlay (time overlap)
   let overlayCount = 0;
   for (let i = 0; i < lns.length; i++) {
     for (let j = i + 1; j < lns.length; j++) {
@@ -562,24 +571,118 @@ function analyzeLNCell(notes: NoteInfo[], beatLength: number): LNMetrics {
   }
   const ar = (arCount / lns.length) * 100;
 
-  // Ouroboros: head/tail gap < 5ms
+  // Ouroboros: head/tail gap < 21ms (LN_TIME_WINDOW_MS/4)
   let ouroCount = 0;
   for (const a of lns) {
     for (const b of lns) {
       if (a === b) continue;
-      if (Math.abs(a.end - b.start) < 5) ouroCount++;
+      if (Math.abs(a.end - b.start) < 21) ouroCount++;
     }
   }
   const ouroboros = (ouroCount / lns.length) * 100;
 
-  return { inverse, overlay, ar, tapLN, ouroboros };
+  // Shield: N→H same col ≤83ms
+  let shieldCount = 0;
+  for (const n of normals) {
+    for (const ln of lns) {
+      if (ln.col === n.col && ln.start > n.start && ln.start - n.start <= LN_WIN) {
+        shieldCount++; break;
+      }
+    }
+  }
+  const shield = (shieldCount / Math.max(1, normals.length)) * 100;
+
+  // Reversed Shield: T→N same col ≤83ms
+  let revShieldCount = 0;
+  for (const ln of lns) {
+    for (const n of normals) {
+      if (n.col === ln.col && n.start > ln.end && n.start - ln.end <= LN_WIN) {
+        revShieldCount++; break;
+      }
+    }
+  }
+  const reversedShield = (revShieldCount / lns.length) * 100;
+
+  // ColumnLock: LN body active + same-hand neighbor ≥2 hits (per-LN check)
+  const HANDS: [number, number][] = [[0,1],[2,3]];
+  let colLockCount = 0;
+  for (const ln of lns) {
+    const hand = HANDS.find(h => h[0] === ln.col || h[1] === ln.col);
+    if (!hand) continue;
+    const adjCol = hand[0] === ln.col ? hand[1] : hand[0];
+    // Count neighbor hits during LN body (exclude LN's own start, include body and end time)
+    let neighborHits = 0;
+    for (const n of notes) {
+      if (n.col !== adjCol) continue;
+      // Note must overlap with LN body time (start < n.start < end, or n is the LN itself)
+      if (n.start >= ln.start && n.start <= ln.end) neighborHits++;
+    }
+    if (neighborHits >= 2) colLockCount++;
+  }
+  const columnLock = (colLockCount / lns.length) * 100;
+
+  // JS/HS Density: LN heads forming chord patterns (count heads, not timestamps)
+  const timeCols = new Map<number, number[]>();
+  for (const ln of lns) {
+    // Group by start time with 5ms tolerance for simultaneous heads
+    let key = ln.start;
+    for (const k of timeCols.keys()) { if (Math.abs(k - ln.start) <= 5) { key = k; break; } }
+    const entries = timeCols.get(key) ?? [];
+    entries.push(ln.col);
+    timeCols.set(key, entries);
+  }
+  let jsHeads = 0, hsHeads = 0;
+  for (const cols of timeCols.values()) {
+    if (cols.length >= 3) hsHeads += cols.length;
+    else if (cols.length === 2) jsHeads += cols.length;
+  }
+  const jsDensity = lns.length > 0 ? (jsHeads / lns.length) * 100 : 0;
+  const hsDensity = lns.length > 0 ? (hsHeads / lns.length) * 100 : 0;
+
+  // Speedy WC / Jacky WC: all notes (LN heads + normals) directional/jack patterns
+  // Group ALL notes by time to form rows, then check adjacent row patterns
+  const allTimeCols = new Map<number, number[]>();
+  for (const n of notes) {
+    let key = n.start;
+    for (const k of allTimeCols.keys()) { if (Math.abs(k - n.start) <= 5) { key = k; break; } }
+    const entries = allTimeCols.get(key) ?? [];
+    if (!entries.includes(n.col)) entries.push(n.col);
+    allTimeCols.set(key, entries);
+  }
+  const allRows = [...allTimeCols.entries()]
+    .sort((a, b) => a[0] - b[0])
+    .map(([t, cols]) => ({ time: t, cols }));
+  let speedyHeads = 0, jackyHeads = 0;
+  for (let i = 1; i < allRows.length; i++) {
+    const prev = allRows[i - 1]!, curr = allRows[i]!;
+    const dt = curr.time - prev.time;
+    if (dt <= 0) continue;
+    // Same-column note repeat (LN or normal) → jacky pattern
+    if (curr.cols.some(c => prev.cols.includes(c))) jackyHeads += curr.cols.length;
+    // Directional movement (all columns shift left or right)
+    const prevMin = Math.min(...prev.cols), prevMax = Math.max(...prev.cols);
+    const currMin = Math.min(...curr.cols), currMax = Math.max(...curr.cols);
+    if (currMax < prevMin || currMin > prevMax) speedyHeads += curr.cols.length;
+  }
+  const totalNotes = notes.length;
+  const speedyWC = totalNotes > 0 ? (speedyHeads / totalNotes) * 100 : 0;
+  const jackyWC = totalNotes > 0 ? (jackyHeads / totalNotes) * 100 : 0;
+
+  return { inverse, overlay, ar, tapLN, ouroboros, shield, reversedShield, columnLock, jsDensity, hsDensity, speedyWC, jackyWC };
 }
 
 const LN_TYPE_COLORS: Record<string, string> = {
-  reverse: "#9b59b6",
+  shield: "#e91e63",
+  reversedshield: "#f06292",
+  collock: "#ff9800",
   releasehell: "#e74c3c",
-  density: "#3498db",
+  inverse: "#9b59b6",
   ouroboros: "#1abc9c",
+  jsdensity: "#42a5f5",
+  hsdensity: "#1e88e5",
+  speedywc: "#66bb6a",
+  jackywc: "#ef5350",
+  density: "#3498db",
   unknown: "#7f8c8d",
 };
 
@@ -588,25 +691,47 @@ function classifyLNCell(
 ): { lnSubtype: string; lnSubtypes: Array<{ key: string; name: string; value: string }> } {
   const triggered: Array<{ key: string; name: string; value: string }> = [];
 
-  if (metrics.inverse >= 20) {
-    triggered.push({ key: "reverse", name: "LN Inverse", value: `${Math.round(metrics.inverse)}%` });
+  if (metrics.shield >= 15) {
+    triggered.push({ key: "shield", name: "Shield", value: `Sh${Math.round(metrics.shield)}%` });
+  }
+  if (metrics.reversedShield >= 15) {
+    triggered.push({ key: "reversedshield", name: "Reversed Shield", value: `RS${Math.round(metrics.reversedShield)}%` });
+  }
+  if (metrics.columnLock >= 15) {
+    triggered.push({ key: "collock", name: "Column Lock", value: `CL${Math.round(metrics.columnLock)}%` });
   }
   if (metrics.overlay >= 30 && metrics.ar >= 20) {
-    triggered.push({ key: "releasehell", name: "Release Hell", value: `Ov${Math.round(metrics.overlay)}/AR${Math.round(metrics.ar)}` });
-  }
-  if (metrics.tapLN >= 40) {
-    triggered.push({ key: "density", name: "Density", value: `Tap${Math.round(metrics.tapLN)}%` });
+    triggered.push({ key: "releasehell", name: "Timing Hell", value: `Ov${Math.round(metrics.overlay)}/AR${Math.round(metrics.ar)}` });
   }
   if (metrics.ouroboros >= 30) {
     triggered.push({ key: "ouroboros", name: "Ouroboros", value: `${Math.round(metrics.ouroboros)}%` });
   }
+  if (metrics.inverse >= 20) {
+    triggered.push({ key: "inverse", name: "LN Inverse", value: `${Math.round(metrics.inverse)}%` });
+  }
+  if (metrics.jsDensity >= 15) {
+    triggered.push({ key: "jsdensity", name: "JS Density", value: `JS${Math.round(metrics.jsDensity)}%` });
+  }
+  if (metrics.hsDensity >= 10) {
+    triggered.push({ key: "hsdensity", name: "HS Density", value: `HS${Math.round(metrics.hsDensity)}%` });
+  }
+  if (metrics.speedyWC >= 10) {
+    triggered.push({ key: "speedywc", name: "Speedy WC", value: `Sp${Math.round(metrics.speedyWC)}%` });
+  }
+  if (metrics.jackyWC >= 10) {
+    triggered.push({ key: "jackywc", name: "Jacky WC", value: `Jk${Math.round(metrics.jackyWC)}%` });
+  }
+  if (metrics.tapLN >= 40) {
+    triggered.push({ key: "density", name: "Density", value: `Tap${Math.round(metrics.tapLN)}%` });
+  }
 
-  // First match wins for primary subtype
+  // Primary subtype: only from defining pool types (not companion patterns)
   let lnSubtype = "LN Unknown";
-  if (metrics.inverse >= 20) lnSubtype = "LN Inverse";
-  else if (metrics.overlay >= 30 && metrics.ar >= 20) lnSubtype = "Release Hell";
-  else if (metrics.tapLN >= 40) lnSubtype = "Density";
+  if (metrics.overlay >= 30 && metrics.ar >= 20) lnSubtype = "Timing Hell";
+  else if (metrics.inverse >= 20) lnSubtype = "LN Inverse";
   else if (metrics.ouroboros >= 30) lnSubtype = "Ouroboros";
+  else if (metrics.speedyWC >= 10) lnSubtype = "Speedy WC";
+  else if (metrics.jackyWC >= 10) lnSubtype = "Jacky WC";
 
   return { lnSubtype, lnSubtypes: triggered };
 }

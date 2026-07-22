@@ -3,14 +3,13 @@
 // Based on osumania_map_analyser patterns/
 // ============================================================
 
-/** Six core pattern categories */
+/** Five core pattern categories — LN replaces Coordination/Density/Wildcard */
 export const enum CorePattern {
   Stream = "Stream",
-  Chordstream = "Chordstream",
-  Jacks = "Jacks",
-  Coordination = "Coordination",
-  Density = "Density",
-  Wildcard = "Wildcard",
+  Chord = "Chord",          // ren Coinbase:Chordstream
+  Jack = "Jack",             // ren Coinbase:Jacks
+  LN = "LN",                 // unified LN category (replaces Coordination + Density + Wildcard)
+  Grace = "Grace",           // 48th+ division patterns
 }
 
 /** A single detected pattern instance with timing */
@@ -56,6 +55,32 @@ export interface PatternSummary {
   duration: number;
   /** Clusters filtered by importance >= 50% of top cluster */
   importantClusters: PatternCluster[];
+  /** Per-cluster LN annotations (RC/Mix mode: attached to Stream/Chord/Jack clusters) */
+  lnAnnotations?: {
+    shieldCount: number;
+    reversedShieldCount: number;
+    columnLockCount: number;
+    overlapCount: number;
+    inverseCount: number;
+    ouroborosCount: number;
+    lnStreamCount: number;
+    lnChordCount: number;
+    wcJackCount: number;
+    wcSpeedCount: number;
+  };
   /** Raw LN pattern counts (set by summary, used by lnAnalysis) */
-  _lnCounts?: { shields: number; antiShields: number; columnLocks: number; inverses: number; releases: number };
+  _lnCounts?: {
+    shields: number;
+    reversedShields: number;
+    columnLocks: number;
+    inverses: number;
+    ouroboros: number;
+    overlaps: number;
+    lnStreams: number;
+    lnChords: number;
+    wcJacks: number;
+    wcSpeeds: number;
+    /** @deprecated — replaced by overlaps */
+    releases?: number;
+  };
 }

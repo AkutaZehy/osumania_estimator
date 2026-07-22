@@ -9,9 +9,7 @@ import { PATTERNS_CONFIG } from "./config.js";
 import { detectDirection } from "./primitives.js";
 
 const {
-  COORDINATION_SPECIFIC_ORDER,
   CORE_RATING_MULTIPLIER,
-  DENSITY_SPECIFIC_ORDER,
   INVERSE_GAP_TOLERANCE_MS,
   INVERSE_MIN_FILLED_LANES,
   JACKY_CONTEXT_WINDOW,
@@ -25,16 +23,14 @@ const {
   RC_CORE_LN_SCALE,
   SHIELD_MAX_BEAT_RATIO,
   SUBTYPE_RATING_MULTIPLIER_BY_MODE,
-  WILDCARD_SPECIFIC_ORDER,
 } = PATTERNS_CONFIG;
 
 export const CORE_PATTERN_LIST: CorePattern[] = [
   CorePattern.Stream,
-  CorePattern.Chordstream,
-  CorePattern.Jacks,
-  CorePattern.Coordination,
-  CorePattern.Density,
-  CorePattern.Wildcard,
+  CorePattern.Chord,
+  CorePattern.Jack,
+  CorePattern.LN,
+  CorePattern.Grace,
 ];
 
 // ============================================================
@@ -51,14 +47,12 @@ export function resolveRatingMultiplier(
   modeTag = "Mix",
 ): number {
   const lnCorePatterns = new Set<CorePattern>([
-    CorePattern.Coordination,
-    CorePattern.Density,
-    CorePattern.Wildcard,
+    CorePattern.LN,
   ]);
   const rcCorePatterns = new Set<CorePattern>([
     CorePattern.Stream,
-    CorePattern.Chordstream,
-    CorePattern.Jacks,
+    CorePattern.Chord,
+    CorePattern.Jack,
   ]);
 
   const defaultMultiplier = ratingMultiplier(pattern);
@@ -315,20 +309,125 @@ export function CoreChordstream(xs: PrimitiveRow[]): number {
   return 0;
 }
 
-export function CoreCoordination(xs: PrimitiveRow[]): number {
+export function CoreLN(xs: PrimitiveRow[]): number {
   if (!xs.length) return 0;
-  const a = xs[0]!;
-  return a.lnHeads.length || a.lnBodies.length || a.lnTails.length ? 1 : 0;
+  // Single check: does this window have any LN content?
+  return hasLnContext(xs, 4) ? 1 : 0;
+}
+// ============================================================
+// LN sub-detectors (10 total, unified from old Coordination/Density/Wildcard)
+// ============================================================
+
+function LN_Shield(xs: PrimitiveRow[]): number {
+  // Shield: normal→LN head, same col, within LN_TIME_WINDOW_MS
+  if (xs.length < 2) return 0;
+  const a = xs[0]!, b = xs[1]!;
+  const dt = b.time - a.time;
+  if (dt < 0 || dt > 83) return 0;
+  for (const col of a.normalNotes) {
+    if (b.lnHeads.includes(col)) return 2;
+  }
+  return 0;
 }
 
-export function CoreDensity(xs: PrimitiveRow[]): number {
-  if (!xs.length) return 0;
-  return isLnHeadContext(xs) ? 1 : 0;
+function LN_ReversedShield(xs: PrimitiveRow[]): number {
+  // Reversed Shield: LN tail→normal, same col, within LN_TIME_WINDOW_MS
+  if (xs.length < 2) return 0;
+  const a = xs[0]!, b = xs[1]!;
+  const dt = b.time - a.time;
+  if (dt < 0 || dt > 83) return 0;
+  for (const col of a.lnTails) {
+    if (b.normalNotes.includes(col)) return 2;
+  }
+  return 0;
 }
 
-export function CoreWildcard(xs: PrimitiveRow[]): number {
-  if (!xs.length) return 0;
-  return isLnHeadContext(xs) ? 1 : 0;
+function LN_Overlap(xs: PrimitiveRow[]): number {
+  // Overlap: within 83ms window, ≥2 cols have active LN bodies
+  if (xs.length < 2) return 0;
+  const winEnd = xs[0]!.time + 83;
+  const win = xs.filter(r => r.time <= winEnd);
+  const overlapRows = win.filter(r => r.lnBodies.length >= 2).length;
+  return overlapRows >= 2 ? overlapRows : 0;
+}
+
+function LN_ColumnLock(xs: PrimitiveRow[]): number {
+  // ColumnLock: LN body must be active ≥3 rows, same-hand neighbor ≥3 hits on body rows.
+  if (xs.length < 2) return 0;
+  const x0 = xs[0]!;
+  const split = x0.leftHandKeys;
+  const windowMs = x0.beatLength > 333 ? x0.beatLength * 4 : 1333;
+  const win = xs.filter(r => r.time <= x0.time + windowMs);
+  if (win.length < 2) return 0;
+  
+  let count = 0;
+  const HANDS: [number, number][] = [[0,1],[2,3]];
+  for (const hand of HANDS) {
+    for (const lnCol of hand) {
+      // Only count hits during rows where LN body is active
+      const bodyRows = win.filter(r => r.lnBodies.includes(lnCol));
+      if (bodyRows.length < 3) continue;
+      for (const adj of hand) {
+        if (adj === lnCol) continue;
+        if (!isSameHandAdjacent(lnCol, adj, split)) continue;
+        const adjHits = bodyRows.filter(r => r.rawNotes.includes(adj) || r.normalNotes.includes(adj)).length;
+        if (adjHits >= 3) count++;
+      }
+    }
+  }
+  return count >= 1 ? count : 0;
+}
+
+function LN_Ouroboros(xs: PrimitiveRow[]): number {
+  // Ouroboros: LN tail→LN head chained pair, gap < 21ms, within 2 rows (any column)
+  // Case 1: same row — tail and head at same time
+  if (xs.length >= 1) {
+    const r = xs[0]!;
+    if (r.lnTails.length > 0 && r.lnHeads.length > 0) return 2;
+  }
+  // Case 2: adjacent rows — row[i] tail → row[i+1] head, gap < 21ms
+  if (xs.length >= 2) {
+    const a = xs[0]!, b = xs[1]!;
+    const gap = b.time - a.time;
+    if (gap >= 0 && gap < 21 && a.lnTails.length > 0 && b.lnHeads.length > 0) return 2;
+  }
+  return 0;
+}
+
+function LN_Inverse(xs: PrimitiveRow[]): number {
+  // Inverse: reuse existing inverseReady helper
+  // inverseReady already checks: 5-row window, 0 normal notes, ≥INVERSE_MIN_FILLED_LANES bodies, consistent gaps
+  return inverseReady(xs) ? 5 : 0;
+}
+
+function LN_WC_Jack(xs: PrimitiveRow[]): number {
+  // WC_Jack: Jack patterns within LN context
+  return WildcardJack(xs); // reuse existing
+}
+
+function LN_WC_Speed(xs: PrimitiveRow[]): number {
+  // WC_Speed: Speed/roll patterns within LN context
+  return WildcardSpeed(xs); // reuse existing
+}
+
+function LN_Chord(xs: PrimitiveRow[]): number {
+  // LN_Chord: LN heads form 2+ note chord pattern
+  if (!hasLnContext(xs, 4)) return 0;
+  if (xs.length < 4) return 1; // short window: has LN but too few rows for full check
+  const hrows = headRows(xs, 4);
+  // Check for handstream or jumpstream pattern in head-only view
+  if (Chordstream4kHandstream(hrows) !== 0) return 4;
+  if (Chordstream4kJumpstream(hrows) !== 0) return 4;
+  return 0;
+}
+
+function LN_Stream(xs: PrimitiveRow[]): number {
+  // LN_Stream: LN heads form 1-note stream (catch-all for LN context)
+  if (!hasLnContext(xs, 4)) return 0;
+  if (xs.length < 4) return 1; // short window: has LN but too few rows for full check
+  const hrows = headRows(xs, 4);
+  if (Stream4kRoll(hrows) !== 0) return 4;
+  return 2; // generic LN head stream
 }
 
 // ============================================================
@@ -602,7 +701,7 @@ function Chordstream7kBrackets(xs: PrimitiveRow[]): number {
 }
 
 // ============================================================
-// Coordination sub-detectors
+// Coordination sub-detectors (DEAD CODE - kept for reference)
 // ============================================================
 
 function CoordinationColumnLock(xs: PrimitiveRow[]): number {
@@ -708,7 +807,8 @@ function CoordinationRelease(xs: PrimitiveRow[]): number {
   } else {
     const firstRow = effectiveRows[0]!;
     const a = firstRow.rawNotes[0]!;
-    const b = effectiveRows[1] ? effectiveRows[1]!.rawNotes[0]! : a;
+    const b = effectiveRows[1]
+      ? effectiveRows[1]!.rawNotes[0]! : a;
     const dt = effectiveRows[1]
       ? effectiveRows[1]!.time - firstRow.time
       : 0;
@@ -722,7 +822,7 @@ function CoordinationRelease(xs: PrimitiveRow[]): number {
 }
 
 // ============================================================
-// Density sub-detectors
+// Density sub-detectors (DEAD CODE - kept for reference)
 // ============================================================
 
 function Density4kJumpstream(xs: PrimitiveRow[]): number {
@@ -761,7 +861,7 @@ const DensityOtherLightChordstream = Density7kLightChordstream;
 const DensityOtherInverse = Density7kInverse;
 
 // ============================================================
-// Wildcard sub-detectors
+// Wildcard sub-detectors (DEAD CODE - kept for reference)
 // ============================================================
 
 function WildcardJack(xs: PrimitiveRow[]): number {
@@ -823,174 +923,63 @@ function WildcardSpeed(xs: PrimitiveRow[]): number {
 
 interface SpecificPatternMap {
   Stream: SpecificEntry[];
-  Chordstream: SpecificEntry[];
-  Jacks: SpecificEntry[];
-  Coordination: SpecificEntry[];
-  Density: SpecificEntry[];
-  Wildcard: SpecificEntry[];
+  Chord: SpecificEntry[];
+  Jack: SpecificEntry[];
+  LN: SpecificEntry[];
 }
 
 function makeSpecificPatterns(
   stream: SpecificEntry[],
-  chordstream: SpecificEntry[],
+  chord: SpecificEntry[],
   jack: SpecificEntry[],
-  coordination: SpecificEntry[],
-  density: SpecificEntry[],
-  wildcard: SpecificEntry[],
+  ln: SpecificEntry[],
 ): SpecificPatternMap {
   return {
     Stream: stream,
-    Chordstream: chordstream,
-    Jacks: jack,
-    Coordination: coordination,
-    Density: density,
-    Wildcard: wildcard,
+    Chord: chord,
+    Jack: jack,
+    LN: ln,
   };
 }
 
 export function SPECIFIC_4K(): SpecificPatternMap {
-  const coordination = reorderSpecific(
-    [
-      ["ColumnLock", CoordinationColumnLock],
-      ["Release", CoordinationRelease],
-      ["Shield", CoordinationShield],
-    ],
-    COORDINATION_SPECIFIC_ORDER,
-  );
-
-  const density = reorderSpecific(
-    [
-      ["JS Density", Density4kJumpstream],
-      ["HS Density", Density4kHandstream],
-      ["Inverse", Density4kInverse],
-    ],
-    DENSITY_SPECIFIC_ORDER,
-  );
-
-  const wildcard = reorderSpecific(
-    [
-      ["Jacky WC", WildcardJack],
-      ["Speedy WC", WildcardSpeed],
-    ],
-    WILDCARD_SPECIFIC_ORDER,
-  );
+  // Priority order: Shield > ReversedShield > Overlap > ColumnLock > Ouroboros > Inverse > WC_Jack > WC_Speed > LN_Chord > LN_Stream
+  const lnSpecifics: SpecificEntry[] = [
+    ["Shield", LN_Shield],
+    ["ReversedShield", LN_ReversedShield],
+    ["Overlap", LN_Overlap],
+    ["ColumnLock", LN_ColumnLock],
+    ["Ouroboros", LN_Ouroboros],
+    ["Inverse", LN_Inverse],
+    ["WC_Jack", LN_WC_Jack],
+    ["WC_Speed", LN_WC_Speed],
+    ["LN_Chord", LN_Chord],
+    ["LN_Stream", LN_Stream],
+  ];
 
   return makeSpecificPatterns(
-    [
-      ["Rolls", Stream4kRoll],
-      ["Trills", Stream4kTrill],
-      ["MiniTrills", Stream4kMinitrill],
-    ],
-    [
-      ["HandStream", Chordstream4kHandstream],
-      ["SplitTrill", Chordstream4kSplittrill],
-      ["JumpTrill", Chordstream4kJumptrill],
-      ["JumpStream", Chordstream4kJumpstream],
-    ],
-    [
-      ["LongJacks", JacksLongjacks],
-      ["QuadStream", Jacks4kQuadstream],
-      ["Gluts", Jacks4kGluts],
-      ["ChordJacks", JacksChordjacks],
-      ["MiniJacks", JacksMinijacks],
-    ],
-    coordination,
-    density,
-    wildcard,
+    [["Rolls", Stream4kRoll],["Trills", Stream4kTrill],["MiniTrills", Stream4kMinitrill]],
+    [["HandStream", Chordstream4kHandstream],["SplitTrill", Chordstream4kSplittrill],["JumpTrill", Chordstream4kJumptrill],["JumpStream", Chordstream4kJumpstream]],
+    [["LongJacks", JacksLongjacks],["QuadStream", Jacks4kQuadstream],["Gluts", Jacks4kGluts],["ChordJacks", JacksChordjacks],["MiniJacks", JacksMinijacks]],
+    lnSpecifics,
   );
 }
 
 export function SPECIFIC_7K(): SpecificPatternMap {
-  const coordination = reorderSpecific(
-    [
-      ["ColumnLock", CoordinationColumnLock],
-      ["Release", CoordinationRelease],
-      ["Shield", CoordinationShield],
-    ],
-    COORDINATION_SPECIFIC_ORDER,
-  );
-
-  const density = reorderSpecific(
-    [
-      ["DS Density", Density7kDoubleStreams],
-      ["DCS Density", Density7kDenseChordstream],
-      ["LCS Density", Density7kLightChordstream],
-      ["Inverse", Density7kInverse],
-    ],
-    DENSITY_SPECIFIC_ORDER,
-  );
-
-  const wildcard = reorderSpecific(
-    [
-      ["Jacky WC", WildcardJack],
-      ["Speedy WC", WildcardSpeed],
-    ],
-    WILDCARD_SPECIFIC_ORDER,
-  );
-
   return makeSpecificPatterns(
     [],
-    [
-      ["Brackets", Chordstream7kBrackets],
-      ["Double Stream", Chordstream7kDoubleStreams],
-      ["Dense Chordstream", Chordstream7kDenseChordstream],
-      ["Light Chordstream", Chordstream7kLightChordstream],
-    ],
-    [
-      ["LongJacks", JacksLongjacks],
-      ["ChordJacks", JacksChordjacks],
-      ["MiniJacks", JacksMinijacks],
-    ],
-    coordination,
-    density,
-    wildcard,
+    [["Brackets", Chordstream7kBrackets],["Double Stream", Chordstream7kDoubleStreams],["Dense Chordstream", Chordstream7kDenseChordstream],["Light Chordstream", Chordstream7kLightChordstream]],
+    [["LongJacks", JacksLongjacks],["ChordJacks", JacksChordjacks],["MiniJacks", JacksMinijacks]],
+    [], // no LN detection for 7K+
   );
 }
 
 export function SPECIFIC_OTHER(): SpecificPatternMap {
-  const coordination = reorderSpecific(
-    [
-      ["ColumnLock", CoordinationColumnLock],
-      ["Release", CoordinationRelease],
-      ["Shield", CoordinationShield],
-    ],
-    COORDINATION_SPECIFIC_ORDER,
-  );
-
-  const density = reorderSpecific(
-    [
-      ["DS Density", DensityOtherDoubleStreams],
-      ["DCS Density", DensityOtherDenseChordstream],
-      ["LCS Density", DensityOtherLightChordstream],
-      ["Inverse", DensityOtherInverse],
-    ],
-    DENSITY_SPECIFIC_ORDER,
-  );
-
-  const wildcard = reorderSpecific(
-    [
-      ["Jacky WC", WildcardJack],
-      ["Speedy WC", WildcardSpeed],
-    ],
-    WILDCARD_SPECIFIC_ORDER,
-  );
-
   return makeSpecificPatterns(
     [],
-    [
-      ["Chord Rolls", Chordstream7kChordRoll],
-      ["Double Stream", Chordstream7kDoubleStreams],
-      ["Dense Chordstream", Chordstream7kDenseChordstream],
-      ["Light Chordstream", Chordstream7kLightChordstream],
-    ],
-    [
-      ["LongJacks", JacksLongjacks],
-      ["ChordJacks", JacksChordjacks],
-      ["MiniJacks", JacksMinijacks],
-    ],
-    coordination,
-    density,
-    wildcard,
+    [["Chord Rolls", Chordstream7kChordRoll],["Double Stream", Chordstream7kDoubleStreams],["Dense Chordstream", Chordstream7kDenseChordstream],["Light Chordstream", Chordstream7kLightChordstream]],
+    [["LongJacks", JacksLongjacks],["ChordJacks", JacksChordjacks],["MiniJacks", JacksMinijacks]],
+    [], // no LN detection for non-4K
   );
 }
 
@@ -1001,11 +990,18 @@ export function SPECIFIC_OTHER(): SpecificPatternMap {
 export const CORE_STREAM = CoreStream;
 export const CORE_JACKS = CoreJacks;
 export const CORE_CHORDSTREAM = CoreChordstream;
-export const CORE_COORDINATION = CoreCoordination;
-export const CORE_DENSITY = CoreDensity;
-export const CORE_WILDCARD = CoreWildcard;
+export const CORE_LN = CoreLN;
 
 // Suppress "declared but never read" for dead-code detectors ported from JS
+void reorderSpecific;
+void CoordinationColumnLock;
+void CoordinationRelease;
+void Density4kJumpstream;
+void Density4kHandstream;
+void DensityOtherDoubleStreams;
+void DensityOtherDenseChordstream;
+void DensityOtherLightChordstream;
+void DensityOtherInverse;
 void Chordstream4kDoubleJumpstream;
 void Chordstream4kTripleJumpstream;
 

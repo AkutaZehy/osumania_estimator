@@ -96,8 +96,8 @@ function classifyPatterns(
 
   for (const p of patterns) {
     totalPatterns++;
-    // LN patterns (Coordination/Density/Wildcard) don't participate in speed clustering
-    const isLN = p.pattern === "Coordination" || p.pattern === "Density" || p.pattern === "Wildcard";
+    // LN patterns don't participate in speed clustering
+    const isLN = p.pattern === "LN";
     if (isLN) {
       classified.push({
         source: p,
@@ -140,10 +140,10 @@ function classifyPatterns(
       let bandSpecific: string | null = p.specificType;
       const hasHand = speedRows.some((r) => r.notes >= 3);
       const hasJump = speedRows.some((r) => r.notes >= 2);
-      if (p.pattern === "Chordstream") {
+      if (p.pattern === "Chord") {
         if (hasHand) bandSpecific = "HandStream";
         else if (hasJump) bandSpecific = "JumpStream";
-      } else if (p.pattern === "Jacks") {
+      } else if (p.pattern === "Jack") {
         if (hasJump) bandSpecific = "ChordJacks";
         else bandSpecific = "MiniJacks";
       }
@@ -393,19 +393,17 @@ function mergeHalfSpeedClusters(
 // Release multiplier scaling
 // ============================================================
 
-/** Scale Release rating multiplier if Density/Wildcard clusters exist. */
+/** Scale Overlap rating multiplier if LN clusters exist. */
 function applyReleaseDWScaling(clusters: PatternCluster[]): void {
-  const hasDW = clusters.some(
-    (c) => c.pattern === CorePattern.Density || c.pattern === CorePattern.Wildcard,
-  );
+  const hasLN = clusters.some((c) => c.pattern === CorePattern.LN);
   if (
-    hasDW &&
+    hasLN &&
     (PATTERNS_CONFIG.RELEASE_WITH_DW_MULTIPLIER as number) !== 1.0
   ) {
     for (const c of clusters) {
       if (
         c.specificTypes.some(
-          ([name, ratio]) => name === "Release" && ratio > 0,
+          ([name, ratio]) => name === "Overlap" && ratio > 0,
         )
       ) {
         c.ratingMultiplier *= PATTERNS_CONFIG.RELEASE_WITH_DW_MULTIPLIER;

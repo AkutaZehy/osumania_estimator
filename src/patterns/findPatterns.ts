@@ -8,11 +8,9 @@ import type { PrimitiveRow } from "../types/primitives.js";
 import { PATTERNS_CONFIG } from "./config.js";
 import {
   CORE_CHORDSTREAM,
-  CORE_COORDINATION,
-  CORE_DENSITY,
   CORE_JACKS,
+  CORE_LN,
   CORE_STREAM,
-  CORE_WILDCARD,
   SPECIFIC_4K,
   SPECIFIC_7K,
   SPECIFIC_OTHER,
@@ -55,7 +53,7 @@ function resolvedMspb(
   specificType: string | null,
   meanMspb: number,
 ): number {
-  if (pattern === CorePattern.Density && specificType === "Inverse") {
+  if (pattern === CorePattern.LN && specificType === "Inverse") {
     return 0.0;
   }
   return meanMspb;
@@ -81,7 +79,7 @@ function appendFoundPattern(
   const start = remaining[0]!.time;
   let end: number;
 
-  if (pattern === CorePattern.Jacks) {
+  if (pattern === CorePattern.Jack) {
     const endCandidate =
       n2 < remaining.length ? remaining[n2]!.time : lastNote;
     end = Math.max(
@@ -108,11 +106,9 @@ function appendFoundPattern(
 
 interface SpecificPatternMap {
   Stream: SpecificEntry[];
-  Chordstream: SpecificEntry[];
-  Jacks: SpecificEntry[];
-  Coordination: SpecificEntry[];
-  Density: SpecificEntry[];
-  Wildcard: SpecificEntry[];
+  Chord: SpecificEntry[];
+  Jack: SpecificEntry[];
+  LN: SpecificEntry[];
 }
 
 function appendCoreMatches(
@@ -192,41 +188,25 @@ function matches(
     );
     appendCoreMatches(
       results,
-      CorePattern.Chordstream,
+      CorePattern.Chord,
       CORE_CHORDSTREAM(remaining),
-      specificMap.Chordstream,
+      specificMap.Chord,
       remaining,
       lastNote,
     );
     appendCoreMatches(
       results,
-      CorePattern.Jacks,
+      CorePattern.Jack,
       CORE_JACKS(remaining),
-      specificMap.Jacks,
+      specificMap.Jack,
       remaining,
       lastNote,
     );
     appendCoreMatches(
       results,
-      CorePattern.Coordination,
-      CORE_COORDINATION(remaining),
-      specificMap.Coordination,
-      remaining,
-      lastNote,
-    );
-    appendCoreMatches(
-      results,
-      CorePattern.Density,
-      CORE_DENSITY(remaining),
-      specificMap.Density,
-      remaining,
-      lastNote,
-    );
-    appendCoreMatches(
-      results,
-      CorePattern.Wildcard,
-      CORE_WILDCARD(remaining),
-      specificMap.Wildcard,
+      CorePattern.LN,
+      CORE_LN(remaining),
+      specificMap.LN,
       remaining,
       lastNote,
     );
@@ -244,7 +224,7 @@ function matches(
 /**
  * Find all patterns in the given primitive rows using sliding window scanning.
  *
- * At each position, tests all 6 core detectors. When a core match is found,
+ * At each position, tests all 5 core detectors (Stream, Chord, Jack, LN, Grace).
  * also tests the relevant specific sub-patterns. Supports multi-label
  * same-window matching via ENABLE_MULTI_LABEL_SAME_WINDOW config.
  *

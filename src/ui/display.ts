@@ -63,6 +63,20 @@ function abbrevKeyType(kt: string): string {
     .replace(/Handstream/g, "HS");
 }
 
+/** 4 LN pool types: CO (Coordination), DE (Density), WC (Wildcard), TE (Technical) */
+function dominantLNPool(ln: LNMetrics): string | null {
+  const FULL_NAMES: Record<string, string> = { CO: "Coordination", DE: "Density", WC: "Wildcard", TE: "Technical" };
+  const pools: Array<[string, number]> = [
+    ["CO", ln.coordinationPoolScore],
+    ["DE", ln.densityPoolScore],
+    ["WC", ln.wildcardPoolScore],
+    ["TE", ln.technicalPoolScore],
+  ];
+  if (pools.every(([, s]) => s <= 0)) return null;
+  const maxPool = pools.reduce((a, b) => a[1] > b[1] ? a : b);
+  return maxPool[1] > 0 ? FULL_NAMES[maxPool[0]!] ?? maxPool[0]! : null;
+}
+
 /** Aggregate grid analysis segment grades into a single grade string */
 function aggregateGridGrade(ga: GridAnalysisResult | null, category: "jack" | "stream"): string | null {
   if (!ga) return null;
@@ -182,7 +196,13 @@ export function showResult(result: DifficultyResult): void {
       setText("star-rating", "VIBRO");
       const se = el("star-rating"); if (se) se.style.color = "#ff4444";
     } else {
-      setText("star-rating", `${mt.bpm} ${mt.keyType}`);
+      const poolType = meta.lnRatio >= 0.15 ? dominantLNPool(ln) : null;
+      let displayType = poolType ?? mt.keyType;
+      // Append Jacky/Speedy annotation for WC pool
+      if (poolType === "Wildcard" && (ln.wcJackCount > 0 || ln.wcSpeedCount > 0)) {
+        displayType += ln.wcJackCount >= ln.wcSpeedCount ? " (Jacky)" : " (Speedy)";
+      }
+      setText("star-rating", `${mt.bpm} ${displayType}`);
       const se = el("star-rating"); if (se) se.style.color = color;
     }
   } else {
@@ -269,17 +289,19 @@ export function showResult(result: DifficultyResult): void {
   ];
   if (d.perColumn.length === 4) bpmItems.push(mrow("Cols", d.perColumn.map((c) => `${c.meanDensity.toFixed(1)}`).join(" | ")));
   r.push(col("BPM / DENSITY", ...bpmItems));
-  if (ln.ratio > 0.01 || ln.shieldCount > 0 || ln.columnLockCount > 0 || ln.inverseCount > 0 || ln.asyncReleaseCount > 0 || ln.releaseCount > 0 || ln.tapLNCount > 0 || ln.overlayCount > 0) {
+  const hasLNPanel = ln.ratio > 0.01 || ln.overlapCount > 0 || ln.tapLNCount > 0;
+  if (hasLNPanel) {
     const lnItems = [mrow("Ratio", `${(ln.ratio * 100).toFixed(0)}% (${(ln.strictLNRatio * 100).toFixed(0)}%)`)];
-    if (ln.overlayCount > 0) {
-      const overlayPct = ln.totalLN > 0 ? (ln.overlayCount / ln.totalLN * 100).toFixed(0) : "0";
-      lnItems.push(mrow("Overlay", `${ln.overlayCount} (${overlayPct}%)`));
+    if (ln.overlapCount > 0) {
+      const overlapPct = ln.totalLN > 0 ? (ln.overlapCount / ln.totalLN * 100).toFixed(0) : "0";
+      lnItems.push(mrow("Overlap", `${ln.overlapCount} (${overlapPct}%)`));
     }
     if (ln.tapLNCount > 0) lnItems.push(mrow("Tap LN", `${ln.tapLNCount}`));
-    if (ln.shieldCount > 0 || ln.antiShieldCount > 0) lnItems.push(mrow("Shield/R", `${ln.shieldCount}/${ln.antiShieldCount}`));
-    if (ln.columnLockCount > 0) lnItems.push(mrow("ColLock", `${ln.columnLockCount}`));
-    if (ln.asyncReleaseCount > 0 || ln.releaseCount > 0) lnItems.push(mrow("A/R", `${ln.asyncReleaseCount}/${ln.releaseCount}`));
-    if (ln.inverseCount > 0) lnItems.push(mrow("Inverse", `${ln.inverseCount}`));
+    // Pool weighted scores (CO/DE/WC/TE)
+    if (ln.coordinationPoolScore > 0 || ln.densityPoolScore > 0 || ln.wildcardPoolScore > 0 || ln.technicalPoolScore > 0) {
+      const poolStr = `CO ${ln.coordinationPoolScore.toFixed(1)} · DE ${ln.densityPoolScore.toFixed(1)} · WC ${ln.wildcardPoolScore.toFixed(1)} · TE ${ln.technicalPoolScore.toFixed(1)}`;
+      lnItems.push(mrow("P-Score", poolStr));
+    }
     r.push(col("LONG NOTE", ...lnItems));
   }
   r.push(`</div>`);
