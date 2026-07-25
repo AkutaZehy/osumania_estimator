@@ -7,6 +7,7 @@ import type { CustomMetrics } from "../types/custom.js";
 import type { ParsedBeatmap } from "../types/beatmap.js";
 import type { SunnyResult } from "../types/algorithm.js";
 import type { PatternSummary } from "../types/patterns.js";
+import type { GridAnalysisResult } from "./gridAnalysis.js";
 import { computeDensityMetrics } from "./density.js";
 import { computeEquivalentBPM } from "./equivalentBpm.js";
 import { computeJackMetrics } from "./jackAnalysis.js";
@@ -14,6 +15,7 @@ import { computeStreamMetrics } from "./streamAnalysis.js";
 import { computeTechMetrics } from "./techAnalysis.js";
 import { computeStaminaMetrics } from "./staminaAnalysis.js";
 import { computeLNMetrics } from "./lnAnalysis.js";
+import { computeAnchorMetrics } from "./anchorAnalysis.js";
 
 /**
  * Compute the full custom metrics pipeline for a 4K beatmap.
@@ -38,6 +40,7 @@ export function computeCustomMetrics(
   sunny: SunnyResult,
   patterns: PatternSummary,
   speedRate: number = 1,
+  gridAnalysis?: GridAnalysisResult | null,
 ): CustomMetrics {
   // Density metrics (used by multiple sub-modules).
   const density = computeDensityMetrics(parsed);
@@ -60,6 +63,22 @@ export function computeCustomMetrics(
   // LN-specific analysis (ratio, release, patterns).
   const ln = computeLNMetrics(parsed, sunny, patterns, speedRate);
 
+  // Anchor/stamina analysis (SF, SH, DH).
+  let anchor;
+  try {
+    anchor = computeAnchorMetrics(parsed, gridAnalysis ?? null);
+  } catch (err) {
+    console.error("[AnchorMetrics] failed", err);
+    anchor = {
+      sf: { p100: 0, p90: 0, p50: 0, p90Count: 0, p50Count: 0 },
+      sh: { p100: 0, p90: 0, p50: 0, p90Count: 0, p50Count: 0 },
+      dh: { p100: 0, p90: 0, p50: 0, p90Count: 0, p50Count: 0 },
+      isJackType: false,
+      sfBPM: 0,
+      shBPM: 0,
+    };
+  }
+
   return {
     density,
     equivalentBPM,
@@ -68,5 +87,6 @@ export function computeCustomMetrics(
     tech,
     stamina,
     ln,
+    anchor,
   };
 }

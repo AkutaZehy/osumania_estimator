@@ -130,6 +130,27 @@ export interface LNMetrics {
   tapLNCount: number;
   /** Total LN count (for overlay percentage) */
   totalLN: number;
+  /** Overlapping LN pair count */
+  overlayCount: number;
+}
+
+/** Single tier of anchor/stamina analysis */
+export interface AnchorTier {
+  p100: number;       // P100 value (in measures)
+  p90: number;        // P90 value (in measures)
+  p50: number;        // P50 value (in measures)
+  p90Count: number;   // # of segments reaching P90
+  p50Count: number;   // # of segments reaching P50
+}
+
+/** Anchor analysis: single-finger (SF), single-hand (SH), dual-hand (DH) */
+export interface AnchorMetrics {
+  sf: AnchorTier;
+  sh: AnchorTier;
+  dh: AnchorTier;
+  isJackType: boolean;
+  sfBPM: number;
+  shBPM: number;
 }
 
 /** Complete custom metrics result */
@@ -141,4 +162,5 @@ export interface CustomMetrics {
   tech: TechMetrics;
   stamina: StaminaMetrics;
   ln: LNMetrics;
+  anchor: AnchorMetrics;
 }

@@ -129,6 +129,14 @@ function defaultCustomMetrics(
       totalLN: 0,
       strictLNRatio: 0,
     },
+    anchor: {
+      sf: { p100: 0, p90: 0, p50: 0, p90Count: 0, p50Count: 0 },
+      sh: { p100: 0, p90: 0, p50: 0, p90Count: 0, p50Count: 0 },
+      dh: { p100: 0, p90: 0, p50: 0, p90Count: 0, p50Count: 0 },
+      isJackType: false,
+      sfBPM: 0,
+      shBPM: 0,
+    },
   };
 }
 
@@ -170,6 +178,7 @@ function buildErrorResult(
     ),
     graph: { times: [], values: [] },
     sectionAnalysis: null,
+    gridAnalysis: null,
     meta,
   };
 }
@@ -250,10 +259,22 @@ export function analyzeBeatmap(
   }
   signal?.throwIfAborted();
 
-  // ---- Step 4: Custom Metrics ----
+  // ---- Step 4: Grid Analysis (cell-based key type) ----
+  // Computed early so custom metrics can use its BPM for anchor analysis.
+  let gridAnalysis;
+  try {
+    gridAnalysis = analyzeGrid(beatmap, signal);
+  } catch (err) {
+    if (err instanceof AnalysisCancelledError) throw err;
+    console.error("[GridAnalysis] failed", err);
+    gridAnalysis = null;
+  }
+  signal?.throwIfAborted();
+
+  // ---- Step 5: Custom Metrics ----
   let custom: CustomMetrics;
   try {
-    custom = computeCustomMetrics(beatmap, sunny, patterns, opts.speedRate);
+    custom = computeCustomMetrics(beatmap, sunny, patterns, opts.speedRate, gridAnalysis);
   } catch (err) {
     console.error("[CustomMetrics] failed", err);
     custom = defaultCustomMetrics(
@@ -263,10 +284,10 @@ export function analyzeBeatmap(
     );
   }
 
-  // ---- Step 5: Aggregate ----
+  // ---- Step 6: Aggregate ----
   const { finalStar } = aggregateDifficulty(sunny, patterns, custom);
 
-  // ---- Step 6: Section Analysis ----
+  // ---- Step 7: Section Analysis ----
   let sectionAnalysis;
   try {
     sectionAnalysis = analyzeSections(beatmap, signal);
@@ -274,17 +295,6 @@ export function analyzeBeatmap(
     if (err instanceof AnalysisCancelledError) throw err;
     console.error("[SectionAnalysis] failed", err);
     sectionAnalysis = null;
-  }
-  signal?.throwIfAborted();
-
-  // ---- Step 7: Grid Analysis (new cell-based key type system) ----
-  let gridAnalysis;
-  try {
-    gridAnalysis = analyzeGrid(beatmap, signal);
-  } catch (err) {
-    if (err instanceof AnalysisCancelledError) throw err;
-    console.error("[GridAnalysis] failed", err);
-    gridAnalysis = null;
   }
   signal?.throwIfAborted();
 

@@ -4,7 +4,7 @@
 // ============================================================
 
 import type { DifficultyResult } from "../types/result.js";
-import type { DensityMetrics } from "../types/custom.js";
+import type { DensityMetrics, AnchorTier } from "../types/custom.js";
 import type { PatternCluster } from "../types/patterns.js";
 import type { SectionAnalysis, SegmentCategory } from "../custom/sectionAnalysis.js";
 import type { GridAnalysisResult, SegmentResult, CellResult } from "../custom/gridAnalysis.js";
@@ -115,6 +115,15 @@ function median(arr: number[]): number {
   const s = [...arr].sort((a, b) => a - b);
   const m = Math.floor(s.length / 2);
   return s.length % 2 ? s[m]! : (s[m - 1]! + s[m]!) / 2;
+}
+
+/** Format an AnchorTier for display: `P100 / P90=v×n / P50=v×n` */
+function anchorCellStr(t: AnchorTier): string {
+  const parts: string[] = [];
+  parts.push(t.p100 > 0 ? t.p100.toFixed(2) : "—");
+  parts.push(t.p90 > 0 && t.p90Count > 0 ? `${t.p90.toFixed(2)}×${t.p90Count}` : "—");
+  parts.push(t.p50 > 0 && t.p50Count > 0 ? `${t.p50.toFixed(2)}×${t.p50Count}` : "—");
+  return parts.join(" / ");
 }
 
 const CAT_COLORS: Record<SegmentCategory, string> = {
@@ -289,7 +298,7 @@ export function showResult(result: DifficultyResult): void {
   const jackImbal = j.isBias ? "bias" : `${j.imbalance4r.toFixed(2)}/${j.imbalance16r.toFixed(2)}/${j.imbalanceTotal.toFixed(2)}`;
   const jackItems = [
     mrow("Grade", aggregateGridGrade(ga, "jack") ?? j.densityGrade ?? "None"),
-    ...(j.anchorCount > 0 ? [mrow("Anchors", `${j.anchorCount}`)] : []),
+    mrow("Anchor", anchorCellStr(custom.anchor.sf)),
     mrow("Finger", j.singleFingerPressure.toFixed(2)),
     mrow("Hand", j.singleHandPressure.toFixed(2)),
     mrow("Imbal 4r/16r/T", jackImbal),
@@ -318,6 +327,8 @@ export function showResult(result: DifficultyResult): void {
     mrow("Grade", aggregateGridGrade(ga, "stream") ?? s.densityGrade ?? "Unknown"),
     mrow("Imbal 4r/16r/T", streamImbal),
     mrow("Brk2r", `${s.brokenMax.toFixed(1)}/${s.brokenMed.toFixed(1)}`),
+    mrow("Sta L/R", anchorCellStr(custom.anchor.sh)),
+    mrow("Sta Alt", anchorCellStr(custom.anchor.dh)),
   ];
   r.push(col("STREAM", ...streamItems));
   r.push(`</div>`);
