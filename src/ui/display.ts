@@ -216,8 +216,8 @@ export function showResult(result: DifficultyResult): void {
   const gs = meta.gameStar;
   let sunnyText = `Sunny: ${sunnyStar.toFixed(2)}`;
   if (gs != null && gs > 0 && sunnyStar > 0.01) {
-    const diff = sunnyStar - gs;
-    sunnyText += ` (${diff >= 0 ? "+" : ""}${diff.toFixed(2)})`;
+    const diffPct = ((sunnyStar - gs) / gs) * 100;
+    sunnyText += ` (${diffPct >= 0 ? "+" : ""}${diffPct.toFixed(1)}%)`;
   }
   setText("star-value", sunnyText);
 

@@ -1,4 +1,4 @@
-# osumania-estimator v2.1.0
+# osumania-estimator v2.2.0
 
 A tosu overlay plugin for osu!mania 4K key pattern analysis and difficulty estimation.
 
@@ -130,21 +130,23 @@ Shown when LN ratio > 1% or patterns detected.
 
 | Field   | Meaning                                                            |
 | ------- | ------------------------------------------------------------------ |
-| Grade   | Mini (<=4) / Low (5-7) / Mid (8-11) / Dense (12+). Values: P90/P50 |
-| Anchors | 3+ consecutive same-column notes, gap <= 2x per-row beat length    |
-| Finger  | Max per-column density / max both-hands (0-1)                      |
-| Hand    | Max(left,right) peak density / max both-hands (0-1)                |
-| Imbal   | 4-row / 16-row / overall hand imbalance                            |
-| Vibro   | "ETT" when Etterna JackSpeed/Overall >= 0.95                       |
+| Grade  | Mini (<=4) / Low (5-7) / Mid (8-11) / Dense (12+). Values: P90/P50 |
+| Anchor | SF (Single Finger) stamina — `P100 / P90=v×n / P50=v×n` in measures |
+| Finger | Max per-column density / max both-hands (0-1)                       |
+| Hand   | Max(left,right) peak density / max both-hands (0-1)                 |
+| Imbal  | 4-row / 16-row / overall hand imbalance                             |
+| Vibro  | "ETT" when Etterna JackSpeed/Overall >= 0.95                        |
 
 #### STREAM Panel
 
 | Field | Meaning                                                         |
 | ----- | --------------------------------------------------------------- |
-| Type  | Stream / JumpStream / HandStream / mixed                        |
-| Grade | Single(<=4) / Light(5) / Mid(6) / Dense(8) / Heavy(9+). P90/P50 |
-| Imbal | 4-row / 16-row / overall hand imbalance                         |
-| Brk2r | Broken stream: max/median notes in any 2-row window             |
+| Type   | Stream / JumpStream / HandStream / mixed                        |
+| Grade  | Single(<=4) / Light(5) / Mid(6) / Dense(8) / Heavy(9+). P90/P50 |
+| Imbal  | 4-row / 16-row / overall hand imbalance                         |
+| Brk2r  | Broken stream: max/median notes in any 2-row window             |
+| Sta L/R| SH (Single Hand) stamina — `P100 / P90=v×n / P50=v×n`           |
+| Sta Alt| DH (Dual Hand) stamina — `P100 / P90=v×n / P50=v×n`             |
 
 #### TECH Panel
 
@@ -169,19 +171,19 @@ Shown when LN ratio > 1% or patterns detected.
 
 ## Technical Notes
 
-### Architecture (v2.0.0)
+### Architecture (v2.2.0)
 
-The analysis pipeline is decomposed into two focused modules:
+The analysis pipeline is decomposed into focused modules:
 
 ```
-sectionAnalysis.ts           gridAnalysis.ts
-┌─────────────────────┐     ┌──────────────────────────┐
-│ Beat-grid slicing   │──┬──│ Cell-level subdivision   │
-│ Segment aggregation │  │  │ Pattern classification   │
-│ Cross-segment stats │  │  │ Jack/stream detection     │
-│ Summary reports     │  │  │ LN metrics               │
-└─────────────────────┘  │  │ Grace/flam detection     │
-                          │  │ Cross-cell jack analysis │
+sectionAnalysis.ts           gridAnalysis.ts           anchorAnalysis.ts
+┌─────────────────────┐     ┌──────────────────────────┐  ┌──────────────────────────────┐
+│ Beat-grid slicing   │──┬──│ Cell-level subdivision   │  │ SF (Single Finger) stamina   │
+│ Segment aggregation │  │  │ Pattern classification   │  │ SH (Single Hand) stamina     │
+│ Cross-segment stats │  │  │ Jack/stream detection     │  │ DH (Dual Hand) stamina       │
+│ Summary reports     │  │  │ LN metrics               │  │ Bridge tolerance (P100)      │
+└─────────────────────┘  │  │ Grace/flam detection     │  │ Strict detection (P90/P50)   │
+                          │  │ Cross-cell jack analysis │  └──────────────────────────────┘
                           │  └──────────────────────────┘
                           │
                           ├── Per-cell timing lookup:
@@ -214,6 +216,22 @@ Maps with scroll velocity changes (multiple uninherited timing points at differe
 
 This ensures accurate BPM assignment for sections at different tempos within the same map.
 
+### Anchor / Stamina Analysis
+
+Measures single-finger (SF), single-hand (SH), and dual-hand (DH) stamina by detecting consecutive-note segments in 16th-note positions:
+
+| Tier | Tolerance | Description |
+|------|-----------|-------------|
+| **P100** | Bridge (gap≤2 bridged by 4 consecutive notes) | Worst-case endurance |
+| **P90** | Strict (consecutive only) | 90th percentile segment length |
+| **P50** | Strict (consecutive only) | Median segment length |
+
+Display format: `P100 / P90=v×n / P50=v×n` (values in measures, `—` = no qualifying segment).
+
+**SF** segments are per-column. **SH** segments merge left-hand (cols 0+1) and right-hand (cols 2+3). **DH** segments merge four paired column combinations (0+2, 1+3, 1+2, 0+3).
+
+BPM scaling: jack-type maps use base BPM for SF and 2× base for SH/DH; stream-type maps halve SF BPM and use base for SH/DH.
+
 ### Division ↔ BPM Mapping
 
 | Div  | Type  | Effective BPM formula |
@@ -231,7 +249,7 @@ This ensures accurate BPM assignment for sections at different tempos within the
 - **Sunny Rework** — 6 strain components, weighted percentile aggregation
 - **Grid Analysis** — Beat-grid cell classification, subdivision detection, jack/stream/LN pattern recognition
 - **Pattern Detection** — Interlude sliding-window, 6 core + 22+ specific patterns
-- **Custom Metrics** — Beat-grid density, speed, stamina, tech analysis
+- **Custom Metrics** — Beat-grid density, speed, stamina, tech analysis, anchor (SF/SH/DH) analysis
 - **Etterna Vibro** — MinaCalc v0.72.3 WASM, JackSpeed/Overall >= 0.95
 
 ### MOD Support
