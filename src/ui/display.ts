@@ -702,7 +702,23 @@ export function updateGameState(stateName: string): void {
 export function updateInGameBar(progress: number): void {
   // ---- Playhead cursor on section bar ----
   const playhead = document.getElementById("playhead");
-  if (playhead) playhead.style.left = `${progress * 100}%`;
+  if (playhead) {
+    // playhead is absolutely positioned in #section-bar whose padding box
+    // (containing block) includes the 14px side padding, but the measure
+    // blocks and time ticks live inside the content area (no padding).
+    // Compensate so the playhead tracks the content area exactly.
+    const bar = playhead.parentElement;
+    if (bar) {
+      const s = getComputedStyle(bar);
+      const pl = parseFloat(s.paddingLeft);
+      const pr = parseFloat(s.paddingRight);
+      const bw = bar.getBoundingClientRect().width;
+      const cw = bw - pl - pr;
+      playhead.style.left = `${((pl + progress * cw) / bw) * 100}%`;
+    } else {
+      playhead.style.left = `${progress * 100}%`;
+    }
+  }
 
   // ---- Update progress bar width ----
   const igProgress = el("ig-progress");
