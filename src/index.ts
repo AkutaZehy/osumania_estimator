@@ -21,6 +21,7 @@ let lastModSig = "";
 let isAnalyzing = false;
 let analysisId = 0;
 let totalDurationMs = 0;
+let gridStartTimeMs = 0;
 let abortController: AbortController | null = null;
 
 // ---- Fetch .osu file from tosu ----
@@ -196,8 +197,11 @@ async function onBeatmapChange(msg: TosuStateMessage): Promise<void> {
     // Determine total duration from section analysis or grid cells
     const sa = result.sectionAnalysis;
     const ga2 = result.gridAnalysis;
-    totalDurationMs = sa?.totalDuration
-      ?? (ga2 && ga2.cells.length > 0 ? ga2.cells[ga2.cells.length - 1]!.endTime - ga2.cells[0]!.startTime : 0);
+    // Prefer grid duration (section bar uses cell range); fall back to section analysis
+    gridStartTimeMs = ga2 && ga2.cells.length > 0 ? ga2.cells[0]!.startTime : 0;
+    totalDurationMs = (ga2 && ga2.cells.length > 0
+      ? ga2.cells[ga2.cells.length - 1]!.endTime - ga2.cells[0]!.startTime
+      : sa?.totalDuration) ?? 0;
   } catch (err) {
     if (myId !== analysisId) return;
     const message = err instanceof Error ? err.message : "Unknown error";
@@ -218,7 +222,9 @@ function onStateChange(msg: TosuStateMessage): void {
   // Use beatmap.time.live — available during gameplay AND preview (matches PP by Belikhun / ManiaMapAnalyser)
   const liveTime = msg.beatmap?.time?.live;
   if (liveTime != null && Number.isFinite(liveTime)) {
-    const progress = Math.max(0, Math.min(1, liveTime / totalDurationMs));
+    // Offset by grid start time so the playhead aligns with cell start
+    const effectiveTime = liveTime - gridStartTimeMs;
+    const progress = Math.max(0, Math.min(1, effectiveTime / totalDurationMs));
     updateInGameBar(progress);
   }
 }

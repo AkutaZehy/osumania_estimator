@@ -802,8 +802,10 @@ function renderSectionAnalysisPatched(
 ): void {
   lastAnalysis = sa;
   lastSectionAnalysis = sa;
-  lastTotalDuration = sa?.totalDuration
-    ?? (ga && ga.cells.length > 0 ? ga.cells[ga.cells.length - 1]!.endTime - ga.cells[0]!.startTime : 0);
+    // Prefer grid duration for consistency with section bar time axis
+  lastTotalDuration = (ga && ga.cells.length > 0
+    ? ga.cells[ga.cells.length - 1]!.endTime - ga.cells[0]!.startTime
+    : sa?.totalDuration) ?? 0;
 
   debugLog("renderSectionAnalysisPatched: sa=%s, grid=%s", sa ? "yes" : "null", ga ? "yes" : "null");
 
@@ -829,12 +831,14 @@ function renderSectionAnalysisPatched(
 // Grid-based Section Bar (timeline from grid cells)
 // ---------------------------------------------------------------------------
 
-const GRID_CAT_COLORS: Record<string, string> = {
-  stream: "#2980b9",
-  jack: "#c0392b",
-  ln: "#8e44ad",
-  tech: "#27ae60",
-  break: "#2c2c2c",
+const GRID_COLORS: Record<string, string> = {
+  "stream":      "#2980b9",   // mid+ stream (blue)
+  "stream-low":  "#5dade2",   // low stream (light blue)
+  "jack":        "#c0392b",   // mid+ jack (red)
+  "jack-low":    "#e74c3c",   // low jack (light red)
+  "ln":          "#27ae60",   // green
+  "tech":        "#8e44ad",   // purple (mixed stream+jack)
+  "break":       "#2c2c2c",
 };
 
 function renderGridSectionBar(cells: CellResult[], bpmRange: { min: number; max: number }): void {
@@ -905,7 +909,7 @@ function renderGridSectionBar(cells: CellResult[], bpmRange: { min: number; max:
   // Second pass: render merged blocks
   let blocksHtml = "";
   for (const winner of winners) {
-    const color = GRID_CAT_COLORS[winner] ?? "#444";
+    const color = GRID_COLORS[winner] ?? "#444";
     blocksHtml += `<div class="measure-block" style="background:${color}"></div>`;
   }
   bar.innerHTML = blocksHtml;
@@ -928,7 +932,7 @@ function renderGridStructure(segments: SegmentResult[]): void {
 
   let html = "";
   for (const seg of nonBreak) {
-    const color = GRID_CAT_COLORS[seg.category] ?? "#666";
+    const color = GRID_COLORS[seg.category] ?? "#666";
     const catName = seg.category.charAt(0).toUpperCase() + seg.category.slice(1);
 
     // Build row note display
@@ -984,7 +988,7 @@ function renderGridSegmentTable(segments: SegmentResult[]): void {
 
   let html = "";
   for (const seg of nonBreak) {
-    const color = GRID_CAT_COLORS[seg.category] ?? "#666";
+    const color = GRID_COLORS[seg.category] ?? "#666";
     const startSec = seg.startTime / 1000;
     const endSec = seg.endTime / 1000;
 
