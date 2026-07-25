@@ -11,6 +11,7 @@
 // ============================================================
 
 import type { ParsedBeatmap, TimingPoint } from "../types/beatmap.js";
+import type { SectionAnalysis } from "./sectionAnalysis.js";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -527,6 +528,7 @@ interface LNMetrics {
   ar: number;
   tapLN: number;
   ouroboros: number;
+  tree: number;
   shield: number;
   reversedShield: number;
   columnLock: number;
@@ -536,11 +538,93 @@ interface LNMetrics {
   jackyWC: number;
 }
 
+// ---------------------------------------------------------------------------
+// Strict Ouroboros helpers (shared with sectionAnalysis.ts)
+// ---------------------------------------------------------------------------
+
+type LNNote = { col: number; start: number; end: number };
+
+interface LNEdge { from: LNNote; to: LNNote }
+
+function buildEdges(lns: LNNote[]): LNEdge[] {
+  const edges: LNEdge[] = [];
+  for (let i = 0; i < lns.length; i++) {
+    for (let j = 0; j < lns.length; j++) {
+      if (i === j) continue;
+      const gap = lns[j]!.start - lns[i]!.end;
+      if (gap >= 0 && gap < 21) edges.push({ from: lns[i]!, to: lns[j]! });
+    }
+  }
+  return edges;
+}
+
+function findComponents(lns: LNNote[], edges: LNEdge[]): LNNote[][] {
+  const nodeIdx = new Map<LNNote, number>();
+  lns.forEach((ln, i) => nodeIdx.set(ln, i));
+  const adj: number[][] = Array.from({ length: lns.length }, () => []);
+  for (const e of edges) { const fi = nodeIdx.get(e.from)!, ti = nodeIdx.get(e.to)!; adj[fi]!.push(ti); adj[ti]!.push(fi); }
+  const visited = new Array(lns.length).fill(false);
+  const components: LNNote[][] = [];
+  for (let i = 0; i < lns.length; i++) {
+    if (visited[i]) continue;
+    const comp: LNNote[] = []; const stack = [i]; visited[i] = true;
+    while (stack.length) { const v = stack.pop()!; comp.push(lns[v]!); for (const nb of adj[v]!) { if (!visited[nb]) { visited[nb] = true; stack.push(nb); } } }
+    components.push(comp);
+  }
+  return components;
+}
+
+function spansAllColumns(lnSet: LNNote[], edges: LNEdge[]): boolean {
+  const cols = new Set<number>();
+  for (const e of edges) { if (lnSet.includes(e.from) && lnSet.includes(e.to)) { cols.add(e.from.col); cols.add(e.to.col); } }
+  return cols.size === 4;
+}
+
+function hasFullSpan(lns: LNNote[], edges: LNEdge[]): boolean {
+  return findComponents(lns, edges).some(c => spansAllColumns(c, edges));
+}
+
+function findLongestPath(lns: LNNote[], edges: LNEdge[]): LNNote[] {
+  const adj = new Map<LNNote, LNNote[]>(); for (const ln of lns) adj.set(ln, []); for (const e of edges) adj.get(e.from)!.push(e.to);
+  const sorted = [...lns].sort((a, b) => a.start - b.start);
+  const idx = new Map(sorted.map((ln, i) => [ln, i]));
+  const dpDur = new Array(sorted.length).fill(0), dpLen = new Array(sorted.length).fill(1), dpStart = new Array(sorted.length).fill(0), dpPrev = new Array<number | null>(sorted.length).fill(null), dpAvgCol = new Array(sorted.length).fill(0);
+  for (let i = 0; i < sorted.length; i++) {
+    const ln = sorted[i]!; dpDur[i] = ln.end - ln.start; dpStart[i] = ln.start; dpAvgCol[i] = ln.col;
+    for (const e of edges) { if (e.to === ln) { const pi = idx.get(e.from)!; const candDur = ln.end - dpStart[pi]!, candLen = dpLen[pi]! + 1, candCol = (dpAvgCol[pi]! * dpLen[pi]! + ln.col) / candLen; if (candDur > dpDur[i]! || (candDur === dpDur[i]! && candLen > dpLen[i]!) || (candDur === dpDur[i]! && candLen === dpLen[i]! && candCol < dpAvgCol[i]!)) { dpDur[i] = candDur; dpLen[i] = candLen; dpStart[i] = dpStart[pi]!; dpPrev[i] = pi; dpAvgCol[i] = candCol; } } }
+  }
+  let bestEnd = 0; for (let i = 1; i < sorted.length; i++) { if (dpDur[i]! > dpDur[bestEnd]! || (dpDur[i]! === dpDur[bestEnd]! && dpLen[i]! > dpLen[bestEnd]!) || (dpDur[i]! === dpDur[bestEnd]! && dpLen[i]! === dpLen[bestEnd]! && dpAvgCol[i]! < dpAvgCol[bestEnd]!)) bestEnd = i; }
+  const path: LNNote[] = []; let curr: number | null = bestEnd; while (curr !== null) { path.unshift(sorted[curr]!); curr = dpPrev[curr]; } return path;
+}
+
+function allConnected(lns: LNNote[], edges: LNEdge[]): boolean {
+  const connected = new Set<LNNote>(); for (const e of edges) { connected.add(e.from); connected.add(e.to); }
+  return connected.size === lns.length;
+}
+
+function computeStrictOuroboros(lns: LNNote[]): number {
+  if (lns.length < 2) return 0;
+  const edges = buildEdges(lns); if (edges.length === 0) return 0;
+  const components = findComponents(lns, edges);
+  const fullComps = components.filter(c => spansAllColumns(c, edges));
+  if (fullComps.length === 0) return 0;
+  const longestPath = findLongestPath(lns, edges);
+  const pathSet = new Set(longestPath);
+  const remaining = lns.filter(ln => !pathSet.has(ln));
+  if (remaining.length === 0) { let count = 0; for (const c of fullComps) count += c.length; return (count / lns.length) * 100; }
+  const remEdges = edges.filter(e => !pathSet.has(e.from) && !pathSet.has(e.to));
+  if (!hasFullSpan(remaining, remEdges)) return 0;
+  const remComps = findComponents(remaining, remEdges);
+  for (const comp of remComps) { const compE = remEdges.filter(e => comp.includes(e.from) && comp.includes(e.to)); if (compE.length > 0 && !spansAllColumns(comp, remEdges)) return 0; }
+  let count = 0; for (const c of fullComps) count += c.length;
+  return (count / lns.length) * 100;
+}
+
 function analyzeLNCell(notes: NoteInfo[], beatLength: number): LNMetrics {
   const LN_WIN = 83; // LN_TIME_WINDOW_MS
   const lns = notes.filter((n) => n.isLN);
   const normals = notes.filter((n) => !n.isLN);
-  if (lns.length === 0) return { inverse: 0, overlay: 0, ar: 0, tapLN: 0, ouroboros: 0, shield: 0, reversedShield: 0, columnLock: 0, jsDensity: 0, hsDensity: 0, speedyWC: 0, jackyWC: 0 };
+  if (lns.length === 0) return { inverse: 0, overlay: 0, ar: 0, tapLN: 0, ouroboros: 0, tree: 0, shield: 0, reversedShield: 0, columnLock: 0, jsDensity: 0, hsDensity: 0, speedyWC: 0, jackyWC: 0 };
 
   // Tap LN: ≤ beatLength/4
   const maxTap = beatLength / 4;
@@ -571,7 +655,8 @@ function analyzeLNCell(notes: NoteInfo[], beatLength: number): LNMetrics {
   }
   const ar = (arCount / lns.length) * 100;
 
-  // Ouroboros: head/tail gap < 21ms (LN_TIME_WINDOW_MS/4)
+  // Ouroboros: loose definition for cell-level (strict too granular for 4-beat cells)
+  const lnsOnly: LNNote[] = lns.map(n => ({ col: n.col, start: n.start, end: n.end }));
   let ouroCount = 0;
   for (const a of lns) {
     for (const b of lns) {
@@ -580,6 +665,19 @@ function analyzeLNCell(notes: NoteInfo[], beatLength: number): LNMetrics {
     }
   }
   const ouroboros = (ouroCount / lns.length) * 100;
+
+  // Tree: ≥75% of LNs participate in T→H edges
+  let tree = 0;
+  if (ouroboros < 30) {
+    const edges = buildEdges(lnsOnly);
+    if (edges.length > 0) {
+      const connected = new Set<LNNote>();
+      for (const e of edges) { connected.add(e.from); connected.add(e.to); }
+      if (connected.size / lns.length >= 0.75) {
+        tree = 100;
+      }
+    }
+  }
 
   // Shield: N→H same col ≤83ms
   let shieldCount = 0;
@@ -652,23 +750,23 @@ function analyzeLNCell(notes: NoteInfo[], beatLength: number): LNMetrics {
   const allRows = [...allTimeCols.entries()]
     .sort((a, b) => a[0] - b[0])
     .map(([t, cols]) => ({ time: t, cols }));
-  let speedyHeads = 0, jackyHeads = 0;
+  let speedyTransitions = 0, jackyTransitions = 0;
   for (let i = 1; i < allRows.length; i++) {
     const prev = allRows[i - 1]!, curr = allRows[i]!;
     const dt = curr.time - prev.time;
     if (dt <= 0) continue;
     // Same-column note repeat (LN or normal) → jacky pattern
-    if (curr.cols.some(c => prev.cols.includes(c))) jackyHeads += curr.cols.length;
+    if (curr.cols.some(c => prev.cols.includes(c))) jackyTransitions++;
     // Directional movement (all columns shift left or right)
     const prevMin = Math.min(...prev.cols), prevMax = Math.max(...prev.cols);
     const currMin = Math.min(...curr.cols), currMax = Math.max(...curr.cols);
-    if (currMax < prevMin || currMin > prevMax) speedyHeads += curr.cols.length;
+    if (currMax < prevMin || currMin > prevMax) speedyTransitions++;
   }
-  const totalNotes = notes.length;
-  const speedyWC = totalNotes > 0 ? (speedyHeads / totalNotes) * 100 : 0;
-  const jackyWC = totalNotes > 0 ? (jackyHeads / totalNotes) * 100 : 0;
+  const rowCount = Math.max(1, allRows.length - 1);
+  const speedyWC = (speedyTransitions / rowCount) * 100;
+  const jackyWC = (jackyTransitions / rowCount) * 100;
 
-  return { inverse, overlay, ar, tapLN, ouroboros, shield, reversedShield, columnLock, jsDensity, hsDensity, speedyWC, jackyWC };
+  return { inverse, overlay, ar, tapLN, ouroboros, tree, shield, reversedShield, columnLock, jsDensity, hsDensity, speedyWC, jackyWC };
 }
 
 const LN_TYPE_COLORS: Record<string, string> = {
@@ -678,6 +776,7 @@ const LN_TYPE_COLORS: Record<string, string> = {
   releasehell: "#e74c3c",
   inverse: "#9b59b6",
   ouroboros: "#1abc9c",
+  tree: "#2ecc71",
   jsdensity: "#42a5f5",
   hsdensity: "#1e88e5",
   speedywc: "#66bb6a",
@@ -706,6 +805,9 @@ function classifyLNCell(
   if (metrics.ouroboros >= 30) {
     triggered.push({ key: "ouroboros", name: "Ouroboros", value: `${Math.round(metrics.ouroboros)}%` });
   }
+  if (metrics.tree >= 1) {
+    triggered.push({ key: "tree", name: "LN Tree", value: "Tree" });
+  }
   if (metrics.inverse >= 20) {
     triggered.push({ key: "inverse", name: "LN Inverse", value: `${Math.round(metrics.inverse)}%` });
   }
@@ -715,10 +817,10 @@ function classifyLNCell(
   if (metrics.hsDensity >= 10) {
     triggered.push({ key: "hsdensity", name: "HS Density", value: `HS${Math.round(metrics.hsDensity)}%` });
   }
-  if (metrics.speedyWC >= 10) {
+  if (metrics.speedyWC >= 50) {
     triggered.push({ key: "speedywc", name: "Speedy WC", value: `Sp${Math.round(metrics.speedyWC)}%` });
   }
-  if (metrics.jackyWC >= 10) {
+  if (metrics.jackyWC >= 20) {
     triggered.push({ key: "jackywc", name: "Jacky WC", value: `Jk${Math.round(metrics.jackyWC)}%` });
   }
   if (metrics.tapLN >= 40) {
@@ -727,11 +829,12 @@ function classifyLNCell(
 
   // Primary subtype: only from defining pool types (not companion patterns)
   let lnSubtype = "LN Unknown";
-  if (metrics.overlay >= 30 && metrics.ar >= 20) lnSubtype = "Timing Hell";
+  if (metrics.ouroboros >= 30) lnSubtype = "Ouroboros";
+  else if (metrics.tree >= 1) lnSubtype = "LN Tree";
+  else if (metrics.overlay >= 30 && metrics.ar >= 20) lnSubtype = "Timing Hell";
   else if (metrics.inverse >= 20) lnSubtype = "LN Inverse";
-  else if (metrics.ouroboros >= 30) lnSubtype = "Ouroboros";
-  else if (metrics.speedyWC >= 10) lnSubtype = "Speedy WC";
-  else if (metrics.jackyWC >= 10) lnSubtype = "Jacky WC";
+  else if (metrics.speedyWC >= 50) lnSubtype = "Speedy WC";
+  else if (metrics.jackyWC >= 20) lnSubtype = "Jacky WC";
 
   return { lnSubtype, lnSubtypes: triggered };
 }
@@ -801,6 +904,7 @@ function buildGrid(
 function buildSegments(
   cells: CellResult[],
   beatmap: ParsedBeatmap,
+  sectionAnalysis?: SectionAnalysis,
 ): SegmentResult[] {
   if (cells.length === 0) return [];
 
@@ -818,8 +922,22 @@ function buildSegments(
       Math.abs(curr.effectiveBPM - prev.effectiveBPM) > 15;
 
     if (categoryChanged || bpmJump) {
-      segments.push(createSegment(segCells, beatmap));
+      segments.push(createSegment(segCells, beatmap, sectionAnalysis));
       segCells = [curr];
+    } else if (
+      sectionAnalysis &&
+      prev.category === "ln" &&
+      curr.category === "ln"
+    ) {
+      // Split LN segments at sectionAnalysis measure-level subtype boundaries
+      const prevMsr = sectionAnalysis.measures.find(m => m.startTime <= (prev.startTime + prev.endTime) / 2 && m.endTime > (prev.startTime + prev.endTime) / 2);
+      const currMsr = sectionAnalysis.measures.find(m => m.startTime <= (curr.startTime + curr.endTime) / 2 && m.endTime > (curr.startTime + curr.endTime) / 2);
+      if (prevMsr && currMsr && prevMsr.lnSubtype !== currMsr.lnSubtype) {
+        segments.push(createSegment(segCells, beatmap, sectionAnalysis));
+        segCells = [curr];
+      } else {
+        segCells.push(curr);
+      }
     } else {
       segCells.push(curr);
     }
@@ -827,7 +945,7 @@ function buildSegments(
 
   // Final segment
   if (segCells.length > 0) {
-    segments.push(createSegment(segCells, beatmap));
+    segments.push(createSegment(segCells, beatmap, sectionAnalysis));
   }
 
   return segments;
@@ -836,6 +954,7 @@ function buildSegments(
 function createSegment(
   cells: CellResult[],
   beatmap: ParsedBeatmap,
+  sectionAnalysis?: SectionAnalysis,
 ): SegmentResult {
   const first = cells[0]!, last = cells[cells.length - 1]!;
   const category = first.category;
@@ -887,17 +1006,35 @@ function createSegment(
     }
   }
 
-  // LN segment
+  // LN segment: prefer sectionAnalysis measure-level classification
   let lnSubtype: string | null = null;
   let lnSubtypes: Array<{ key: string; name: string; value: string }> = [];
   if (category === "ln") {
-    const beatLength = 60000 / effectiveBPM;
-    // Aggregate LN metrics across all cells in segment
-    const allNotes = getNotesInRange(beatmap, first.startTime, last.endTime);
-    const metrics = analyzeLNCell(allNotes, beatLength);
-    const lnResult = classifyLNCell(metrics);
-    lnSubtype = lnResult.lnSubtype;
-    lnSubtypes = lnResult.lnSubtypes;
+    if (sectionAnalysis) {
+      // Find overlapping LN measures and pick dominant subtype
+      const subtypeCounts = new Map<string, number>();
+      for (const m of sectionAnalysis.measures) {
+        if (m.category !== "ln" || !m.lnSubtype) continue;
+        // Check if measure overlaps with this segment
+        if (m.endTime > first.startTime && m.startTime < last.endTime) {
+          subtypeCounts.set(m.lnSubtype, (subtypeCounts.get(m.lnSubtype) ?? 0) + 1);
+        }
+      }
+      if (subtypeCounts.size > 0) {
+        const dominant = [...subtypeCounts.entries()].sort((a, b) => b[1] - a[1])[0]!;
+        lnSubtype = dominant[0];
+        lnSubtypes = [{ key: dominant[0].toLowerCase().replace(/\s+/g, ""), name: dominant[0], value: `${dominant[1]}msr` }];
+      }
+    }
+    // Fallback: use cell-level classification
+    if (!lnSubtype) {
+      const beatLength = 60000 / effectiveBPM;
+      const allNotes = getNotesInRange(beatmap, first.startTime, last.endTime);
+      const metrics = analyzeLNCell(allNotes, beatLength);
+      const lnResult = classifyLNCell(metrics);
+      lnSubtype = lnResult.lnSubtype;
+      lnSubtypes = lnResult.lnSubtypes;
+    }
     keyType = lnSubtype ?? "Unknown LN";
   }
 
@@ -1178,7 +1315,7 @@ function decomposeStreamRun(
 /**
  * Run the full cell-based grid analysis on a parsed beatmap.
  */
-export function analyzeGrid(beatmap: ParsedBeatmap, signal?: AbortSignal): GridAnalysisResult | null {
+export function analyzeGrid(beatmap: ParsedBeatmap, signal?: AbortSignal, sectionAnalysis?: SectionAnalysis): GridAnalysisResult | null {
   // Skip grid analysis for extremely long maps (50000+ notes) to avoid performance issues.
   if (beatmap.noteStarts.length > 50000) return null;
 
@@ -1307,6 +1444,7 @@ export function analyzeGrid(beatmap: ParsedBeatmap, signal?: AbortSignal): GridA
   const nonStreamSegments = buildSegments(
     cells.filter((c) => c.category !== "stream"),
     beatmap,
+    sectionAnalysis,
   );
 
   // Convert stream runs to display segments (for structure grid / segment table)
@@ -1587,7 +1725,7 @@ export { getNotesInRange };
  */
 function keyTypeToCategory(keyType: string): CellCategory {
   const JACK_TYPES = new Set(["Minijack", "High Chordjack", "Jacky Tech"]);
-  const LN_TYPES = new Set(["LN Inverse", "LN Unknown", "Ouroboros"]);
+  const LN_TYPES = new Set(["LN Inverse", "LN Unknown", "Ouroboros", "LN Tree", "Timing Hell", "Speedy WC", "Jacky WC"]);
   if (JACK_TYPES.has(keyType)) return "jack";
   if (LN_TYPES.has(keyType)) return "ln";
   return "stream";

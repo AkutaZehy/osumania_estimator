@@ -286,7 +286,7 @@ export function analyzeBeatmap(
   // ---- Step 7: Grid Analysis (new cell-based key type system) ----
   let gridAnalysis;
   try {
-    gridAnalysis = analyzeGrid(beatmap, signal);
+    gridAnalysis = analyzeGrid(beatmap, signal, sectionAnalysis);
   } catch (err) {
     if (err instanceof AnalysisCancelledError) throw err;
     console.error("[GridAnalysis] failed", err);

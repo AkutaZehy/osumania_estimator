@@ -198,10 +198,7 @@ export function showResult(result: DifficultyResult): void {
     } else {
       const poolType = meta.lnRatio >= 0.15 ? dominantLNPool(ln) : null;
       let displayType = poolType ?? mt.keyType;
-      // Append Jacky/Speedy annotation for WC pool
-      if (poolType === "Wildcard" && (ln.wcJackCount > 0 || ln.wcSpeedCount > 0)) {
-        displayType += ln.wcJackCount >= ln.wcSpeedCount ? " (Jacky)" : " (Speedy)";
-      }
+      // Jacky/Speedy annotation moved to ln-ratio display
       setText("star-rating", `${mt.bpm} ${displayType}`);
       const se = el("star-rating"); if (se) se.style.color = color;
     }
@@ -244,7 +241,24 @@ export function showResult(result: DifficultyResult): void {
     setText("bpm", `${Math.round(meta.bpm)}`);
   }
   setText("keys", `${meta.columnCount}K`);
-  setText("ln-ratio", `${(meta.lnRatio * 100).toFixed(0)}%`);
+  const lnRatioPct = meta.lnRatio * 100;
+  let lnRatioText = `${lnRatioPct.toFixed(0)}%`;
+  // Jacky/Speedy WC annotation: show when LN ≥ 1% and WC pool is dominant
+  if (lnRatioPct >= 1) {
+    const sa = result.sectionAnalysis;
+    let jackyCnt = 0, speedyCnt = 0;
+    if (sa) {
+      for (const m of sa.measures) {
+        if (!m.lnMetrics) continue;
+        if (m.lnMetrics.jackyWC >= 20) jackyCnt++;
+        if (m.lnMetrics.speedyWC >= 50) speedyCnt++;
+      }
+    }
+    if (jackyCnt > 0 || speedyCnt > 0) {
+      lnRatioText += jackyCnt >= speedyCnt ? " \u00b7 Jacky" : " \u00b7 Speedy";
+    }
+  }
+  setText("ln-ratio", lnRatioText);
 
   // Key type bars (from grid analysis, replacing Interlude pattern bars)
   if (ga && ga.bpmKeyTypes.length > 0) {
