@@ -4,7 +4,7 @@
 // ============================================================
 
 import type { DifficultyResult } from "../types/result.js";
-import type { DensityMetrics } from "../types/custom.js";
+import type { DensityMetrics, AnchorTier } from "../types/custom.js";
 import type { PatternCluster } from "../types/patterns.js";
 import type { SectionAnalysis, SegmentCategory } from "../custom/sectionAnalysis.js";
 import type { GridAnalysisResult, SegmentResult, CellResult } from "../custom/gridAnalysis.js";
@@ -131,6 +131,15 @@ function median(arr: number[]): number {
   return s.length % 2 ? s[m]! : (s[m - 1]! + s[m]!) / 2;
 }
 
+/** Format an AnchorTier for display: `P100 / P90=v×n / P50=v×n` */
+function anchorCellStr(t: AnchorTier): string {
+  const parts: string[] = [];
+  parts.push(t.p100 > 0 ? t.p100.toFixed(2) : "—");
+  parts.push(t.p90 > 0 && t.p90Count > 0 ? `${t.p90.toFixed(2)}×${t.p90Count}` : "—");
+  parts.push(t.p50 > 0 && t.p50Count > 0 ? `${t.p50.toFixed(2)}×${t.p50Count}` : "—");
+  return parts.join(" / ");
+}
+
 const CAT_COLORS: Record<SegmentCategory, string> = {
   stream: "#1a5276",
   jack: "#922b21",
@@ -224,8 +233,8 @@ export function showResult(result: DifficultyResult): void {
   const gs = meta.gameStar;
   let sunnyText = `Sunny: ${sunnyStar.toFixed(2)}`;
   if (gs != null && gs > 0 && sunnyStar > 0.01) {
-    const diff = sunnyStar - gs;
-    sunnyText += ` (${diff >= 0 ? "+" : ""}${diff.toFixed(2)})`;
+    const diffPct = ((sunnyStar - gs) / gs) * 100;
+    sunnyText += ` (${diffPct >= 0 ? "+" : ""}${diffPct.toFixed(1)}%)`;
   }
   setText("star-value", sunnyText);
 
@@ -325,7 +334,7 @@ export function showResult(result: DifficultyResult): void {
   const jackImbal = j.isBias ? "bias" : `${j.imbalance4r.toFixed(2)}/${j.imbalance16r.toFixed(2)}/${j.imbalanceTotal.toFixed(2)}`;
   const jackItems = [
     mrow("Grade", aggregateGridGrade(ga, "jack") ?? j.densityGrade ?? "None"),
-    ...(j.anchorCount > 0 ? [mrow("Anchors", `${j.anchorCount}`)] : []),
+    mrow("Anchor", anchorCellStr(custom.anchor.sf)),
     mrow("Finger", j.singleFingerPressure.toFixed(2)),
     mrow("Hand", j.singleHandPressure.toFixed(2)),
     mrow("Imbal 4r/16r/T", jackImbal),
@@ -354,6 +363,8 @@ export function showResult(result: DifficultyResult): void {
     mrow("Grade", aggregateGridGrade(ga, "stream") ?? s.densityGrade ?? "Unknown"),
     mrow("Imbal 4r/16r/T", streamImbal),
     mrow("Brk2r", `${s.brokenMax.toFixed(1)}/${s.brokenMed.toFixed(1)}`),
+    mrow("Sta L/R", anchorCellStr(custom.anchor.sh)),
+    mrow("Sta Alt", anchorCellStr(custom.anchor.dh)),
   ];
   r.push(col("STREAM", ...streamItems));
   r.push(`</div>`);
@@ -738,7 +749,23 @@ export function updateGameState(stateName: string): void {
 export function updateInGameBar(progress: number): void {
   // ---- Playhead cursor on section bar ----
   const playhead = document.getElementById("playhead");
-  if (playhead) playhead.style.left = `${progress * 100}%`;
+  if (playhead) {
+    // playhead is absolutely positioned in #section-bar whose padding box
+    // (containing block) includes the 14px side padding, but the measure
+    // blocks and time ticks live inside the content area (no padding).
+    // Compensate so the playhead tracks the content area exactly.
+    const bar = playhead.parentElement;
+    if (bar) {
+      const s = getComputedStyle(bar);
+      const pl = parseFloat(s.paddingLeft);
+      const pr = parseFloat(s.paddingRight);
+      const bw = bar.getBoundingClientRect().width;
+      const cw = bw - pl - pr;
+      playhead.style.left = `${((pl + progress * cw) / bw) * 100}%`;
+    } else {
+      playhead.style.left = `${progress * 100}%`;
+    }
+  }
 
   // ---- Update progress bar width ----
   const igProgress = el("ig-progress");
@@ -811,8 +838,10 @@ function renderSectionAnalysisPatched(
 ): void {
   lastAnalysis = sa;
   lastSectionAnalysis = sa;
-  lastTotalDuration = sa?.totalDuration
-    ?? (ga && ga.cells.length > 0 ? ga.cells[ga.cells.length - 1]!.endTime - ga.cells[0]!.startTime : 0);
+    // Prefer grid duration for consistency with section bar time axis
+  lastTotalDuration = (ga && ga.cells.length > 0
+    ? ga.cells[ga.cells.length - 1]!.endTime - ga.cells[0]!.startTime
+    : sa?.totalDuration) ?? 0;
 
   debugLog("renderSectionAnalysisPatched: sa=%s, grid=%s", sa ? "yes" : "null", ga ? "yes" : "null");
 
@@ -838,12 +867,14 @@ function renderSectionAnalysisPatched(
 // Grid-based Section Bar (timeline from grid cells)
 // ---------------------------------------------------------------------------
 
-const GRID_CAT_COLORS: Record<string, string> = {
-  stream: "#2980b9",
-  jack: "#c0392b",
-  ln: "#8e44ad",
-  tech: "#27ae60",
-  break: "#2c2c2c",
+const GRID_COLORS: Record<string, string> = {
+  "stream":      "#2980b9",   // mid+ stream (blue)
+  "stream-low":  "#5dade2",   // low stream (light blue)
+  "jack":        "#c0392b",   // mid+ jack (red)
+  "jack-low":    "#e74c3c",   // low jack (light red)
+  "ln":          "#27ae60",   // green
+  "tech":        "#8e44ad",   // purple (mixed stream+jack)
+  "break":       "#2c2c2c",
 };
 
 function renderGridSectionBar(cells: CellResult[], bpmRange: { min: number; max: number }): void {
@@ -914,7 +945,7 @@ function renderGridSectionBar(cells: CellResult[], bpmRange: { min: number; max:
   // Second pass: render merged blocks
   let blocksHtml = "";
   for (const winner of winners) {
-    const color = GRID_CAT_COLORS[winner] ?? "#444";
+    const color = GRID_COLORS[winner] ?? "#444";
     blocksHtml += `<div class="measure-block" style="background:${color}"></div>`;
   }
   bar.innerHTML = blocksHtml;
@@ -937,7 +968,7 @@ function renderGridStructure(segments: SegmentResult[]): void {
 
   let html = "";
   for (const seg of nonBreak) {
-    const color = GRID_CAT_COLORS[seg.category] ?? "#666";
+    const color = GRID_COLORS[seg.category] ?? "#666";
     const catName = seg.category.charAt(0).toUpperCase() + seg.category.slice(1);
 
     // Build row note display
@@ -993,7 +1024,7 @@ function renderGridSegmentTable(segments: SegmentResult[]): void {
 
   let html = "";
   for (const seg of nonBreak) {
-    const color = GRID_CAT_COLORS[seg.category] ?? "#666";
+    const color = GRID_COLORS[seg.category] ?? "#666";
     const startSec = seg.startTime / 1000;
     const endSec = seg.endTime / 1000;
 

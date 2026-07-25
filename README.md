@@ -1,4 +1,4 @@
-# osumania-estimator v3.0.0
+# osumania-estimator v3.1.0
 
 A tosu overlay plugin for osu!mania 4K key pattern analysis, difficulty estimation, and LN pool type classification.
 
@@ -176,6 +176,35 @@ Shown when LN ratio > 1% or patterns detected.
 
 ## Technical Notes
 
+### Architecture (v3.1.0 — Strict LN Subtype Classification)
+
+The analysis pipeline classifies LN measures into subtypes with a strict priority chain:
+
+```
+Ouroboros → LN Inverse → LN Tree → Timing Hell → Density → Speedy WC → Jacky WC → Unknown
+```
+
+**LN Subtype Definitions:**
+
+| Subtype | Detection | Threshold |
+|---------|-----------|-----------|
+| **Ouroboros** | Strict path-removal: longest T→H chain removed, remaining LNs still span 4 columns | ≥30% |
+| **LN Inverse** | Cross-column T→H alternation with same-column gap consistency, no RC interference | ≥20% |
+| **LN Tree** | ≥75% of LNs connected in T→H graph (no orphans) | binary |
+| **Timing Hell** | Overlay ≥30% AND AR ≥20% | dual |
+| **Density** | Tap LN ratio > beatLength/4 | ≥40% |
+| **Speedy WC** | Directional row movement at ≥8th-note density (≥2 rows/beat) | ≥50% |
+| **Jacky WC** | Same-column repeats between rows | ≥20% |
+
+**Key changes from v3.0.0:**
+- Ouroboros uses strict definition (path removal resilience) instead of simple T→H pair counting
+- LN Inverse uses genuine alternation detection (gap-consistent T→H pairs) instead of column body counting
+- New **LN Tree** subtype: all LNs participate in T→H edges but structure lacks ouroboros redundancy
+- Speedy WC now requires ≥8th-note density (≥2 rows/beat) — half-BPM jack patterns excluded
+- Jacky/Speedy annotation moved to LN ratio display (e.g. "LN 66% · Jacky")
+- RC notes excluded from Inverse T→H alignment checks
+- Tap LNs (≤ beatLength/8) excluded from Inverse detection
+
 ### Architecture (v3.0.0 — LN Pool Classification)
 
 The analysis pipeline has three parallel detection paths for LN patterns:
@@ -262,6 +291,16 @@ npm test                         # Vitest suite
 Output: `deploy/osumania-estimator by Akuta Zehy/`
 
 Test maps are in `maps/` (4K LN Dan Courses — 16 maps, Stage 1-4 × 5th-8th). Test scripts in `scripts/` and test suites in `test/`.
+
+### v3.1.0 Changes
+
+- **Strict Ouroboros**: Path-removal resilience check replaces simple T→H pair counting. A measure is Ouroboros only when removing the longest T→H chain still leaves a 4-column-spanning structure.
+- **LN Subtype Priority**: Ouroboros → LN Inverse → LN Tree → Timing Hell → Density → Speedy WC → Jacky WC.
+- **LN Tree (new subtype)**: Measures where ≥75% of LNs participate in T→H edges but don't meet strict Ouroboros criteria. Captures well-structured but non-redundant LN chains.
+- **LN Inverse Rewrite**: Now detects genuine H-T-H-T alternation with gap consistency, instead of simple column body counting. Excludes RC-interrupted transitions and tap LNs.
+- **Speedy WC Density Gate**: Requires ≥2 rows per beat (≥8th-note density). Half-BPM jack-like alternating patterns no longer trigger Speedy WC.
+- **Jacky/Speedy Annotation**: Moved from title to LN ratio display. Uses raw jackyWC/speedyWC values, independent of LN subtype classification.
+- **RC Filtering**: Inverse detection excludes T→H alignments where RC notes sit between tail and head.
 
 ### v3.0.0 Changes
 
