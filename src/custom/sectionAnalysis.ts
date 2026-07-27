@@ -7,6 +7,7 @@
 // ============================================================
 
 import type { ParsedBeatmap } from "../types/beatmap.js";
+import { getNotesInRange } from "../utils/beatmapUtils.js";
 import type { SunnyResult } from "../types/algorithm.js";
 import type { PatternSummary } from "../types/patterns.js";
 
@@ -159,27 +160,6 @@ function getBeatLength(beatmap: ParsedBeatmap): number {
  * Get notes in a time range.
  * Returns start times, columns, and LN flags for all notes in [startTime, endTime).
  */
-function getNotesInRange(
-  beatmap: ParsedBeatmap,
-  startTime: number,
-  endTime: number,
-): Array<{ col: number; start: number; end: number; isLN: boolean }> {
-  const notes: Array<{ col: number; start: number; end: number; isLN: boolean }> = [];
-  for (let i = 0; i < beatmap.noteStarts.length; i++) {
-    const noteTime = beatmap.noteStarts[i]!;
-    if (noteTime >= startTime && noteTime < endTime) {
-      const isLN = (beatmap.noteTypes[i]! & 128) !== 0;
-      notes.push({
-        col: beatmap.columns[i]!,
-        start: noteTime,
-        end: isLN ? beatmap.noteEnds[i]! : noteTime,
-        isLN,
-      });
-    }
-  }
-  return notes;
-}
-
 /**
  * Compute per-beat note count structure for a measure.
  * Groups notes by beat boundary and returns an array of note counts per beat.

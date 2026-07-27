@@ -48,6 +48,17 @@ export interface HitNote {
 /** LN detection: note type & 128 !== 0 */
 export const NOTE_TYPE_LN = 128;
 
+/**
+ * A single note with pre-resolved fields.
+ * Pre-built during parse to avoid repeated lookups across parallel arrays.
+ */
+export interface BeatmapNote {
+  col: number;
+  start: number;
+  end: number;
+  isLN: boolean;
+}
+
 /** Full parsed beatmap result from OsuFileParser */
 export interface ParsedBeatmap {
   columnCount: number;   // number of keys (4 for 4K)
@@ -64,4 +75,6 @@ export interface ParsedBeatmap {
   firstNote: number;     // ms
   lastNote: number;      // ms
   duration: number;      // ms (lastNote - firstNote)
+  /** Pre-built note list (sorted by start time) */
+  notes: BeatmapNote[];
 }

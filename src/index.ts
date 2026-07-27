@@ -6,7 +6,7 @@
 import { WebSocketManager } from "./tosu/websocket.js";
 import TosuSocketManager from "./tosu/socket.js";
 import { analyzeBeatmap } from "./integration/analyzer.js";
-import { showLoading, showResult, showError, showWaiting, showCountdown, updateGameState, updateInGameBar, onSettingsUpdate } from "./ui/display.js";
+import { showLoading, showResult, showError, showWaiting, updateGameState, updateInGameBar, onSettingsUpdate } from "./ui/display.js";
 import type { TosuStateMessage } from "./types/tosu.js";
 
 // ---- Config ----
@@ -155,18 +155,19 @@ async function onBeatmapChange(msg: TosuStateMessage): Promise<void> {
         if (t && !t.startsWith("//")) noteCount++;
       }
     }
-    // Show countdown for heavy maps (>5000 notes): N/1000 seconds
-    // Extra 5s delay for user to read the warning
-    const baseSec = Math.ceil(noteCount / 1000);
-    const countdownSec = baseSec + 5;
-    if (baseSec > 5) {
-      for (let s = countdownSec; s > 0; s--) {
-        if (myId !== analysisId) return;
-        showCountdown(`${s}s remaining (switch map to cancel)`);
-        await new Promise(r => setTimeout(r, 1000));
-      }
-      if (myId !== analysisId) return;
-    }
+    // [LOCK] Countdown for heavy maps (>5000 notes).
+    // Disabled after O(n log n) indexing optimization — analysis is fast enough.
+    // Keep code for future reference / safety re-enable.
+    // const baseSec = Math.ceil(noteCount / 1000);
+    // const countdownSec = baseSec + 5;
+    // if (baseSec > 5) {
+    //   for (let s = countdownSec; s > 0; s--) {
+    //     if (myId !== analysisId) return;
+    //     showCountdown(`${s}s remaining (switch map to cancel)`);
+    //     await new Promise(r => setTimeout(r, 1000));
+    //   }
+    //   if (myId !== analysisId) return;
+    // }
 
     const result = analyzeBeatmap(osuText, {
       speedRate: modData.speedRate,

@@ -11,6 +11,7 @@
 // ============================================================
 
 import type { ParsedBeatmap, TimingPoint } from "../types/beatmap.js";
+import { getNotesInRange } from "../utils/beatmapUtils.js";
 import { analyzeVibro } from "./vibroAnalysis.js";
 
 // ---------------------------------------------------------------------------
@@ -42,6 +43,10 @@ export interface CellResult {
   lnRatio: number;
   /** Per-beat note counts within this cell (4 beats per cell) */
   beatNotes: number[];
+  /** Pre-cached notes within this cell (set during Phase 1) */
+  _notes: NoteInfo[];
+  /** Notes grouped by quarter-beat row (4 rows, set during Phase 1) */
+  _rowNotes: NoteInfo[][];
 }
 
 export interface SegmentResult {
@@ -137,26 +142,6 @@ function getActiveBPM(beatmap: ParsedBeatmap, time: number): number {
 /** Beat length from the active timing point at `time`. */
 function getActiveBeatLength(beatmap: ParsedBeatmap, time: number): number {
   return 60000 / getActiveBPM(beatmap, time);
-}
-
-function getNotesInRange(
-  beatmap: ParsedBeatmap,
-  startTime: number,
-  endTime: number,
-): NoteInfo[] {
-  const notes: NoteInfo[] = [];
-  for (let i = 0; i < beatmap.noteStarts.length; i++) {
-    const t = beatmap.noteStarts[i]!;
-    if (t >= startTime && t < endTime) {
-      notes.push({
-        col: beatmap.columns[i]!,
-        start: t,
-        end: (beatmap.noteTypes[i]! & 128) !== 0 ? beatmap.noteEnds[i]! : t,
-        isLN: (beatmap.noteTypes[i]! & 128) !== 0,
-      });
-    }
-  }
-  return notes;
 }
 
 function median(arr: number[]): number {
@@ -365,7 +350,11 @@ function detectCrossCellJacks(
     const endIdx = Math.min(i + 3, cells.length);
     if (endIdx - i < 2) continue;
 
-    const allNotes = getNotesInRange(beatmap, cell.startTime, cells[endIdx - 1]!.endTime);
+    // Concatenate pre-cached notes from the window cells (avoids getNotesInRange calls)
+    let allNotes: NoteInfo[] = [];
+    for (let w = i; w < endIdx; w++) {
+      allNotes = allNotes.concat(cells[w]!._notes);
+    }
     const rice = allNotes.filter((n) => !n.isLN);
     if (rice.length < 2) continue;
 
@@ -634,7 +623,7 @@ function buildGrid(
   segmentCells: CellResult[],
   effectiveBPM: number,
   _subdivision: number,
-  beatmap: ParsedBeatmap,
+  _beatmap: ParsedBeatmap,
 ): {
   gridNotes: number;
   maxBeat: number;
@@ -643,16 +632,15 @@ function buildGrid(
 } {
   const jackInterval = 60000 / (effectiveBPM || 120) / 4;
 
-  // Collect all notes across the segment
+  // Collect all notes across the segment from pre-cached cell._notes
   const allNotes: Array<{ time: number; col: number }> = [];
   for (const cell of segmentCells) {
-    const notes = getNotesInRange(beatmap, cell.startTime, cell.endTime);
-    for (const n of notes) allNotes.push({ time: n.start, col: n.col });
+    for (const n of cell._notes) allNotes.push({ time: n.start, col: n.col });
   }
 
   // Fallback: too few notes → use per-cell row method
   if (allNotes.length < 2) {
-    return fallbackGrid(segmentCells, jackInterval, beatmap);
+    return fallbackGrid(segmentCells, jackInterval);
   }
 
   // Note-clustering: group by jack interval around first note
@@ -673,7 +661,7 @@ function buildGrid(
 
   // Not enough jack positions → fallback
   if (maxSlot - minSlot < 3) {
-    return fallbackGrid(segmentCells, jackInterval, beatmap);
+    return fallbackGrid(segmentCells, jackInterval);
   }
 
   // Slide 4-cluster window for max total
@@ -702,17 +690,16 @@ function buildGrid(
 function fallbackGrid(
   cells: CellResult[],
   rowDuration: number,
-  beatmap: ParsedBeatmap,
 ): { gridNotes: number; maxBeat: number; avgPerRow: number; rowNotes: number[] } {
   let bestTotal = 0;
   let bestRowNotes: number[] = [0, 0, 0, 0];
   let bestMaxBeat = 1;
   for (const cell of cells) {
-    const rowNotes: number[] = [];
-    for (let row = 0; row < 4; row++) {
-      const rowStart = cell.startTime + row * rowDuration;
-      const rowEnd = rowStart + rowDuration;
-      rowNotes.push(getNotesInRange(beatmap, rowStart, rowEnd).length);
+    const rowNotes: number[] = [0, 0, 0, 0];
+    for (const n of cell._notes) {
+      const relTime = n.start - cell.startTime;
+      const r = Math.min(3, Math.max(0, Math.floor(relTime / rowDuration)));
+      rowNotes[r]++;
     }
     const total = rowNotes.reduce((a, b) => a + b, 0);
     if (total > bestTotal) { bestTotal = total; bestRowNotes = rowNotes; bestMaxBeat = Math.max(...rowNotes, 1); }
@@ -770,7 +757,7 @@ function buildSegments(
 function computeSegmentDensity(
   cells: CellResult[],
   effectiveBPM: number,
-  beatmap: ParsedBeatmap,
+  _beatmap: ParsedBeatmap,
 ): number {
   if (cells.length === 0) return 0;
   const subdiv = cells[0]!.subdivision ?? 4;
@@ -779,8 +766,7 @@ function computeSegmentDensity(
 
   const allNotes: Array<{ time: number; col: number }> = [];
   for (const cell of cells) {
-    const notes = getNotesInRange(beatmap, cell.startTime, cell.endTime);
-    for (const n of notes) allNotes.push({ time: n.start, col: n.col });
+    for (const n of cell._notes) allNotes.push({ time: n.start, col: n.col });
   }
   if (allNotes.length < 2) return 0;
 
@@ -864,8 +850,9 @@ function createSegment(
   let lnSubtypes: Array<{ key: string; name: string; value: string }> = [];
   if (category === "ln") {
     const beatLength = 60000 / effectiveBPM;
-    // Aggregate LN metrics across all cells in segment
-    const allNotes = getNotesInRange(beatmap, first.startTime, last.endTime);
+    // Aggregate LN metrics across all cells in segment (concat pre-cached notes)
+    let allNotes: NoteInfo[] = [];
+    for (const cell of cells) allNotes = allNotes.concat(cell._notes);
     const metrics = analyzeLNCell(allNotes, beatLength);
     const lnResult = classifyLNCell(metrics);
     lnSubtype = lnResult.lnSubtype;
@@ -975,21 +962,22 @@ interface StreamRun {
  */
 function analyzeStreamRuns(
   cells: CellResult[],
-  beatmap: ParsedBeatmap,
+  _beatmap: ParsedBeatmap,
 ): StreamRun[] {
   const runs: StreamRun[] = [];
   let i = 0;
   while (i < cells.length) {
     if (cells[i]!.category !== "stream") { i++; continue; }
 
-    // Sliding-window helper
+    // Sliding-window helper: compute per-row note counts from pre-cached cell._notes
     const cellGrid = (cell: CellResult): { notes: number; maxBeat: number } => {
       const bpm = cell.effectiveBPM > 0 ? cell.effectiveBPM : 120;
-      const bl = 60000 / bpm, rd = bl / 4;
+      const rd = 60000 / bpm / 4;
       const rn = [0, 0, 0, 0];
-      for (let r = 0; r < 4; r++) {
-        const rs = cell.startTime + r * rd;
-        rn[r] = getNotesInRange(beatmap, rs, rs + rd).length;
+      for (const n of cell._notes) {
+        const relTime = n.start - cell.startTime;
+        const r = Math.min(3, Math.max(0, Math.floor(relTime / rd)));
+        rn[r]++;
       }
       return { notes: rn.reduce((a, b) => a + b, 0), maxBeat: Math.max(...rn, 1) };
     };
@@ -1158,8 +1146,9 @@ function decomposeStreamRun(
  * Run the full cell-based grid analysis on a parsed beatmap.
  */
 export function analyzeGrid(beatmap: ParsedBeatmap, signal?: AbortSignal): GridAnalysisResult | null {
-  // Skip grid analysis for extremely long maps (50000+ notes) to avoid performance issues.
-  if (beatmap.noteStarts.length > 50000) return null;
+  // Safety: skip grid analysis for extremely long maps (100000+ notes)
+  // to prevent pathological cases from causing issues.
+  if (beatmap.noteStarts.length > 100000) return null;
 
   // Grid layout uses the FIRST timing point's beat length.
   // Each cell then uses its own active timing point for BPM/beatLength.
@@ -1178,7 +1167,7 @@ export function analyzeGrid(beatmap: ParsedBeatmap, signal?: AbortSignal): GridA
   // so totalBeats directly covers the full note range.
   const totalBeats = Math.max(1, Math.ceil(duration / firstBeatLength));
 
-  // Phase 1: Classify each beat cell
+  // Phase 1: Classify each beat cell + pre-cache notes by cell & row
   const cells: CellResult[] = [];
 
   // Global grace counter: track how many cells have possible 1/6, 1/8, 1/12 intervals
@@ -1201,12 +1190,22 @@ export function analyzeGrid(beatmap: ParsedBeatmap, signal?: AbortSignal): GridA
     const lnNotes = notes.filter((n) => n.isLN).length;
     const lnRatio = noteCount > 0 ? lnNotes / noteCount : 0;
 
+    // Pre-group notes by quarter-beat row for zero-cost access by later phases
+    const rowDuration = 60000 / (cellRawBPM || 120) / 4;
+    const rowNotes: NoteInfo[][] = [[], [], [], []];
+    for (const n of notes) {
+      const relTime = n.start - cellStart;
+      const rowIdx = Math.min(3, Math.max(0, Math.floor(relTime / rowDuration)));
+      rowNotes[rowIdx]!.push(n);
+    }
+
     // Break: no notes or very sparse
     if (noteCount === 0) {
       cells.push({
         beatIndex: beat, startTime: cellStart, endTime: cellEnd,
         category: "break", subdivision: null, effectiveBPM: 0,
         noteCount: 0, lnRatio: 0, beatNotes: [0, 0, 0, 0],
+        _notes: notes, _rowNotes: rowNotes,
       });
       continue;
     }
@@ -1217,6 +1216,7 @@ export function analyzeGrid(beatmap: ParsedBeatmap, signal?: AbortSignal): GridA
         beatIndex: beat, startTime: cellStart, endTime: cellEnd,
         category: "ln", subdivision: null, effectiveBPM: cellRawBPM,
         noteCount, lnRatio, beatNotes: [0, 0, 0, 0],
+        _notes: notes, _rowNotes: rowNotes,
       });
       continue;
     }
@@ -1244,6 +1244,7 @@ export function analyzeGrid(beatmap: ParsedBeatmap, signal?: AbortSignal): GridA
       effectiveBPM: Math.round(effectiveBPM),
       noteCount, lnRatio,
       beatNotes: structure,
+      _notes: notes, _rowNotes: rowNotes,
     });
   }
 
@@ -1257,7 +1258,7 @@ export function analyzeGrid(beatmap: ParsedBeatmap, signal?: AbortSignal): GridA
         if (cell.category === "break" || cell.category === "ln") continue;
         if (cell.subdivision !== null) continue;
 
-        const notes = getNotesInRange(beatmap, cell.startTime, cell.endTime);
+        const notes = cell._notes;
         const cellBeatLength = getActiveBeatLength(beatmap, cell.startTime);
         const cellRawBPM = getActiveBPM(beatmap, cell.startTime);
 
@@ -1487,18 +1488,19 @@ export function analyzeGrid(beatmap: ParsedBeatmap, signal?: AbortSignal): GridA
   // 4 cells = 16 rows → 15 adjacent row pairs (including cross-cell boundaries).
   // For each row pair: jack = same column active in both rows.
   let gridSwitch = 0;
-  // Collect all rows' active columns across all stream cells
+  // Collect all rows' active columns from pre-cached cell._notes
   const allRowCols: Set<number>[] = [];
   for (const cell of cells) {
     if (cell.category === "break" || cell.category === "ln") continue;
     const bpm = cell.effectiveBPM > 0 ? cell.effectiveBPM : 120;
     const rowDur = 60000 / bpm / 4;
-    for (let r = 0; r < 4; r++) {
-      const rs = cell.startTime + r * rowDur;
-      const cols = new Set<number>();
-      for (const n of getNotesInRange(beatmap, rs, rs + rowDur)) cols.add(n.col);
-      allRowCols.push(cols);
+    const rowCols: Set<number>[] = [new Set(), new Set(), new Set(), new Set()];
+    for (const n of cell._notes) {
+      const relTime = n.start - cell.startTime;
+      const r = Math.min(3, Math.max(0, Math.floor(relTime / rowDur)));
+      rowCols[r]!.add(n.col);
     }
+    for (const cols of rowCols) allRowCols.push(cols);
   }
   // Build pair types (jack/stream) for ALL consecutive row pairs
   const pairTypes: ("jack" | "stream")[] = [];
@@ -1531,7 +1533,6 @@ export function analyzeGrid(beatmap: ParsedBeatmap, signal?: AbortSignal): GridA
 
 // Re-export colors for display
 export { LN_TYPE_COLORS };
-export { getNotesInRange };
 
 /**
  * Map a key type string to its parent cell category.

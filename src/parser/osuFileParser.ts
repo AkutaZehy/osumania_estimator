@@ -105,12 +105,29 @@ export class OsuFileParser {
 
         const gameMode = this.gameMode != null ? Number.parseInt(this.gameMode, 10) : 0;
 
+        // Pre-build sorted note list for O(log n) range queries.
+        // noteStarts is already sorted (from .osu file order), but we sort
+        // explicitly to guarantee correctness.
+        const sortedIndices = Array.from({ length: this.noteStarts.length }, (_, i) => i)
+            .sort((a, b) => this.noteStarts[a]! - this.noteStarts[b]!);
+        const notes: import("../types/beatmap.js").BeatmapNote[] = sortedIndices.map((i) => {
+            const start = this.noteStarts[i]!;
+            const isLN = (this.noteTypes[i]! & 128) !== 0;
+            return {
+                col: this.columns[i]!,
+                start,
+                end: isLN ? this.noteEnds[i]! : start,
+                isLN,
+            };
+        });
+
         return {
             columnCount: this.columnCount,
             columns: this.columns,
             noteStarts: this.noteStarts,
             noteEnds: this.noteEnds,
             noteTypes: this.noteTypes,
+            notes,
             od: this.od,
             metadata,
             timingPoints,
