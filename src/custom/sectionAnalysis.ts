@@ -18,9 +18,11 @@ import type { PatternSummary } from "../types/patterns.js";
 /** LN subtypes with thresholds */
 export const LN_SUBTYPES = {
   reverse: { name: "LN Reverse", threshold: { inverse: 20 } },
-  releasehell: { name: "Release Hell", threshold: { overlay: 30, ar: 20 } },
+  releasehell: { name: "Timing Hell", threshold: { overlay: 30, ar: 20 } },
   density: { name: "Density", threshold: { tapLN: 40 } },
   ouroboros: { name: "Ouroboros", threshold: { ouroboros: 30 } },
+  speedywc: { name: "Speedy WC", threshold: { speedyWC: 10 } },
+  jackywc: { name: "Jacky WC", threshold: { jackyWC: 10 } },
   unknown: { name: "Unknown", threshold: {} },
 } as const;
 
@@ -52,6 +54,8 @@ export interface SegmentLNMetrics {
   ar: number;
   tapLN: number;
   ouroboros: number;
+  speedyWC: number;
+  jackyWC: number;
 }
 
 /** Tech direction data */
@@ -356,9 +360,8 @@ function analyzeLNMetrics(
   beatLength: number,
 ): SegmentLNMetrics {
   const lns = notes.filter((n) => n.isLN);
-  if (lns.length === 0) {
-    return { inverse: 0, overlay: 0, ar: 0, tapLN: 0, ouroboros: 0 };
-  }
+  const ZERO = { inverse: 0, overlay: 0, ar: 0, tapLN: 0, ouroboros: 0, speedyWC: 0, jackyWC: 0 };
+  if (lns.length === 0) return ZERO;
 
   // Tap LN: duration <= beatLength/4
   const maxTapLN = beatLength / 4;
@@ -413,7 +416,29 @@ function analyzeLNMetrics(
   }
   const ouroboros = lns.length > 0 ? (ouroborosCount / lns.length) * 100 : 0;
 
-  return { inverse, overlay, ar, tapLN, ouroboros };
+  // Speedy WC / Jacky WC: directional/same-column row analysis on all notes
+  const allByTime = new Map<number, number[]>();
+  for (const n of notes) {
+    let key = n.start;
+    for (const k of allByTime.keys()) { if (Math.abs(k - n.start) <= 5) { key = k; break; } }
+    const cols = allByTime.get(key) ?? [];
+    if (!cols.includes(n.col)) cols.push(n.col);
+    allByTime.set(key, cols);
+  }
+  const sortedRows = [...allByTime.entries()].sort((a, b) => a[0] - b[0]);
+  let speedy = 0, jacky = 0;
+  for (let i = 1; i < sortedRows.length; i++) {
+    const prev = sortedRows[i - 1]![1], curr = sortedRows[i]![1];
+    if (curr.some(c => prev.includes(c))) jacky++;
+    const pMin = Math.min(...prev), pMax = Math.max(...prev);
+    const cMin = Math.min(...curr), cMax = Math.max(...curr);
+    if (cMax < pMin || cMin > pMax) speedy++;
+  }
+  const rowCount = Math.max(1, sortedRows.length - 1);
+  const speedyWC = (speedy / rowCount) * 100;
+  const jackyWC = (jacky / rowCount) * 100;
+
+  return { inverse, overlay, ar, tapLN, ouroboros, speedyWC, jackyWC };
 }
 
 /**
@@ -434,6 +459,12 @@ function determineLNSubtype(metrics: SegmentLNMetrics): string {
   }
   if (metrics.ouroboros >= LN_SUBTYPES.ouroboros.threshold.ouroboros!) {
     return LN_SUBTYPES.ouroboros.name;
+  }
+  if (metrics.speedyWC >= LN_SUBTYPES.speedywc.threshold.speedyWC!) {
+    return LN_SUBTYPES.speedywc.name;
+  }
+  if (metrics.jackyWC >= LN_SUBTYPES.jackywc.threshold.jackyWC!) {
+    return LN_SUBTYPES.jackywc.name;
   }
   return LN_SUBTYPES.unknown.name;
 }
@@ -474,6 +505,20 @@ function determineTriggeredLNTypes(
       key: "ouroboros",
       name: LN_SUBTYPES.ouroboros.name,
       value: `${Math.round(metrics.ouroboros)}%`,
+    });
+  }
+  if (metrics.speedyWC >= LN_SUBTYPES.speedywc.threshold.speedyWC!) {
+    triggered.push({
+      key: "speedywc",
+      name: LN_SUBTYPES.speedywc.name,
+      value: `Sp${Math.round(metrics.speedyWC)}%`,
+    });
+  }
+  if (metrics.jackyWC >= LN_SUBTYPES.jackywc.threshold.jackyWC!) {
+    triggered.push({
+      key: "jackywc",
+      name: LN_SUBTYPES.jackywc.name,
+      value: `Jk${Math.round(metrics.jackyWC)}%`,
     });
   }
   return triggered;
@@ -669,7 +714,7 @@ function resolvePatternStr(
 
   if (category === "ln") {
     // Compute average LN metrics across segment
-    const avgMetrics: SegmentLNMetrics = { inverse: 0, overlay: 0, ar: 0, tapLN: 0, ouroboros: 0 };
+    const avgMetrics: SegmentLNMetrics = { inverse: 0, overlay: 0, ar: 0, tapLN: 0, ouroboros: 0, speedyWC: 0, jackyWC: 0 };
     let metricCount = 0;
     for (const mm of measures) {
       if (mm.lnMetrics) {
@@ -678,6 +723,8 @@ function resolvePatternStr(
         avgMetrics.ar += mm.lnMetrics.ar;
         avgMetrics.tapLN += mm.lnMetrics.tapLN;
         avgMetrics.ouroboros += mm.lnMetrics.ouroboros;
+        avgMetrics.speedyWC += mm.lnMetrics.speedyWC;
+        avgMetrics.jackyWC += mm.lnMetrics.jackyWC;
         metricCount++;
       }
     }
@@ -687,6 +734,8 @@ function resolvePatternStr(
       avgMetrics.ar = Math.round(avgMetrics.ar / metricCount);
       avgMetrics.tapLN = Math.round(avgMetrics.tapLN / metricCount);
       avgMetrics.ouroboros = Math.round(avgMetrics.ouroboros / metricCount);
+      avgMetrics.speedyWC = Math.round(avgMetrics.speedyWC / metricCount);
+      avgMetrics.jackyWC = Math.round(avgMetrics.jackyWC / metricCount);
     }
 
     const triggered = determineTriggeredLNTypes(avgMetrics);
@@ -825,25 +874,29 @@ export function analyzeSections(
       // LN triggered types (for segment)
       let triggeredLNTypes: Array<{ key: string; name: string; value: string }> = [];
       if (m0.category === "ln") {
-        const avgMetrics: SegmentLNMetrics = { inverse: 0, overlay: 0, ar: 0, tapLN: 0, ouroboros: 0 };
-        let metricCount = 0;
-        for (const mm of chunk) {
-          if (mm.lnMetrics) {
-            avgMetrics.inverse += mm.lnMetrics.inverse;
-            avgMetrics.overlay += mm.lnMetrics.overlay;
-            avgMetrics.ar += mm.lnMetrics.ar;
-            avgMetrics.tapLN += mm.lnMetrics.tapLN;
-            avgMetrics.ouroboros += mm.lnMetrics.ouroboros;
-            metricCount++;
-          }
+      const avgMetrics: SegmentLNMetrics = { inverse: 0, overlay: 0, ar: 0, tapLN: 0, ouroboros: 0, speedyWC: 0, jackyWC: 0 };
+      let metricCount = 0;
+      for (const mm of chunk) {
+        if (mm.lnMetrics) {
+          avgMetrics.inverse += mm.lnMetrics.inverse;
+          avgMetrics.overlay += mm.lnMetrics.overlay;
+          avgMetrics.ar += mm.lnMetrics.ar;
+          avgMetrics.tapLN += mm.lnMetrics.tapLN;
+          avgMetrics.ouroboros += mm.lnMetrics.ouroboros;
+          avgMetrics.speedyWC += mm.lnMetrics.speedyWC;
+          avgMetrics.jackyWC += mm.lnMetrics.jackyWC;
+          metricCount++;
         }
-        if (metricCount > 0) {
-          avgMetrics.inverse = Math.round(avgMetrics.inverse / metricCount);
-          avgMetrics.overlay = Math.round(avgMetrics.overlay / metricCount);
-          avgMetrics.ar = Math.round(avgMetrics.ar / metricCount);
-          avgMetrics.tapLN = Math.round(avgMetrics.tapLN / metricCount);
-          avgMetrics.ouroboros = Math.round(avgMetrics.ouroboros / metricCount);
-        }
+      }
+      if (metricCount > 0) {
+        avgMetrics.inverse = Math.round(avgMetrics.inverse / metricCount);
+        avgMetrics.overlay = Math.round(avgMetrics.overlay / metricCount);
+        avgMetrics.ar = Math.round(avgMetrics.ar / metricCount);
+        avgMetrics.tapLN = Math.round(avgMetrics.tapLN / metricCount);
+        avgMetrics.ouroboros = Math.round(avgMetrics.ouroboros / metricCount);
+        avgMetrics.speedyWC = Math.round(avgMetrics.speedyWC / metricCount);
+        avgMetrics.jackyWC = Math.round(avgMetrics.jackyWC / metricCount);
+      }
         triggeredLNTypes = determineTriggeredLNTypes(avgMetrics);
       }
 

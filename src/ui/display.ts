@@ -4,7 +4,7 @@
 // ============================================================
 
 import type { DifficultyResult } from "../types/result.js";
-import type { DensityMetrics, AnchorTier } from "../types/custom.js";
+import type { DensityMetrics, AnchorTier, LNMetrics } from "../types/custom.js";
 import type { PatternCluster } from "../types/patterns.js";
 import type { SectionAnalysis, SegmentCategory } from "../custom/sectionAnalysis.js";
 import type { GridAnalysisResult, SegmentResult, CellResult } from "../custom/gridAnalysis.js";
@@ -60,6 +60,20 @@ function abbrevKeyType(kt: string): string {
     .replace(/Chordjack/g, "CJ")
     .replace(/Jumpstream/g, "JS")
     .replace(/Handstream/g, "HS");
+}
+
+/** Determine dominant LN pool (CO/DE/WC/TE) from pool scores, returns full name or null */
+function dominantLNPool(ln: LNMetrics): string | null {
+  const FULL_NAMES: Record<string, string> = { CO: "Coordination", DE: "Density", WC: "Wildcard", TE: "Technical" };
+  const pools: Array<[string, number]> = [
+    ["CO", ln.coordinationPoolScore],
+    ["DE", ln.densityPoolScore],
+    ["WC", ln.wildcardPoolScore],
+    ["TE", ln.technicalPoolScore],
+  ];
+  if (pools.every(([, s]) => s <= 0)) return null;
+  const maxPool = pools.reduce((a, b) => a[1] > b[1] ? a : b);
+  return maxPool[1] > 0 ? FULL_NAMES[maxPool[0]!] ?? maxPool[0]! : null;
 }
 
 /** Aggregate grid analysis segment grades into a single grade string */
@@ -224,7 +238,9 @@ export function showResult(result: DifficultyResult): void {
       setText("star-rating", "Vibro");
       const se = el("star-rating"); if (se) se.style.color = "#ff4444";
     } else {
-      setText("star-rating", `${mt.bpm} ${mt.keyType}`);
+      const poolType = meta.lnRatio >= 0.15 ? dominantLNPool(ln) : null;
+      const displayType = poolType ?? mt.keyType;
+      setText("star-rating", `${mt.bpm} ${displayType}`);
       const se = el("star-rating"); if (se) se.style.color = color;
     }
   } else {
@@ -260,7 +276,23 @@ export function showResult(result: DifficultyResult): void {
     setText("bpm", `${Math.round(meta.bpm)}`);
   }
   setText("keys", `${meta.columnCount}K`);
-  setText("ln-ratio", `${(meta.lnRatio * 100).toFixed(0)}%`);
+  const lnRatioPct = meta.lnRatio * 100;
+  let lnRatioText = `${lnRatioPct.toFixed(0)}%`;
+  if (lnRatioPct >= 1) {
+    const sa = result.sectionAnalysis;
+    let jackyCnt = 0, speedyCnt = 0;
+    if (sa) {
+      for (const m of sa.measures) {
+        if (!m.lnMetrics) continue;
+        if (m.lnMetrics.jackyWC >= 10) jackyCnt++;
+        if (m.lnMetrics.speedyWC >= 10) speedyCnt++;
+      }
+    }
+    if (jackyCnt > 0 || speedyCnt > 0) {
+      lnRatioText += jackyCnt >= speedyCnt ? " \u00b7 Jacky" : " \u00b7 Speedy";
+    }
+  }
+  setText("ln-ratio", lnRatioText);
 
   // Key type bars (from grid analysis, replacing Interlude pattern bars)
   if (ga && ga.bpmKeyTypes.length > 0) {
@@ -316,6 +348,10 @@ export function showResult(result: DifficultyResult): void {
     if (ln.columnLockCount > 0) lnItems.push(mrow("ColLock", `${ln.columnLockCount}`));
     if (ln.asyncReleaseCount > 0 || ln.releaseCount > 0) lnItems.push(mrow("A/R", `${ln.asyncReleaseCount}/${ln.releaseCount}`));
     if (ln.inverseCount > 0) lnItems.push(mrow("Inverse", `${ln.inverseCount}`));
+    if (ln.coordinationPoolScore > 0 || ln.densityPoolScore > 0 || ln.wildcardPoolScore > 0 || ln.technicalPoolScore > 0) {
+      const poolStr = `CO ${ln.coordinationPoolScore.toFixed(1)} \u00b7 DE ${ln.densityPoolScore.toFixed(1)} \u00b7 WC ${ln.wildcardPoolScore.toFixed(1)} \u00b7 TE ${ln.technicalPoolScore.toFixed(1)}`;
+      lnItems.push(mrow("P-Score", poolStr));
+    }
     r.push(col("LONG NOTE", ...lnItems));
   }
   r.push(`</div>`);

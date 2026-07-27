@@ -57,5 +57,5 @@ export interface PatternSummary {
   /** Clusters filtered by importance >= 50% of top cluster */
   importantClusters: PatternCluster[];
   /** Raw LN pattern counts (set by summary, used by lnAnalysis) */
-  _lnCounts?: { shields: number; antiShields: number; columnLocks: number; inverses: number; releases: number };
+  _lnCounts?: { shields: number; antiShields: number; columnLocks: number; inverses: number; releases: number; lnChords?: number; wcJacks?: number; wcSpeeds?: number; lnStreams?: number; ouroboros?: number };
 }

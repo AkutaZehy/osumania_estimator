@@ -120,12 +120,14 @@ export interface LNMetrics {
   releaseDifficulty: number;
   /** Shield patterns detected (normal→LN head) */
   shieldCount: number;
-  /** Anti-Shield patterns detected (LN tail→normal) */
+  /** Reversed-Shield patterns detected (LN tail→normal) */
   antiShieldCount: number;
+  reversedShieldCount: number;
   /** Column lock patterns detected */
   columnLockCount: number;
   /** Inverse patterns detected (alternating LN releases) */
   inverseCount: number;
+  ouroborosCount: number;
   /** A: different head col, same tail time pairs */
   asyncReleaseCount: number;
   /** R: same head col, different tail time pairs */
@@ -136,6 +138,16 @@ export interface LNMetrics {
   totalLN: number;
   /** Overlapping LN pair count */
   overlayCount: number;
+  overlapCount: number;
+  lnStreamCount: number;
+  lnChordCount: number;
+  wcJackCount: number;
+  wcSpeedCount: number;
+  /** LN Pool scores (CO/DE/WC/TE) */
+  coordinationPoolScore: number;
+  densityPoolScore: number;
+  wildcardPoolScore: number;
+  technicalPoolScore: number;
 }
 
 /** Single tier of anchor/stamina analysis */

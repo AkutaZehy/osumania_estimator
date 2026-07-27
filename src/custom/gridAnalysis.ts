@@ -524,11 +524,22 @@ interface LNMetrics {
   ar: number;
   tapLN: number;
   ouroboros: number;
+  shield: number;
+  reversedShield: number;
+  columnLock: number;
+  jsDensity: number;
+  hsDensity: number;
+  speedyWC: number;
+  jackyWC: number;
 }
+
+const LN_WIN = 83; // LN_TIME_WINDOW_MS
 
 function analyzeLNCell(notes: NoteInfo[], beatLength: number): LNMetrics {
   const lns = notes.filter((n) => n.isLN);
-  if (lns.length === 0) return { inverse: 0, overlay: 0, ar: 0, tapLN: 0, ouroboros: 0 };
+  const normals = notes.filter((n) => !n.isLN);
+  const ZERO = { inverse: 0, overlay: 0, ar: 0, tapLN: 0, ouroboros: 0, shield: 0, reversedShield: 0, columnLock: 0, jsDensity: 0, hsDensity: 0, speedyWC: 0, jackyWC: 0 };
+  if (lns.length === 0) return ZERO;
 
   // Tap LN: ≤ beatLength/4
   const maxTap = beatLength / 4;
@@ -559,17 +570,91 @@ function analyzeLNCell(notes: NoteInfo[], beatLength: number): LNMetrics {
   }
   const ar = (arCount / lns.length) * 100;
 
-  // Ouroboros: head/tail gap < 5ms
+  // Ouroboros: head/tail gap < 21ms (LN_TIME_WINDOW_MS/4)
   let ouroCount = 0;
   for (const a of lns) {
     for (const b of lns) {
       if (a === b) continue;
-      if (Math.abs(a.end - b.start) < 5) ouroCount++;
+      if (Math.abs(a.end - b.start) < 21) ouroCount++;
     }
   }
   const ouroboros = (ouroCount / lns.length) * 100;
 
-  return { inverse, overlay, ar, tapLN, ouroboros };
+  // Shield: normal note → LN head same column within LN_WIN
+  let shieldCount = 0;
+  for (const n of normals) {
+    for (const ln of lns) {
+      if (n.col === ln.col && ln.start > n.start && ln.start - n.start <= LN_WIN) {
+        shieldCount++;
+        break;
+      }
+    }
+  }
+  const shield = lns.length > 0 ? (shieldCount / lns.length) * 100 : 0;
+
+  // Reversed shield: LN tail → normal note same column within LN_WIN
+  let revShieldCount = 0;
+  for (const ln of lns) {
+    for (const n of normals) {
+      if (n.col === ln.col && n.start > ln.end && n.start - ln.end <= LN_WIN) {
+        revShieldCount++;
+        break;
+      }
+    }
+  }
+  const reversedShield = lns.length > 0 ? (revShieldCount / lns.length) * 100 : 0;
+
+  // Column lock: LN body with ≥2 hits on adjacent column (same hand)
+  let clCount = 0;
+  const HANDS: [number, number][] = [[0, 1], [2, 3]];
+  for (const ln of lns) {
+    const hand = HANDS.find(h => h[0] === ln.col || h[1] === ln.col);
+    if (!hand) continue;
+    const adjCol = hand[0] === ln.col ? hand[1] : hand[0];
+    let hits = 0;
+    for (const n of notes) {
+      if (n.col === adjCol && n.start >= ln.start && n.start <= ln.end) hits++;
+    }
+    if (hits >= 2) clCount++;
+  }
+  const columnLock = lns.length > 0 ? (clCount / lns.length) * 100 : 0;
+
+  // JS/HS density: directional row movement (all notes, not just LN)
+  const allByTime = new Map<number, number[]>();
+  for (const n of notes) {
+    let key = n.start;
+    for (const k of allByTime.keys()) { if (Math.abs(k - n.start) <= 5) { key = k; break; } }
+    const cols = allByTime.get(key) ?? [];
+    if (!cols.includes(n.col)) cols.push(n.col);
+    allByTime.set(key, cols);
+  }
+  const sortedRows = [...allByTime.entries()].sort((a, b) => a[0] - b[0]);
+  let jsCnt = 0, hsCnt = 0;
+  for (let i = 1; i < sortedRows.length; i++) {
+    const prevCols = sortedRows[i - 1]![1];
+    const currCols = sortedRows[i]![1];
+    if (currCols.length > prevCols.length) hsCnt++;
+    const overlap = currCols.some(c => prevCols.includes(c));
+    if (!overlap) jsCnt++;
+  }
+  const rowCount = Math.max(1, sortedRows.length);
+  const jsDensity = (jsCnt / rowCount) * 100;
+  const hsDensity = (hsCnt / rowCount) * 100;
+
+  // Speedy WC / Jacky WC: directional vs same-column between rows (all notes)
+  let speedy = 0, jacky = 0;
+  for (let i = 1; i < sortedRows.length; i++) {
+    const prev = sortedRows[i - 1]![1], curr = sortedRows[i]![1];
+    if (curr.some(c => prev.includes(c))) jacky++;
+    const pMin = Math.min(...prev), pMax = Math.max(...prev);
+    const cMin = Math.min(...curr), cMax = Math.max(...curr);
+    if (cMax < pMin || cMin > pMax) speedy++;
+  }
+  const wcRowCount = Math.max(1, sortedRows.length - 1);
+  const speedyWC = (speedy / wcRowCount) * 100;
+  const jackyWC = (jacky / wcRowCount) * 100;
+
+  return { inverse, overlay, ar, tapLN, ouroboros, shield, reversedShield, columnLock, jsDensity, hsDensity, speedyWC, jackyWC };
 }
 
 const LN_TYPE_COLORS: Record<string, string> = {
@@ -585,25 +670,44 @@ function classifyLNCell(
 ): { lnSubtype: string; lnSubtypes: Array<{ key: string; name: string; value: string }> } {
   const triggered: Array<{ key: string; name: string; value: string }> = [];
 
-  if (metrics.inverse >= 20) {
-    triggered.push({ key: "reverse", name: "LN Inverse", value: `${Math.round(metrics.inverse)}%` });
+  if (metrics.shield >= 15) {
+    triggered.push({ key: "shield", name: "Shield", value: `Sh${Math.round(metrics.shield)}%` });
+  }
+  if (metrics.reversedShield >= 15) {
+    triggered.push({ key: "reversedshield", name: "Reversed Shield", value: `RS${Math.round(metrics.reversedShield)}%` });
+  }
+  if (metrics.columnLock >= 15) {
+    triggered.push({ key: "collock", name: "Column Lock", value: `CL${Math.round(metrics.columnLock)}%` });
   }
   if (metrics.overlay >= 30 && metrics.ar >= 20) {
-    triggered.push({ key: "releasehell", name: "Release Hell", value: `Ov${Math.round(metrics.overlay)}/AR${Math.round(metrics.ar)}` });
-  }
-  if (metrics.tapLN >= 40) {
-    triggered.push({ key: "density", name: "Density", value: `Tap${Math.round(metrics.tapLN)}%` });
+    triggered.push({ key: "releasehell", name: "Timing Hell", value: `Ov${Math.round(metrics.overlay)}/AR${Math.round(metrics.ar)}` });
   }
   if (metrics.ouroboros >= 30) {
     triggered.push({ key: "ouroboros", name: "Ouroboros", value: `${Math.round(metrics.ouroboros)}%` });
   }
+  if (metrics.inverse >= 20) {
+    triggered.push({ key: "inverse", name: "LN Inverse", value: `${Math.round(metrics.inverse)}%` });
+  }
+  if (metrics.jsDensity >= 15) {
+    triggered.push({ key: "jsdensity", name: "JS Density", value: `JS${Math.round(metrics.jsDensity)}%` });
+  }
+  if (metrics.hsDensity >= 10) {
+    triggered.push({ key: "hsdensity", name: "HS Density", value: `HS${Math.round(metrics.hsDensity)}%` });
+  }
+  if (metrics.speedyWC >= 10) {
+    triggered.push({ key: "speedywc", name: "Speedy WC", value: `Sp${Math.round(metrics.speedyWC)}%` });
+  }
+  if (metrics.jackyWC >= 10) {
+    triggered.push({ key: "jackywc", name: "Jacky WC", value: `Jk${Math.round(metrics.jackyWC)}%` });
+  }
 
-  // First match wins for primary subtype
+  // First match wins for primary subtype (v3.0.0 priority)
   let lnSubtype = "LN Unknown";
-  if (metrics.inverse >= 20) lnSubtype = "LN Inverse";
-  else if (metrics.overlay >= 30 && metrics.ar >= 20) lnSubtype = "Release Hell";
-  else if (metrics.tapLN >= 40) lnSubtype = "Density";
+  if (metrics.overlay >= 30 && metrics.ar >= 20) lnSubtype = "Timing Hell";
+  else if (metrics.inverse >= 20) lnSubtype = "LN Inverse";
   else if (metrics.ouroboros >= 30) lnSubtype = "Ouroboros";
+  else if (metrics.speedyWC >= 10) lnSubtype = "Speedy WC";
+  else if (metrics.jackyWC >= 10) lnSubtype = "Jacky WC";
 
   return { lnSubtype, lnSubtypes: triggered };
 }
