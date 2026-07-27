@@ -474,14 +474,17 @@ interface KeyTypeResult {
 function classifyJack(totalNotes: number): KeyTypeResult {
   const medNotes = totalNotes; // In grid mode, max=med since it's a single window
   const grade = gradeJack(totalNotes, medNotes);
-  if (totalNotes <= 7) return { keyType: "Minijack", grade };
+  // A4 tier: ≤5 Mini / 6-7 Low / 8-10 Mid / ≥11 High
+  if (totalNotes <= 5) return { keyType: "Minijack", grade };
+  if (totalNotes <= 7) return { keyType: "Low Chordjack", grade };
+  if (totalNotes <= 10) return { keyType: "Mid Chordjack", grade };
   return { keyType: "High Chordjack", grade };
 }
 
 function classifyStream(
   totalNotes: number,
   maxBeat: number,
-  rowNotes: number[],
+  _rowNotes: number[],
 ): KeyTypeResult {
   const avgPerRow = totalNotes / 4;
   const grade = gradeStream(totalNotes, totalNotes);
@@ -1349,146 +1352,109 @@ export function analyzeGrid(beatmap: ParsedBeatmap, signal?: AbortSignal): GridA
     }))
     .sort((a, b) => b.percentage - a.percentage);
 
-  // Phase 4: BPM-aware main key type selection
+  // Phase 4: BPM-first + merge + N=50 main key type selection
   //
-  // Principle: select the HARDER type that is still a significant part
-  // of the map (not grace). Uses effective comparison BPM:
-  //   - Jack: effBPM = BPM × 2  (90 BPM jack ≈ 180 BPM stream in difficulty)
-  //   - Stream: effBPM = BPM
-  //
-  // Step A: For each category, find its dominant eff BPM (most cells there).
-  // LN uses raw BPM (same as stream, no 2× multiplier).
-  const jackEff = new Map<number, number>();
-  const streamEff = new Map<number, number>();
-  const lnEff = new Map<number, number>();
-  const jackEntries: BPMKeyType[] = [];
-  const streamEntries: BPMKeyType[] = [];
-  const lnEntries: BPMKeyType[] = [];
-
-  for (const bkt of bpmKeyTypes) {
-    const cat = keyTypeToCategory(bkt.keyType);
-    if (cat === "break") continue;
-    const rawEff = cat === "jack" ? bkt.bpm * 2 : bkt.bpm;
-    const effKey = Math.round(rawEff / 10) * 10;
-    if (cat === "jack") {
-      jackEff.set(effKey, (jackEff.get(effKey) ?? 0) + bkt.cellCount);
-      jackEntries.push(bkt);
-    } else if (cat === "ln") {
-      lnEff.set(effKey, (lnEff.get(effKey) ?? 0) + bkt.cellCount);
-      lnEntries.push(bkt);
-    } else {
-      streamEff.set(effKey, (streamEff.get(effKey) ?? 0) + bkt.cellCount);
-      streamEntries.push(bkt);
-    }
-  }
-
-  // Helper: find dominant eff BPM for a category
-  function bestEff(m: Map<number, number>): { eff: number; cells: number } {
-    let best = { eff: 0, cells: 0 };
-    for (const [eff, cnt] of m) {
-      if (cnt > best.cells) best = { eff, cells: cnt };
-    }
-    return best;
-  }
-
-  // Compare two categories: pick the harder/significant one
-  // Threshold: harder category needs ≥50% of the easier's cells (not 30%)
-  // to prevent a small hard section from overshadowing a dominant easier section.
-  function pickWinner(a: { eff: number; cells: number }, b: { eff: number; cells: number }): "a" | "b" {
-    if (a.cells === 0 && b.cells === 0) return "a";
-    if (a.cells === 0) return "b";
-    if (b.cells === 0) return "a";
-    if (a.eff === b.eff) {
-      // Same eff → more cells wins; if within 10%, prefer harder (jack > stream > ln)
-      // which is "a" in the jack-vs-stream call order.
-      const diff = Math.abs(a.cells - b.cells) / Math.max(a.cells, b.cells);
-      if (diff < 0.10) return "a";
-      return a.cells >= b.cells ? "a" : "b";
-    }
-    if (a.eff > b.eff) return a.cells >= b.cells * 0.5 ? "a" : "b";
-    return b.cells >= a.cells * 0.5 ? "b" : "a";
-  }
-
-  const jackBest = bestEff(jackEff);
-  const streamBest = bestEff(streamEff);
-  const lnBest = bestEff(lnEff);
-
-  // Three-way elimination: jack vs stream → winner, then vs ln
-  // pickWinner returns "a" (first arg) or "b" (second arg)
-  const jsWinner = pickWinner(jackBest, streamBest);
-  const jsBest = jsWinner === "a" ? jackBest : streamBest;
-  const jsName: CellCategory = jsWinner === "a" ? "jack" : "stream";
-  const lnWinner = pickWinner(jsBest, lnBest);
-  let mainCategory: CellCategory;
-  let candidates: BPMKeyType[];
-  if (lnWinner === "b") {
-    // ln won
-    mainCategory = "ln";
-    candidates = lnEntries;
-  } else {
-    // js (jack or stream) won
-    mainCategory = jsName;
-    candidates = jsName === "jack" ? jackEntries : streamEntries;
-  }
-
-  // Step D: Difficulty weighting — when the same key type appears at
-  //         multiple BPMs (e.g. 90 jack + 180 jack, or 175 stream + 263 stream),
-  //         prefer the harder (higher BPM) variant if it has ≥ 30% share
-  //         AND is at least 1.4× faster than the next slower variant.
-  const byType = new Map<string, BPMKeyType[]>();
-  for (const c of candidates) {
-    const arr = byType.get(c.keyType) ?? [];
-    arr.push(c);
-    byType.set(c.keyType, arr);
-  }
-  const finalList: BPMKeyType[] = [];
-  for (const [, entries] of byType) {
-    if (entries.length <= 1) {
-      finalList.push(entries[0]!);
-      continue;
-    }
-    // Sort by BPM descending (hardest first)
-    entries.sort((a, b) => b.bpm - a.bpm);
-    const total = entries.reduce((s, e) => s + e.cellCount, 0);
-    const hardest = entries[0]!;
-    if (hardest.bpm >= entries[1]!.bpm * 1.4 && hardest.cellCount / total >= 0.30) {
-      finalList.push(hardest);
-    } else {
-      // Keep the variant with most cells
-      entries.sort((a, b) => b.cellCount - a.cellCount);
-      finalList.push(entries[0]!);
-    }
-  }
-  finalList.sort((a, b) => b.cellCount - a.cellCount);
-
-  // Close-call rule: when top two entries have cell counts within 10%,
-  // prefer the harder (higher density) key type.
-  // This prevents a 50/50 split from defaulting to the easier type.
-  const KEY_RANK: Record<string, number> = {
-    "Full Handstream": 12, "Full Jumpstream": 11,
-    "High Handstream": 10, "High Jumpstream": 9,
-    "Mid Handstream": 8, "Mid Jumpstream": 7,
-    "Low Handstream": 6, "Low Jumpstream": 5,
-    "Speedy Tech": 9, "Jacky Tech": 7,
-    "High Stream": 4,
-    "Single Stream": 3, "Rolls": 2, "Minitrills": 2,
+  // Merge (non-recursive, adjacent only):
+  //   HS→HS same chain, HS also feeds into JS at same/adjacent level
+  //   CJ: High→Mid, Mid→Low, Low→Minijack (no skipping)
+  //   Stream cascade: Full→High→Mid→Low→SS
+  // Sort: effBPM group (jack×2) → tier → insertion order (HS > JS > CJ)
+  // First with merged cells ≥ N wins (adaptive threshold by eff BPM).
+  const MERGE: Record<string, string[]> = {
+    "Full Handstream":  [],  // standalone, but feeds into lower types as sub
+    "High Handstream":  ["Full Handstream"],
+    "High Jumpstream":  ["Full Handstream", "Full Jumpstream"],
+    "Mid Handstream":   ["Full Handstream", "High Handstream"],
+    "Mid Jumpstream":   ["Full Handstream", "Full Jumpstream", "High Handstream", "High Jumpstream"],
+    "Low Handstream":   ["Mid Handstream"],
+    "Low Jumpstream":   ["Mid Handstream", "Mid Jumpstream"],
+    "Single Stream":    ["Low Handstream", "Low Jumpstream", "Rolls", "Minitrills", "High Stream"],
+    // Jack: adjacent merge only
+    "Mid Chordjack":    ["High Chordjack"],
+    "Low Chordjack":    ["Mid Chordjack"],
+    "Minijack":         ["Low Chordjack"],
   };
-  if (finalList.length >= 2) {
-    const top = finalList[0]!, second = finalList[1]!;
-    const maxC = Math.max(top.cellCount, second.cellCount);
-    if (maxC > 0 && Math.abs(top.cellCount - second.cellCount) / maxC < 0.10) {
-      const rT = KEY_RANK[top.keyType] ?? 0;
-      const rS = KEY_RANK[second.keyType] ?? 0;
-      if (rS > rT) {
-        finalList[0] = second; // harder type wins
-        finalList[1] = top;
-      }
+  const LN_TYPES = new Set(["LN Inverse", "LN Unknown", "Ouroboros"]);
+
+  interface BPMGroup { keyType: string; cellCount: number }
+  const byBPM = new Map<number, BPMGroup[]>();
+  for (const e of bpmKeyTypes) {
+    if (LN_TYPES.has(e.keyType)) continue;
+    const arr = byBPM.get(e.bpm) ?? [];
+    arr.push(e);
+    byBPM.set(e.bpm, arr);
+  }
+
+  function mergedCount(entries: BPMGroup[], type: string): number {
+    let total = 0;
+    for (const e of entries) {
+      if (e.keyType === type || (MERGE[type] ?? []).includes(e.keyType)) total += e.cellCount;
+    }
+    return total;
+  }
+
+  const mainCandidates: BPMKeyType[] = [];
+  for (const [bpm, es] of byBPM) {
+    for (const t of ["Full Handstream",
+                     "High Handstream", "High Jumpstream", "Full Jumpstream",
+                     "Mid Handstream",
+                     "Low Handstream",
+                     "Mid Jumpstream", "Low Jumpstream",
+                     "Single Stream",
+                     "Rolls", "Minitrills", "High Stream", "Speedy Tech",
+                     "High Chordjack",
+                     "Mid Chordjack",
+                     "Low Chordjack",
+                     "Minijack", "Jacky Tech"]) {
+      const cnt = mergedCount(es, t);
+      if (cnt > 0) mainCandidates.push({ keyType: t, bpm, cellCount: cnt, percentage: 0 });
     }
   }
 
-  const mainKeyType = finalList.length > 0
-    ? finalList[0]!
-    : (bpmKeyTypes.length > 0 ? bpmKeyTypes[0]! : { keyType: "Unknown", bpm: firstBPM, cellCount: 0, percentage: 100 });
+  const JACK_TYPES = new Set(["High Chordjack", "Mid Chordjack", "Low Chordjack", "Minijack", "Jacky Tech"]);
+  function effBpm(kt: string, raw: number): number {
+    return Math.round((JACK_TYPES.has(kt) ? raw * 2 : raw) / 10) * 10;
+  }
+  const TIER: Record<string, number> = {
+    "Full Handstream": 1, "Full Jumpstream": 1,
+    "High Handstream": 1, "High Jumpstream": 1, "High Chordjack": 1,
+    "Mid Handstream": 2, "Mid Chordjack": 2,
+    "Low Handstream": 3, "Mid Jumpstream": 3, "Low Jumpstream": 3, "Low Chordjack": 3,
+    "Single Stream": 4, "Minijack": 4,
+    "Rolls": 5, "Minitrills": 5, "High Stream": 5, "Speedy Tech": 5, "Jacky Tech": 5,
+  };
+  mainCandidates.sort((a, b) =>
+    effBpm(b.keyType, b.bpm) - effBpm(a.keyType, a.bpm) ||
+    (TIER[a.keyType] ?? 9) - (TIER[b.keyType] ?? 9) ||
+    b.bpm - a.bpm  // same eff+tier → higher original BPM (not jack×2 boosted) first
+  );
+
+  // Per-candidate N: use the DISPLAYED BPM (raw, not jack×2) for threshold.
+  // Low-BPM patterns need fewer cells to be meaningful.
+  function threshold(kt: string, rawBpm: number): number {
+    if (rawBpm < 150) return 30;
+    if (!JACK_TYPES.has(kt) && rawBpm < 200) return 30;
+    return 50;
+  }
+  let mainKeyType: BPMKeyType;
+  const pass = mainCandidates.find(e => e.cellCount >= threshold(e.keyType, e.bpm));
+  if (pass) {
+    mainKeyType = pass;
+  } else {
+    // Fallback: BPM desc, most cells per BPM (no merge)
+    const fbBPM = new Map<number, BPMKeyType>();
+    for (const e of bpmKeyTypes) {
+      if (LN_TYPES.has(e.keyType)) continue;
+      const ex = fbBPM.get(e.bpm);
+      if (!ex || e.cellCount > ex.cellCount) fbBPM.set(e.bpm, e);
+    }
+    const fb = [...fbBPM.values()].sort((a, b) => b.bpm - a.bpm);
+    const fbPass = fb.find(e => e.cellCount >= threshold(e.keyType, e.bpm));
+    mainKeyType = fbPass ?? fb.reduce((a, b) => a.cellCount >= b.cellCount ? a : b);
+  }
+  // Recompute percentage for the winner (relative to total non-LN)
+  const nonLNCells = bpmKeyTypes.filter(e => !LN_TYPES.has(e.keyType)).reduce((s, e) => s + e.cellCount, 0);
+  if (nonLNCells > 0) mainKeyType.percentage = (mainKeyType.cellCount / nonLNCells) * 100;
 
   const effectiveBPMs = cells
     .filter((c) => c.effectiveBPM > 0 && c.category !== "break")
@@ -1559,10 +1525,10 @@ export { getNotesInRange };
 /**
  * Map a key type string to its parent cell category.
  */
-function keyTypeToCategory(keyType: string): CellCategory {
-  const JACK_TYPES = new Set(["Minijack", "High Chordjack", "Jacky Tech"]);
-  const LN_TYPES = new Set(["LN Inverse", "LN Unknown", "Ouroboros"]);
-  if (JACK_TYPES.has(keyType)) return "jack";
-  if (LN_TYPES.has(keyType)) return "ln";
-  return "stream";
-}
+// function keyTypeToCategory(keyType: string): CellCategory {
+//   const JACK_TYPES = new Set(["Minijack", "Low Chordjack", "Mid Chordjack", "High Chordjack", "Jacky Tech"]);
+//   const LN_TYPES = new Set(["LN Inverse", "LN Unknown", "Ouroboros"]);
+//   if (JACK_TYPES.has(keyType)) return "jack";
+//   if (LN_TYPES.has(keyType)) return "ln";
+//   return "stream";
+// }

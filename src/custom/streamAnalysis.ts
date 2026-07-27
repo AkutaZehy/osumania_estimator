@@ -287,7 +287,7 @@ export function computeStreamMetrics(beatmap: ParsedBeatmap, _density: unknown, 
       imbalanceTotal: 0,
       brokenMax: 0,
       brokenMed: 0,
-      handBias: "",
+      handBias: "" as const,
     };
   }
 
