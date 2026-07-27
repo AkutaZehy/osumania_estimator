@@ -901,7 +901,9 @@ function fallbackGrid(
   let bestMaxBeat = 1;
   for (const cell of cells) {
     const rowNotes: number[] = [0, 0, 0, 0];
+    const rowEnd = cell.startTime + 4 * rowDuration;
     for (const n of cell._notes) {
+      if (n.start >= rowEnd) break; // past the 4-row window
       const relTime = n.start - cell.startTime;
       const r = Math.min(3, Math.max(0, Math.floor(relTime / rowDuration)));
       rowNotes[r]++;
@@ -1174,12 +1176,16 @@ function analyzeStreamRuns(
   while (i < cells.length) {
     if (cells[i]!.category !== "stream") { i++; continue; }
 
-    // Sliding-window helper: compute per-row note counts from pre-cached cell._notes
+    // Sliding-window helper: compute per-row note counts from pre-cached cell._notes.
+    // Only counts notes within the 4-row window [cellStart, cellStart + 4*rd)
+    // to match the original getNotesInRange-per-row-window behavior.
     const cellGrid = (cell: CellResult): { notes: number; maxBeat: number } => {
       const bpm = cell.effectiveBPM > 0 ? cell.effectiveBPM : 120;
       const rd = 60000 / bpm / 4;
+      const rowEnd = cell.startTime + 4 * rd;
       const rn = [0, 0, 0, 0];
       for (const n of cell._notes) {
+        if (n.start >= rowEnd) break; // past the 4-row window (notes are sorted)
         const relTime = n.start - cell.startTime;
         const r = Math.min(3, Math.max(0, Math.floor(relTime / rd)));
         rn[r]++;
@@ -1693,14 +1699,16 @@ export function analyzeGrid(beatmap: ParsedBeatmap, signal?: AbortSignal): GridA
   // 4 cells = 16 rows → 15 adjacent row pairs (including cross-cell boundaries).
   // For each row pair: jack = same column active in both rows.
   let gridSwitch = 0;
-  // Collect all rows' active columns from pre-cached cell._notes
+  // Collect all rows' active columns from pre-cached cell._notes (within 4-row window)
   const allRowCols: Set<number>[] = [];
   for (const cell of cells) {
     if (cell.category === "break" || cell.category === "ln") continue;
     const bpm = cell.effectiveBPM > 0 ? cell.effectiveBPM : 120;
     const rowDur = 60000 / bpm / 4;
+    const rowEnd = cell.startTime + 4 * rowDur;
     const rowCols: Set<number>[] = [new Set(), new Set(), new Set(), new Set()];
     for (const n of cell._notes) {
+      if (n.start >= rowEnd) break; // past the 4-row window
       const relTime = n.start - cell.startTime;
       const r = Math.min(3, Math.max(0, Math.floor(relTime / rowDur)));
       rowCols[r]!.add(n.col);
