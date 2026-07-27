@@ -7,7 +7,6 @@ import { WebSocketManager } from "./tosu/websocket.js";
 import TosuSocketManager from "./tosu/socket.js";
 import { analyzeBeatmap } from "./integration/analyzer.js";
 import { showLoading, showResult, showError, showWaiting, showCountdown, updateGameState, updateInGameBar, onSettingsUpdate } from "./ui/display.js";
-import { isVibroMap } from "./ett/vibro.js";
 import type { TosuStateMessage } from "./types/tosu.js";
 
 // ---- Config ----
@@ -169,9 +168,6 @@ async function onBeatmapChange(msg: TosuStateMessage): Promise<void> {
       if (myId !== analysisId) return;
     }
 
-    // Run Etterna vibro check in parallel
-    const vibroPromise = isVibroMap(osuText);
-
     const result = analyzeBeatmap(osuText, {
       speedRate: modData.speedRate,
       modFlags: {
@@ -188,9 +184,6 @@ async function onBeatmapChange(msg: TosuStateMessage): Promise<void> {
     // Check again after analysis (which can be slow)
     if (myId !== analysisId) return;
 
-    // Apply Etterna vibro result
-    const isVibro = await vibroPromise;
-    if (isVibro) result.custom.jack.isVibro = true;
     if (gameStar != null) result.meta.gameStar = gameStar;
 
     showResult(result);

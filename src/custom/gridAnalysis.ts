@@ -11,6 +11,7 @@
 // ============================================================
 
 import type { ParsedBeatmap, TimingPoint } from "../types/beatmap.js";
+import { analyzeVibro } from "./vibroAnalysis.js";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -88,6 +89,8 @@ export interface GridAnalysisResult {
   streamBreakdown: string;
   /** Grid-based switch: max jack↔stream transitions in any 4-cell (16-row) window */
   gridSwitch: number;
+  /** Vibro classification label */
+  vibroLabel: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -1515,7 +1518,15 @@ export function analyzeGrid(beatmap: ParsedBeatmap, signal?: AbortSignal): GridA
     }
   }
 
-  return { cells, segments, bpmKeyTypes, mainKeyType, bpmRange, streamBreakdown, gridSwitch };
+  // Vibro analysis
+  const notes = beatmap.columns.map((col, i) => ({ col, t: beatmap.noteStarts[i]! })).filter(n => n.t >= 0);
+  const vibroResult = analyzeVibro(notes, firstBPM);
+  let vibroLabel: string;
+  if (vibroResult.verdict === "no_vibro") vibroLabel = "No Vibro";
+  else if (vibroResult.verdict === "forced_jack") vibroLabel = "Forced Jack";
+  else vibroLabel = `${vibroResult.displayType ?? ""} Vibro(${vibroResult.displayCvRate ?? 0}%)`;
+
+  return { cells, segments, bpmKeyTypes, mainKeyType, bpmRange, streamBreakdown, gridSwitch, vibroLabel };
 }
 
 // Re-export colors for display

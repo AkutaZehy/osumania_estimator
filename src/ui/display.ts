@@ -215,11 +215,13 @@ export function showResult(result: DifficultyResult): void {
   const topClusters = patterns.importantClusters ?? patterns.clusters;
 
   // ---- Main display: key type + BPM (from grid analysis) ----
+  // When VIBRO, star-rating shows "Vibro"; otherwise normal keyType + BPM
   if (ga && ga.mainKeyType.keyType !== "Unknown") {
     const mt = ga.mainKeyType;
     const color = starColor(finalStar);
-    if (j.isVibro && meta.lnRatio < 0.3) {
-      setText("star-rating", "VIBRO");
+    // Check if vibro verdict is VIBRO (vibroLabel starts with type like "Hand Vibro(99%)")
+    if (ga.vibroLabel?.includes("Vibro(")) {
+      setText("star-rating", "Vibro");
       const se = el("star-rating"); if (se) se.style.color = "#ff4444";
     } else {
       setText("star-rating", `${mt.bpm} ${mt.keyType}`);
@@ -229,14 +231,8 @@ export function showResult(result: DifficultyResult): void {
     // Fallback to Interlude clusters if grid analysis unavailable
     if (topClusters.length > 0) {
       const top = topClusters[0]!;
-      const color = starColor(finalStar);
-      if (j.isVibro && meta.lnRatio < 0.3) {
-        setText("star-rating", "VIBRO");
-        const se = el("star-rating"); if (se) se.style.color = "#ff4444";
-      } else {
-        setText("star-rating", `${top.bpm || 0} ${clusterName(top)}`);
-        const se = el("star-rating"); if (se) se.style.color = color;
-      }
+      setText("star-rating", `${top.bpm || 0} ${clusterName(top)}`);
+      const se = el("star-rating"); if (se) se.style.color = starColor(finalStar);
     } else {
       setText("star-rating", "\u2605 --");
     }
@@ -335,7 +331,7 @@ export function showResult(result: DifficultyResult): void {
     mrow("Finger", j.singleFingerPressure.toFixed(2)),
     mrow("Hand", j.singleHandPressure.toFixed(2)),
     mrow("Imbal 4c/16c", jackImbal),
-    ...(j.isVibro ? [mrow("Vibro", "ETT")] : []),
+    mrow("Vibro", ga?.vibroLabel ?? "No Vibro"),
   ];
   r.push(col("JACK", ...jackItems));
   const streamDir = s.handBias ? ` ${s.handBias}` : "";

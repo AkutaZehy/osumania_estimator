@@ -313,41 +313,6 @@ function isBias(primitives: PrimitiveRow[]): boolean {
 }
 
 // ---------------------------------------------------------------------------
-// Vibro detection (tightened thresholds)
-// ---------------------------------------------------------------------------
-
-/**
- * Determine if this is vibro-style gameplay (jacks at very high speed).
- * Tightened: Dense grade + ≥5 anchors, OR Mid grade + ≥8 anchors.
- */
-function detectVibro(
-  densityGrade: string | null,
-  anchorCount: number,
-  singleFingerPressure: number,
-  primitives: PrimitiveRow[],
-): boolean {
-  // Per-column actual MAX density in 4-row windows (not P90 — vibro is about peaks)
-  let perColMax = 0;
-  for (let c = 0; c < 4; c++) {
-    let best = 0;
-    for (let i = 0; i < primitives.length; i++) {
-      let cnt = 0;
-      const end = Math.min(i + 4, primitives.length);
-      for (let j = i; j < end; j++) {
-        if (primitives[j]!.rawNotes.includes(c)) cnt++;
-      }
-      if (cnt > best) best = cnt;
-    }
-    if (best > perColMax) perColMax = best;
-  }
-
-  // Vibro: sustained single-column jacks (using actual MAX, not P90)
-  if (perColMax >= 4 && anchorCount >= 3) return true;
-  if (perColMax >= 3 && anchorCount >= 5) return true;
-  return false;
-}
-
-// ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
 
@@ -395,7 +360,7 @@ export function computeJackMetrics(beatmap: ParsedBeatmap, density: DensityMetri
     imbalanceTotal: jackImbalanceTotal(primitives),
     isBias: isBias(primitives),
     handBias: jackHandBias(primitives),
-    isVibro: false, // disabled — needs Etterna JackSpeed for reliable detection
+    isVibro: false,
   };
 }
 
