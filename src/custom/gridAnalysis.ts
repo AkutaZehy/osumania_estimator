@@ -64,6 +64,8 @@ export interface SegmentResult {
   keyType: string;
   /** 4 row totals from the grid (per-time-row note counts) */
   rowNotes: number[];
+  /** Jack density: N→N+1 adjacent position column sharing rate (0-1) */
+  jackDensity: number;
   /** For LN: triggered subtypes */
   lnSubtype: string | null;
   lnSubtypes: Array<{ key: string; name: string; value: string }>;
@@ -633,17 +635,73 @@ function buildGrid(
   avgPerRow: number;
   rowNotes: number[];
 } {
-  const beatLength = 60000 / effectiveBPM;
-  const rowDuration = beatLength / 4; // 1/4 beat at effective BPM
+  const jackInterval = 60000 / (effectiveBPM || 120) / 4;
 
-  // Slide a 4-row window across each cell in the segment and pick the
-  // window with the most notes (peak density). This avoids underestimating
-  // density when the first cell happens to be sparse.
+  // Collect all notes across the segment
+  const allNotes: Array<{ time: number; col: number }> = [];
+  for (const cell of segmentCells) {
+    const notes = getNotesInRange(beatmap, cell.startTime, cell.endTime);
+    for (const n of notes) allNotes.push({ time: n.start, col: n.col });
+  }
+
+  // Fallback: too few notes → use per-cell row method
+  if (allNotes.length < 2) {
+    return fallbackGrid(segmentCells, jackInterval, beatmap);
+  }
+
+  // Note-clustering: group by jack interval around first note
+  const anchor = allNotes[0]!.time;
+  const clusters = new Map<number, number>();
+  for (const n of allNotes) {
+    const slot = Math.round((n.time - anchor) / jackInterval);
+    clusters.set(slot, (clusters.get(slot) ?? 0) + 1);
+  }
+
+  const slots = [...clusters.entries()].sort((a, b) => a[0] - b[0]);
+  if (slots.length === 0) {
+    return { gridNotes: 0, maxBeat: 1, avgPerRow: 0, rowNotes: [0, 0, 0, 0] };
+  }
+
+  const minSlot = slots[0]![0];
+  const maxSlot = slots[slots.length - 1]![0];
+
+  // Not enough jack positions → fallback
+  if (maxSlot - minSlot < 3) {
+    return fallbackGrid(segmentCells, jackInterval, beatmap);
+  }
+
+  // Slide 4-cluster window for max total
+  let bestTotal = 0;
+  let bestRowNotes: number[] = [0, 0, 0, 0];
+
+  for (let w = minSlot; w <= maxSlot - 3; w++) {
+    let sum = 0;
+    const rv: number[] = [];
+    for (let r = 0; r < 4; r++) {
+      const v = clusters.get(w + r) ?? 0;
+      rv.push(v);
+      sum += v;
+    }
+    if (sum >= bestTotal) { bestTotal = sum; bestRowNotes = rv; }
+  }
+
+  return {
+    gridNotes: bestTotal,
+    maxBeat: Math.max(...bestRowNotes, 1),
+    avgPerRow: bestTotal / 4,
+    rowNotes: bestRowNotes,
+  };
+}
+
+function fallbackGrid(
+  cells: CellResult[],
+  rowDuration: number,
+  beatmap: ParsedBeatmap,
+): { gridNotes: number; maxBeat: number; avgPerRow: number; rowNotes: number[] } {
   let bestTotal = 0;
   let bestRowNotes: number[] = [0, 0, 0, 0];
   let bestMaxBeat = 1;
-
-  for (const cell of segmentCells) {
+  for (const cell of cells) {
     const rowNotes: number[] = [];
     for (let row = 0; row < 4; row++) {
       const rowStart = cell.startTime + row * rowDuration;
@@ -651,19 +709,9 @@ function buildGrid(
       rowNotes.push(getNotesInRange(beatmap, rowStart, rowEnd).length);
     }
     const total = rowNotes.reduce((a, b) => a + b, 0);
-    if (total > bestTotal) {
-      bestTotal = total;
-      bestRowNotes = rowNotes;
-      bestMaxBeat = Math.max(...rowNotes, 1);
-    }
+    if (total > bestTotal) { bestTotal = total; bestRowNotes = rowNotes; bestMaxBeat = Math.max(...rowNotes, 1); }
   }
-
-  return {
-    gridNotes: bestTotal,
-    maxBeat: bestMaxBeat,
-    avgPerRow: bestTotal / 4,
-    rowNotes: bestRowNotes,
-  };
+  return { gridNotes: bestTotal, maxBeat: bestMaxBeat, avgPerRow: bestTotal / 4, rowNotes: bestRowNotes };
 }
 
 // ---------------------------------------------------------------------------
@@ -706,6 +754,49 @@ function buildSegments(
   }
 
   return segments;
+}
+
+/**
+ * Compute segment-level jack density (purity): N→N+1 column sharing rate
+ * among non-empty 16th-note positions within the segment.
+ * Range 0-1. Pure jack ≈ 0.7-1.0, alternating minijack ≈ 0.3-0.5, stream ≈ <0.2.
+ */
+function computeSegmentDensity(
+  cells: CellResult[],
+  effectiveBPM: number,
+  beatmap: ParsedBeatmap,
+): number {
+  if (cells.length === 0) return 0;
+  const subdiv = cells[0]!.subdivision ?? 4;
+  const rawBPM = effectiveBPM > 0 && subdiv ? effectiveBPM / (subdiv / 4) : effectiveBPM || 120;
+  const step16 = 60000 / rawBPM / 4;
+
+  const allNotes: Array<{ time: number; col: number }> = [];
+  for (const cell of cells) {
+    const notes = getNotesInRange(beatmap, cell.startTime, cell.endTime);
+    for (const n of notes) allNotes.push({ time: n.start, col: n.col });
+  }
+  if (allNotes.length < 2) return 0;
+
+  const buckets = new Map<number, Set<number>>();
+  const t0 = cells[0]!.startTime;
+  for (const n of allNotes) {
+    const idx = Math.floor((n.time - t0) / step16);
+    if (!buckets.has(idx)) buckets.set(idx, new Set());
+    buckets.get(idx)!.add(n.col);
+  }
+
+  const slots = [...buckets.entries()]
+    .filter(([_, cols]) => cols.size > 0)
+    .sort((a, b) => a[0] - b[0]);
+  if (slots.length < 2) return 0;
+
+  let sharedPairs = 0;
+  for (let i = 1; i < slots.length; i++) {
+    const prev = slots[i - 1]![1], curr = slots[i]![1];
+    for (const c of curr) { if (prev.has(c)) { sharedPairs++; break; } }
+  }
+  return sharedPairs / (slots.length - 1);
 }
 
 function createSegment(
@@ -780,6 +871,12 @@ function createSegment(
     keyType = "Break";
   }
 
+  // Compute jack density (purity) for jack/stream segments
+  let jackDensity = 0;
+  if (category === "jack") {
+    jackDensity = computeSegmentDensity(cells, effectiveBPM, beatmap);
+  }
+
   return {
     cells,
     category,
@@ -795,6 +892,7 @@ function createSegment(
     grade,
     keyType,
     rowNotes,
+    jackDensity,
     lnSubtype,
     lnSubtypes,
   };
@@ -1207,6 +1305,7 @@ export function analyzeGrid(beatmap: ParsedBeatmap, signal?: AbortSignal): GridA
       grade: runGrade,
       keyType: runTypes[0]?.keyType ?? "Stream",
       rowNotes: [0, 0, 0, 0],
+      jackDensity: 0,
       lnSubtype: null,
       lnSubtypes: [],
     };

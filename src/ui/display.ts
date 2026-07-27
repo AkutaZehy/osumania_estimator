@@ -8,7 +8,6 @@ import type { DensityMetrics, AnchorTier } from "../types/custom.js";
 import type { PatternCluster } from "../types/patterns.js";
 import type { SectionAnalysis, SegmentCategory } from "../custom/sectionAnalysis.js";
 import type { GridAnalysisResult, SegmentResult, CellResult } from "../custom/gridAnalysis.js";
-import { gradeJack, gradeStream } from "../custom/gridAnalysis.js";
 
 const DEBUG = true;
 function debugLog(...args: unknown[]): void {
@@ -82,18 +81,35 @@ function aggregateGridGrade(ga: GridAnalysisResult | null, category: "jack" | "s
   }
   if (totalWeight === 0) return null;
 
-  // Jack: use P75/median with gradeJack (discrete integer format)
+  // Jack: use P90 for grade, show P90/P50 in parens
   if (category === "jack") {
     values.sort((a, b) => a - b);
-    const topIdx = Math.min(values.length - 1, Math.ceil(values.length * 0.75) - 1);
-    const topVal = Math.round(values[topIdx]!);
-    const medIdx = Math.floor(values.length * 0.5);
-    const median = values.length > 0 ? values[medIdx]! : 0;
-    return gradeJack(topVal, median);
+    const p90Idx = Math.max(0, Math.floor(values.length * 0.9));
+    const p90Val = Math.round(values[p90Idx]!);
+    const p50Idx = Math.floor(values.length * 0.5);
+    const p50Val = values.length > 0 ? Math.round(values[p50Idx]!) : 0;
+
+    let name: string;
+    if (p90Val <= 4) name = "Mini";
+    else if (p90Val <= 7) name = "Low";
+    else if (p90Val <= 11) name = "Mid";
+    else name = "Dense";
+    return `${name} (${p90Val}/${p50Val})`;
   }
 
-  // Stream: use mean density (total notes / total rows) for continuous value
-  const meanDensity = weightedSum / (totalWeight * 4);
+  // Stream: use mean density (total notes / total rows), exclude sparse cells
+  // (gridTotalNotes < 4 means avg < 1 note/row — essentially break/transition, not true stream)
+  const streamSegs = relevant.filter(s => s.gridTotalNotes >= 4);
+  if (streamSegs.length === 0) return null;
+
+  let streamWeight = 0, streamSum = 0;
+  for (const seg of streamSegs) {
+    streamSum += seg.gridTotalNotes * seg.cells.length;
+    streamWeight += seg.cells.length;
+  }
+  if (streamWeight === 0) return null;
+
+  const meanDensity = streamSum / (streamWeight * 4);
   let name: string;
   if (meanDensity <= 1.125) name = "Single";
   else if (meanDensity <= 1.25) name = "Light";
@@ -102,6 +118,21 @@ function aggregateGridGrade(ga: GridAnalysisResult | null, category: "jack" | "s
   else if (meanDensity === 2.0) name = "Full";
   else name = "Heavy";
   return `${name} (${meanDensity.toFixed(2)})`;
+}
+
+/** Compute jack purity: percentage of jack cells with density ≥ 15% */
+function aggregateJackPurity(ga: GridAnalysisResult | null): string | null {
+  if (!ga) return null;
+  const relevant = ga.segments.filter((s) => s.category === "jack");
+  if (relevant.length === 0) return null;
+
+  let totalCells = 0, validCells = 0;
+  for (const seg of relevant) {
+    totalCells += seg.cells.length;
+    if ((seg.jackDensity ?? 0) >= 0.15) validCells += seg.cells.length;
+  }
+  if (totalCells === 0) return null;
+  return `${(validCells / totalCells * 100).toFixed(0)}%`;
 }
 function mrow(label: string, value: string): string {
   return `<div class="mrow"><span>${label}</span><span>${value}</span></div>`;
@@ -298,6 +329,7 @@ export function showResult(result: DifficultyResult): void {
   const jackImbal = j.isBias ? "bias" : `${j.imbalance4r.toFixed(2)}/${j.imbalance16r.toFixed(2)}/${j.imbalanceTotal.toFixed(2)}`;
   const jackItems = [
     mrow("Grade", aggregateGridGrade(ga, "jack") ?? j.densityGrade ?? "None"),
+    mrow("Purity", aggregateJackPurity(ga) ?? "—"),
     mrow("Anchor", anchorCellStr(custom.anchor.sf)),
     mrow("Finger", j.singleFingerPressure.toFixed(2)),
     mrow("Hand", j.singleHandPressure.toFixed(2)),

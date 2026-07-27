@@ -206,6 +206,11 @@ function brokenStream(primitives: PrimitiveRow[]): {
     let windowNotes = 0;
     const end = Math.min(i + 2, primitives.length);
     for (let j = i; j < end; j++) {
+      // Skip jack rows — broken stream measures pure stream burst density.
+      // Jack-adjacent rows inflate 2-row counts without representing real
+      // physical density (e.g., a 3-chord + 3-chord with 2 shared columns
+      // gives 6 in 2 rows but is jack, not broken stream).
+      if (primitives[j]!.jacks > 0) continue;
       windowNotes += primitives[j]!.rawNotes.length;
     }
     densities.push(windowNotes);
