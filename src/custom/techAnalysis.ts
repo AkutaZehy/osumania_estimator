@@ -6,6 +6,7 @@
 import type { TechMetrics, RollTrillStats } from "../types/custom.js";
 import type { ParsedBeatmap } from "../types/beatmap.js";
 import type { PatternSummary } from "../types/patterns.js";
+import type { GridAnalysisResult, CellResult } from "./gridAnalysis.js";
 import { createChart } from "../parser/chartBuilder.js";
 import { calculatePrimitives } from "../patterns/primitives.js";
 import type { PrimitiveRow } from "../types/primitives.js";
@@ -120,11 +121,48 @@ export function bothHandsKPS(beatmap: ParsedBeatmap): number {
 }
 
 // ---------------------------------------------------------------------------
-// Grace/flam detection (unchanged)
+// Grace/flam detection — cell-aware subdivision threshold
 // ---------------------------------------------------------------------------
 
-function detectGraces(primitives: PrimitiveRow[]): number {
+/** Grace ratio: a gap is anomalous if it's < 55% of the cell's expected gap. */
+const GRACE_RATIO = 0.55;
+/** Absolute fallback for cells with unknown subdivision (isGrace: true). */
+const ABSOLUTE_FALLBACK_MS = 50;
+
+/**
+ * Build a sorted array of all cells from grid segments for O(log n) time lookup.
+ */
+function flattenCells(grid: GridAnalysisResult): CellResult[] {
+  const cells: CellResult[] = [];
+  for (const seg of grid.segments) {
+    for (const c of seg.cells) {
+      cells.push(c);
+    }
+  }
+  cells.sort((a, b) => a.startTime - b.startTime);
+  return cells;
+}
+
+/**
+ * Find the cell containing the given time using binary search.
+ */
+function findCellAtTime(cells: CellResult[], time: number): CellResult | null {
+  let lo = 0, hi = cells.length - 1;
+  while (lo <= hi) {
+    const mid = (lo + hi) >>> 1;
+    const c = cells[mid]!;
+    if (time < c.startTime) { hi = mid - 1; }
+    else if (time >= c.endTime) { lo = mid + 1; }
+    else { return c; }
+  }
+  return null;
+}
+
+function detectGraces(primitives: PrimitiveRow[], grid?: GridAnalysisResult): number {
   if (primitives.length < 2) return 0;
+
+  // Pre-build cell lookup if grid data is available
+  const cells = grid ? flattenCells(grid) : null;
 
   let graceCount = 0;
 
@@ -133,7 +171,34 @@ function detectGraces(primitives: PrimitiveRow[]): number {
     const curr = primitives[i]!;
 
     const timeGap = curr.msPerBeat / 4.0;
-    if (timeGap > 50) continue;
+
+    // Determine whether this gap is anomalously fast
+    let isGraceCandidate = false;
+    if (cells && cells.length > 0) {
+      const cell = findCellAtTime(cells, curr.time);
+      if (cell && !cell.isGrace && cell.subdivision != null && cell.effectiveBPM > 0) {
+        // Cell-aware: only tighten threshold, never loosen.
+        // Absolute 50ms is the baseline — cell-aware can exempt fast-but-normal gaps.
+        // e.g. 48th notes at 155 BPM have 32ms gap < 50ms, but expectedGap=32ms,
+        // so 32 >= 32*0.55 → NOT grace (normal fast pattern).
+        const expectedGap = 60000 / (cell.effectiveBPM * 4);
+        if (timeGap <= ABSOLUTE_FALLBACK_MS && timeGap < expectedGap * GRACE_RATIO) {
+          isGraceCandidate = true;
+        }
+      } else {
+        // Unknown subdivision (null-subdiv/grace cell, or no cell): absolute fallback
+        if (timeGap <= ABSOLUTE_FALLBACK_MS) {
+          isGraceCandidate = true;
+        }
+      }
+    } else {
+      // No grid data: preserve old behavior with absolute threshold
+      if (timeGap <= ABSOLUTE_FALLBACK_MS) {
+        isGraceCandidate = true;
+      }
+    }
+
+    if (!isGraceCandidate) continue;
 
     const prevCols = new Set(prev.rawNotes);
     const currCols = new Set(curr.rawNotes);
@@ -351,7 +416,12 @@ function computeRollTrillStats(
  * @param patterns  - Pattern analysis summary.
  * @returns TechMetrics with burst KPS, grace count, and roll/trill stats.
  */
-export function computeTechMetrics(beatmap: ParsedBeatmap, patterns: PatternSummary, speedRate = 1) {
+export function computeTechMetrics(
+  beatmap: ParsedBeatmap,
+  patterns: PatternSummary,
+  speedRate = 1,
+  grid?: GridAnalysisResult,
+) {
   if (beatmap.noteStarts.length === 0) {
     return {
       graceCount: 0,
@@ -373,7 +443,7 @@ singleFingerInterval: 0,
 const sfInt = singleFingerInterval(beatmap);
 const ohInt = oneHandInterval(beatmap);
 const bhInt = bothHandsInterval(beatmap);
-  const graceCount = detectGraces(primitives);
+  const graceCount = detectGraces(primitives, grid);
   const rollTrill = computeRollTrillStats(beatmap, patterns);
 
   return {

@@ -55,7 +55,7 @@ export function computeCustomMetrics(
   const stream = computeStreamMetrics(parsed, density, speedRate);
 
   // Tech-specific analysis (bursts, graces, rolls/trills).
-  const tech = computeTechMetrics(parsed, patterns, speedRate);
+  const tech = computeTechMetrics(parsed, patterns, speedRate, gridAnalysis ?? undefined);
 
   // Stamina analysis (stretches above median density).
   const stamina = computeStaminaMetrics(parsed, density, speedRate);
