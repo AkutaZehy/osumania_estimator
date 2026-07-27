@@ -83,6 +83,7 @@ function defaultCustomMetrics(
       imbalance16r: 0,
       imbalanceTotal: 0,
       isBias: false,
+      handBias: "",
       isVibro: false,
     },
     stream: {
@@ -93,6 +94,7 @@ function defaultCustomMetrics(
       imbalanceTotal: 0,
       brokenMax: 0,
       brokenMed: 0,
+      handBias: "",
     },
     tech: {
       graceCount: 0,

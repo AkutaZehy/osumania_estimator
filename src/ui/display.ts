@@ -326,18 +326,20 @@ export function showResult(result: DifficultyResult): void {
 
   // Row 2: Jack + Stream
   r.push(`<div class="grid-row">`);
-  const jackImbal = j.isBias ? "bias" : `${j.imbalance4r.toFixed(2)}/${j.imbalance16r.toFixed(2)}/${j.imbalanceTotal.toFixed(2)}`;
+  const jackDir = j.handBias ? ` ${j.handBias}` : "";
+  const jackImbal = j.isBias ? `bias${jackDir}` : `${j.imbalance4r.toFixed(2)}/${j.imbalance16r.toFixed(2)}${jackDir}`;
   const jackItems = [
     mrow("Grade", aggregateGridGrade(ga, "jack") ?? j.densityGrade ?? "None"),
     mrow("Purity", aggregateJackPurity(ga) ?? "—"),
     mrow("Anchor", anchorCellStr(custom.anchor.sf)),
     mrow("Finger", j.singleFingerPressure.toFixed(2)),
     mrow("Hand", j.singleHandPressure.toFixed(2)),
-    mrow("Imbal 4r/16r/T", jackImbal),
+    mrow("Imbal 4c/16c", jackImbal),
     ...(j.isVibro ? [mrow("Vibro", "ETT")] : []),
   ];
   r.push(col("JACK", ...jackItems));
-  const streamImbal = `${s.imbalance4r.toFixed(2)}/${s.imbalance16r.toFixed(2)}/${s.imbalanceTotal.toFixed(2)}`;
+  const streamDir = s.handBias ? ` ${s.handBias}` : "";
+  const streamImbal = `${s.imbalance4r.toFixed(2)}/${s.imbalance16r.toFixed(2)}${streamDir}`;
   // Determine stream type from grid analysis segments (stream run analysis)
   let streamDisplay = "Stream";
   if (ga) {
@@ -357,7 +359,7 @@ export function showResult(result: DifficultyResult): void {
   const streamItems = [
     mrow("Type", streamDisplay),
     mrow("Grade", aggregateGridGrade(ga, "stream") ?? s.densityGrade ?? "Unknown"),
-    mrow("Imbal 4r/16r/T", streamImbal),
+    mrow("Imbal 4c/16c", streamImbal),
     mrow("Brk2r", `${s.brokenMax.toFixed(1)}/${s.brokenMed.toFixed(1)}`),
     mrow("Sta L/R", anchorCellStr(custom.anchor.sh)),
     mrow("Sta Alt", anchorCellStr(custom.anchor.dh)),

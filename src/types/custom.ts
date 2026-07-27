@@ -47,6 +47,8 @@ export interface JackMetrics {
   imbalanceTotal: number;
   /** True if only one hand has jack notes */
   isBias: boolean;
+  /** Hand bias direction: L (left-dominant), R (right-dominant), S (switching), "" (balanced) */
+  handBias: "L" | "R" | "S" | "";
   /** Vibro detection flag */
   isVibro: boolean;
 }
@@ -64,6 +66,8 @@ export interface StreamMetrics {
   /** Broken stream: "max/med" density in 2-row windows at cluster speed */
   brokenMax: number;
   brokenMed: number;
+  /** Hand bias direction: L (left-dominant), R (right-dominant), S (switching), "" (balanced) */
+  handBias: "L" | "R" | "S" | "";
 }
 
 /** Roll/Trill statistics */

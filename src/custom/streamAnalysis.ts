@@ -105,11 +105,11 @@ function gradeStreamDensity(primitives: PrimitiveRow[]): string | null {
 // Multi-scale stream hand imbalance
 // ---------------------------------------------------------------------------
 
-/** Imbalance ratio: max(side) / sum.  0.5 = balanced, 1.0 = fully biased. */
+/** Imbalance ratio: 2 * max(side) / sum.  1.0 = balanced, 2.0 = fully biased. */
 function imbalanceRatio(leftCount: number, rightCount: number): number {
   const total = leftCount + rightCount;
   if (total === 0) return 0;
-  return Math.max(leftCount, rightCount) / total;
+  return 2 * Math.max(leftCount, rightCount) / total;
 }
 
 /**
@@ -125,7 +125,9 @@ function streamImbalanceForWindow(
   let rightNotes = 0;
 
   for (let i = startIdx; i < end; i++) {
-    for (const col of primitives[i]!.rawNotes) {
+    const row = primitives[i]!;
+    if (row.jacks > 0) continue; // skip jack rows — stream imbalance only counts stream notes
+    for (const col of row.rawNotes) {
       if (LEFT_COLS.has(col)) leftNotes++;
       else if (RIGHT_COLS.has(col)) rightNotes++;
     }
@@ -136,25 +138,25 @@ function streamImbalanceForWindow(
   return imbalanceRatio(leftNotes, rightNotes);
 }
 
-/** Stream imbalance across 4-row windows. Returns average of top 25%. */
+/** Stream imbalance across 16-row (4-cell) windows. Returns average of top 25%. */
 function streamImbalance4r(primitives: PrimitiveRow[]): number {
-  if (primitives.length < 4) return 0;
-
-  const ratios: number[] = [];
-  for (let i = 0; i <= primitives.length - 4; i++) {
-    const ratio = streamImbalanceForWindow(primitives, i, 4);
-    if (ratio > 0) ratios.push(ratio);
-  }
-  return topQuarterAvg(ratios);
-}
-
-/** Stream imbalance across 16-row windows. Returns average of top 25%. */
-function streamImbalance16r(primitives: PrimitiveRow[]): number {
   if (primitives.length < 16) return 0;
 
   const ratios: number[] = [];
   for (let i = 0; i <= primitives.length - 16; i++) {
     const ratio = streamImbalanceForWindow(primitives, i, 16);
+    if (ratio > 0) ratios.push(ratio);
+  }
+  return topQuarterAvg(ratios);
+}
+
+/** Stream imbalance across 64-row (16-cell) windows. Returns average of top 25%. */
+function streamImbalance16r(primitives: PrimitiveRow[]): number {
+  if (primitives.length < 64) return 0;
+
+  const ratios: number[] = [];
+  for (let i = 0; i <= primitives.length - 64; i++) {
+    const ratio = streamImbalanceForWindow(primitives, i, 64);
     if (ratio > 0) ratios.push(ratio);
   }
   return topQuarterAvg(ratios);
@@ -185,6 +187,37 @@ function streamImbalanceTotal(primitives: PrimitiveRow[]): number {
   }
 
   return Math.round(imbalanceRatio(leftNotes, rightNotes) * 1000) / 1000;
+}
+
+/**
+ * Determine hand bias direction for stream windows (16-row = 4c).
+ * Returns "L" (left-dominant), "R" (right-dominant), "S" (switching), or "" (balanced).
+ */
+function streamHandBias(primitives: PrimitiveRow[]): "L" | "R" | "S" | "" {
+  if (primitives.length < 16) return "";
+  let lWins = 0, rWins = 0;
+
+  for (let i = 0; i <= primitives.length - 16; i++) {
+    let leftNotes = 0, rightNotes = 0;
+    for (let j = i; j < i + 16; j++) {
+      const row = primitives[j]!;
+      if (row.jacks > 0) continue;
+      for (const col of row.rawNotes) {
+        if (LEFT_COLS.has(col)) leftNotes++;
+        else if (RIGHT_COLS.has(col)) rightNotes++;
+      }
+    }
+    if (leftNotes + rightNotes < 3) continue;
+    if (leftNotes > rightNotes) lWins++;
+    else if (rightNotes > leftNotes) rWins++;
+  }
+
+  const total = lWins + rWins;
+  if (total === 0) return "";
+  const lPct = lWins / total;
+  if (lPct >= 0.75) return "L";
+  if (lPct <= 0.25) return "R";
+  return "S";
 }
 
 // ---------------------------------------------------------------------------
@@ -254,6 +287,7 @@ export function computeStreamMetrics(beatmap: ParsedBeatmap, _density: unknown, 
       imbalanceTotal: 0,
       brokenMax: 0,
       brokenMed: 0,
+      handBias: "",
     };
   }
 
@@ -286,6 +320,7 @@ export function computeStreamMetrics(beatmap: ParsedBeatmap, _density: unknown, 
     imbalanceTotal: streamImbalanceTotal(primitives),
     brokenMax: bs.max,
     brokenMed: bs.med,
+    handBias: streamHandBias(primitives),
   };
 }
 

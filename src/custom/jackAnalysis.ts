@@ -140,7 +140,8 @@ function countAnchors(
 }
 
 // ---------------------------------------------------------------------------
-// Finger / hand pressure (unchanged)
+// Finger / hand pressure — normalized for key count
+// 1.0 = balanced, >1.5 = significant bias
 // ---------------------------------------------------------------------------
 
 function singleFingerPressure(density: DensityMetrics): number {
@@ -148,7 +149,8 @@ function singleFingerPressure(density: DensityMetrics): number {
   const maxCol = Math.max(
     ...density.perColumn.map((c) => c.maxDensity),
   );
-  return maxCol / density.bothHands.maxDensity;
+  // 4×: balanced 4K stream (25% each) → 1.0, fully single-column → 4.0
+  return (4 * maxCol) / density.bothHands.maxDensity;
 }
 
 function singleHandPressure(density: DensityMetrics): number {
@@ -157,18 +159,19 @@ function singleHandPressure(density: DensityMetrics): number {
     density.perHand.left.maxDensity,
     density.perHand.right.maxDensity,
   );
-  return maxHand / density.bothHands.maxDensity;
+  // 2×: balanced (50% each) → 1.0, fully one-handed → 2.0
+  return (2 * maxHand) / density.bothHands.maxDensity;
 }
 
 // ---------------------------------------------------------------------------
 // Multi-scale jack hand imbalance
 // ---------------------------------------------------------------------------
 
-/** Imbalance ratio: max(side) / sum.  0.5 = balanced, 1.0 = fully biased. */
+/** Imbalance ratio: 2 * max(side) / sum.  1.0 = balanced, 2.0 = fully biased. */
 function imbalanceRatio(leftCount: number, rightCount: number): number {
   const total = leftCount + rightCount;
   if (total === 0) return 0;
-  return Math.max(leftCount, rightCount) / total;
+  return 2 * Math.max(leftCount, rightCount) / total;
 }
 
 /**
@@ -198,30 +201,30 @@ function jackImbalanceForWindow(
 }
 
 /**
- * Jack imbalance across 4-row windows.
+ * Jack imbalance across 16-row (4-cell) windows.
  * Returns the average of top 25% imbalance ratios (avoids single-outlier 1.00).
  */
 function jackImbalance4r(primitives: PrimitiveRow[]): number {
-  if (primitives.length < 4) return 0;
+  if (primitives.length < 16) return 0;
 
   const ratios: number[] = [];
-  for (let i = 0; i <= primitives.length - 4; i++) {
-    const ratio = jackImbalanceForWindow(primitives, i, 4);
+  for (let i = 0; i <= primitives.length - 16; i++) {
+    const ratio = jackImbalanceForWindow(primitives, i, 16);
     if (ratio > 0) ratios.push(ratio);
   }
   return topQuarterAvg(ratios);
 }
 
 /**
- * Jack imbalance across 16-row windows.
+ * Jack imbalance across 64-row (16-cell) windows.
  * Returns the average of top 25% imbalance ratios.
  */
 function jackImbalance16r(primitives: PrimitiveRow[]): number {
-  if (primitives.length < 16) return 0;
+  if (primitives.length < 64) return 0;
 
   const ratios: number[] = [];
-  for (let i = 0; i <= primitives.length - 16; i++) {
-    const ratio = jackImbalanceForWindow(primitives, i, 16);
+  for (let i = 0; i <= primitives.length - 64; i++) {
+    const ratio = jackImbalanceForWindow(primitives, i, 64);
     if (ratio > 0) ratios.push(ratio);
   }
   return topQuarterAvg(ratios);
@@ -255,6 +258,36 @@ function jackImbalanceTotal(primitives: PrimitiveRow[]): number {
   }
 
   return Math.round(imbalanceRatio(leftJacks, rightJacks) * 1000) / 1000;
+}
+
+/**
+ * Determine hand bias direction for jack windows (16-row = 4c).
+ * Returns "L" (left-dominant), "R" (right-dominant), "S" (switching), or "" (balanced/no jacks).
+ */
+function jackHandBias(primitives: PrimitiveRow[]): "L" | "R" | "S" | "" {
+  if (primitives.length < 16) return "";
+  let lWins = 0, rWins = 0;
+
+  for (let i = 0; i <= primitives.length - 16; i++) {
+    let leftJacks = 0, rightJacks = 0;
+    for (let j = i + 1; j < i + 16; j++) {
+      const cols = jackColumnsBetween(primitives[j - 1]!, primitives[j]!);
+      for (const col of cols) {
+        if (LEFT_COLS.has(col)) leftJacks++;
+        else if (RIGHT_COLS.has(col)) rightJacks++;
+      }
+    }
+    if (leftJacks + rightJacks < 3) continue;
+    if (leftJacks > rightJacks) lWins++;
+    else if (rightJacks > leftJacks) rWins++;
+  }
+
+  const total = lWins + rWins;
+  if (total === 0) return "";
+  const lPct = lWins / total;
+  if (lPct >= 0.75) return "L";
+  if (lPct <= 0.25) return "R";
+  return "S";
 }
 
 /**
@@ -340,6 +373,7 @@ export function computeJackMetrics(beatmap: ParsedBeatmap, density: DensityMetri
       imbalance16r: 0,
       imbalanceTotal: 0,
       isBias: false,
+      handBias: "",
       isVibro: false,
     };
   }
@@ -360,6 +394,7 @@ export function computeJackMetrics(beatmap: ParsedBeatmap, density: DensityMetri
     imbalance16r: jackImbalance16r(primitives),
     imbalanceTotal: jackImbalanceTotal(primitives),
     isBias: isBias(primitives),
+    handBias: jackHandBias(primitives),
     isVibro: false, // disabled — needs Etterna JackSpeed for reliable detection
   };
 }
