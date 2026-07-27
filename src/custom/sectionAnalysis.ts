@@ -7,7 +7,7 @@
 // ============================================================
 
 import type { ParsedBeatmap } from "../types/beatmap.js";
-import { getNotesInRange } from "../utils/beatmapUtils.js";
+import { getNotesInRange, lowerBound } from "../utils/beatmapUtils.js";
 import type { SunnyResult } from "../types/algorithm.js";
 import type { PatternSummary } from "../types/patterns.js";
 
@@ -359,12 +359,17 @@ type LNNote = { col: number; start: number; end: number };
 interface LNEdge { from: LNNote; to: LNNote }
 
 function buildEdges(lns: LNNote[]): LNEdge[] {
+  if (lns.length < 2) return [];
+  // Sort by start time for binary search (O(k log k) instead of O(k²))
+  const sorted = [...lns].sort((a, b) => a.start - b.start);
+  const starts = sorted.map(l => l.start);
   const edges: LNEdge[] = [];
-  for (let i = 0; i < lns.length; i++) {
-    for (let j = 0; j < lns.length; j++) {
-      if (i === j) continue;
-      const gap = lns[j]!.start - lns[i]!.end;
-      if (gap >= 0 && gap < 21) edges.push({ from: lns[i]!, to: lns[j]! });
+  for (const ln of lns) {
+    const lo = lowerBound(starts, ln.end);
+    const hi = lowerBound(starts, ln.end + 21);
+    for (let i = lo; i < hi; i++) {
+      const target = sorted[i]!;
+      if (target !== ln) edges.push({ from: ln, to: target });
     }
   }
   return edges;
@@ -460,28 +465,35 @@ function analyzeLNMetrics(
   const inverseCount = [...colBodies.values()].filter((v) => v >= 2).length;
   const inverse = lns.length > 0 ? (inverseCount / lns.length) * 100 : 0;
 
-  // Overlay: overlapping LN pairs (one starts before another ends)
+  // Overlay: overlapping LN pairs — O(k log k) via sweep-line
   let overlayCount = 0;
-  for (let i = 0; i < lns.length; i++) {
-    for (let j = i + 1; j < lns.length; j++) {
-      const a = lns[i]!;
-      const b = lns[j]!;
-      if (a.start < b.start && a.end > b.start) {
-        overlayCount++;
-      }
+  if (lns.length >= 2) {
+    const sorted = [...lns].sort((a, b) => a.start - b.start);
+    const starts = sorted.map(l => l.start);
+    for (let i = 0; i < sorted.length; i++) {
+      const hi = lowerBound(starts, sorted[i]!.end);
+      overlayCount += Math.max(0, hi - i - 1);
     }
   }
   const overlay = lns.length > 0 ? (overlayCount / lns.length) * 100 : 0;
 
-  // A/R: Attack/Release pairs (different start, same end)
+  // A/R: Attack/Release pairs — O(k) via end-time grouping
   let arCount = 0;
-  for (let i = 0; i < lns.length; i++) {
-    for (let j = i + 1; j < lns.length; j++) {
-      const a = lns[i]!;
-      const b = lns[j]!;
-      if (a.start !== b.start && a.end === b.end) {
-        arCount++;
-      }
+  if (lns.length >= 2) {
+    const byEnd = new Map<number, typeof lns>();
+    for (const ln of lns) {
+      const g = byEnd.get(ln.end) ?? [];
+      g.push(ln);
+      byEnd.set(ln.end, g);
+    }
+    for (const [, group] of byEnd) {
+      const total = group.length;
+      if (total < 2) continue;
+      const startCount = new Map<number, number>();
+      for (const ln of group) startCount.set(ln.start, (startCount.get(ln.start) ?? 0) + 1);
+      let sameStartPairs = 0;
+      for (const c of startCount.values()) sameStartPairs += (c * (c - 1)) / 2;
+      arCount += (total * (total - 1)) / 2 - sameStartPairs;
     }
   }
   const ar = lns.length > 0 ? (arCount / lns.length) * 100 : 0;
@@ -501,16 +513,18 @@ function analyzeLNMetrics(
     }
   }
 
-  // Speedy WC / Jacky WC: directional/same-column row analysis on all notes
-  const allByTime = new Map<number, number[]>();
-  for (const n of notes) {
-    let key = n.start;
-    for (const k of allByTime.keys()) { if (Math.abs(k - n.start) <= 5) { key = k; break; } }
-    const cols = allByTime.get(key) ?? [];
-    if (!cols.includes(n.col)) cols.push(n.col);
-    allByTime.set(key, cols);
+  // Speedy WC / Jacky WC: directional/same-column row analysis — O(m log m)
+  const sortedNotes = [...notes].sort((a, b) => a.start - b.start);
+  const rows: Array<{ time: number; cols: number[] }> = [];
+  for (const n of sortedNotes) {
+    if (rows.length > 0 && n.start - rows[rows.length - 1]!.time <= 5) {
+      const last = rows[rows.length - 1]!;
+      if (!last.cols.includes(n.col)) last.cols.push(n.col);
+    } else {
+      rows.push({ time: n.start, cols: [n.col] });
+    }
   }
-  const sortedRows = [...allByTime.entries()].sort((a, b) => a[0] - b[0]);
+  const sortedRows = rows.map(r => [r.time, r.cols] as [number, number[]]);
   let speedy = 0, jacky = 0;
   for (let i = 1; i < sortedRows.length; i++) {
     const prev = sortedRows[i - 1]![1], curr = sortedRows[i]![1];

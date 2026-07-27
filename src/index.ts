@@ -146,14 +146,30 @@ async function onBeatmapChange(msg: TosuStateMessage): Promise<void> {
     const osuText = await fetchBeatmap();
     if (myId !== analysisId) return;
 
-    // Quick note count from osu text (count lines after [HitObjects])
+    // Quick note count from osu text — no split/trim to avoid allocations on heavy maps
     let noteCount = 0;
     const hoIdx = osuText.indexOf("[HitObjects]");
     if (hoIdx >= 0) {
-      for (const line of osuText.slice(hoIdx + 12).split("\n")) {
-        const t = line.trim();
-        if (t && !t.startsWith("//")) noteCount++;
+      let pos = hoIdx + 12;
+      while (pos < osuText.length) {
+        const next = osuText.indexOf("\n", pos);
+        const lineEnd = next >= 0 ? next : osuText.length;
+        // Scan line: skip whitespace, skip "//" comments, count real content
+        let hasNote = false;
+        for (let i = pos; i < lineEnd; i++) {
+          const c = osuText[i]!;
+          if (c === "/" && i + 1 < lineEnd && osuText[i + 1] === "/") break;
+          if (c !== " " && c !== "\t" && c !== "\r") { hasNote = true; break; }
+        }
+        if (hasNote) noteCount++;
+        if (next < 0) break;
+        pos = next + 1;
       }
+    }
+    // Heavy map guard: skip analysis for extremely long maps
+    if (noteCount > 30000) {
+      showError(`Heavy map (${noteCount} notes > 30000) — skipped`);
+      return;
     }
     // [LOCK] Countdown for heavy maps (>5000 notes).
     // Disabled after O(n log n) indexing optimization — analysis is fast enough.

@@ -246,6 +246,23 @@ export function analyzeBeatmap(
   }
   signal?.throwIfAborted();
 
+  // Heavy map guard: reject maps with excessive LN count (>15000)
+  const lnCount = Math.round(beatmap.noteStarts.length * beatmap.lnRatio);
+  if (lnCount > 15000) {
+    return buildErrorResult(
+      {
+        title: beatmap.metadata.title,
+        artist: beatmap.metadata.artist,
+        version: beatmap.metadata.version,
+        creator: beatmap.metadata.creator,
+        columnCount: beatmap.columnCount,
+        lnRatio: beatmap.lnRatio,
+        bpm: Math.round(computeBPM(beatmap)),
+      },
+      `Heavy LN map (${lnCount} LNs > 15000) — skipped`,
+    );
+  }
+
   // ---- Step 2: Sunny Rework ----
   let sunny: SunnyResult;
   try {

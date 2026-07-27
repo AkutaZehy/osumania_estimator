@@ -11,7 +11,7 @@
 // ============================================================
 
 import type { ParsedBeatmap, TimingPoint } from "../types/beatmap.js";
-import { getNotesInRange } from "../utils/beatmapUtils.js";
+import { getNotesInRange, lowerBound } from "../utils/beatmapUtils.js";
 import { analyzeVibro } from "./vibroAnalysis.js";
 
 // ---------------------------------------------------------------------------
@@ -553,83 +553,105 @@ function analyzeLNCell(notes: NoteInfo[], beatLength: number): LNMetrics {
   const invCols = [...colBodies.values()].filter((v) => v >= 2).length;
   const inverse = (invCols / lns.length) * 100;
 
-  // Overlay
+  // Overlay — O(k log k) via sweep-line
   let overlayCount = 0;
-  for (let i = 0; i < lns.length; i++) {
-    for (let j = i + 1; j < lns.length; j++) {
-      if (lns[i]!.start < lns[j]!.start && lns[i]!.end > lns[j]!.start) overlayCount++;
+  if (lns.length >= 2) {
+    const sorted = [...lns].sort((a, b) => a.start - b.start);
+    const starts = sorted.map(l => l.start);
+    for (let i = 0; i < sorted.length; i++) {
+      const hi = lowerBound(starts, sorted[i]!.end);
+      overlayCount += Math.max(0, hi - i - 1);
     }
   }
   const overlay = (overlayCount / lns.length) * 100;
 
-  // A/R
+  // A/R — O(k) via end-time grouping
   let arCount = 0;
-  for (let i = 0; i < lns.length; i++) {
-    for (let j = i + 1; j < lns.length; j++) {
-      if (lns[i]!.start !== lns[j]!.start && lns[i]!.end === lns[j]!.end) arCount++;
+  if (lns.length >= 2) {
+    const byEnd = new Map<number, typeof lns>();
+    for (const ln of lns) {
+      const g = byEnd.get(ln.end) ?? [];
+      g.push(ln);
+      byEnd.set(ln.end, g);
+    }
+    for (const [, group] of byEnd) {
+      const total = group.length;
+      if (total < 2) continue;
+      const startCount = new Map<number, number>();
+      for (const ln of group) startCount.set(ln.start, (startCount.get(ln.start) ?? 0) + 1);
+      let sameStartPairs = 0;
+      for (const c of startCount.values()) sameStartPairs += (c * (c - 1)) / 2;
+      arCount += (total * (total - 1)) / 2 - sameStartPairs;
     }
   }
   const ar = (arCount / lns.length) * 100;
 
-  // Ouroboros: head/tail gap < 21ms (LN_TIME_WINDOW_MS/4)
-  let ouroCount = 0;
-  for (const a of lns) {
-    for (const b of lns) {
-      if (a === b) continue;
-      if (Math.abs(a.end - b.start) < 21) ouroCount++;
-    }
-  }
-  const ouroboros = (ouroCount / lns.length) * 100;
+  // Ouroboros: head/tail gap < 21ms — O(k log k) via optimized buildEdges
+  const lnsAsNodes: LNNote[] = lns.map(n => ({ col: n.col, start: n.start, end: n.end }));
+  const ouroEdges = buildEdges(lnsAsNodes);
+  const ouroboros = lns.length > 0 ? (ouroEdges.length / lns.length) * 100 : 0;
 
-  // Shield: normal note → LN head same column within LN_WIN
+  // Shield: normal → LN same column within LN_WIN — O(k + n) column-grouped
+  const [normByCol, lnByCol] = [Array.from({ length: 4 }, () => [] as NoteInfo[]), Array.from({ length: 4 }, () => [] as NoteInfo[])];
+  for (const n of normals) normByCol[n.col]!.push(n);
+  for (const ln of lns) lnByCol[ln.col]!.push(ln);
   let shieldCount = 0;
-  for (const n of normals) {
-    for (const ln of lns) {
-      if (n.col === ln.col && ln.start > n.start && ln.start - n.start <= LN_WIN) {
-        shieldCount++;
-        break;
-      }
+  for (let col = 0; col < 4; col++) {
+    const cNorm = normByCol[col]!.sort((a, b) => a.start - b.start);
+    const cLn = lnByCol[col]!.sort((a, b) => a.start - b.start);
+    let li = 0;
+    for (const n of cNorm) {
+      while (li < cLn.length && cLn[li]!.start < n.start) li++;
+      if (li < cLn.length && cLn[li]!.start - n.start <= LN_WIN) shieldCount++;
     }
   }
   const shield = lns.length > 0 ? (shieldCount / lns.length) * 100 : 0;
 
-  // Reversed shield: LN tail → normal note same column within LN_WIN
+  // Reversed shield: LN tail → normal same column within LN_WIN — O(k + n)
   let revShieldCount = 0;
-  for (const ln of lns) {
-    for (const n of normals) {
-      if (n.col === ln.col && n.start > ln.end && n.start - ln.end <= LN_WIN) {
-        revShieldCount++;
-        break;
-      }
+  for (let col = 0; col < 4; col++) {
+    const cLn = lnByCol[col]!.sort((a, b) => a.end - b.end);
+    const cNorm = normByCol[col]!.sort((a, b) => a.start - b.start);
+    let ni = 0;
+    for (const ln of cLn) {
+      while (ni < cNorm.length && cNorm[ni]!.start < ln.end) ni++;
+      if (ni < cNorm.length && cNorm[ni]!.start - ln.end <= LN_WIN) revShieldCount++;
     }
   }
   const reversedShield = lns.length > 0 ? (revShieldCount / lns.length) * 100 : 0;
 
-  // Column lock: LN body with ≥2 hits on adjacent column (same hand)
+  // Column lock: LN body with ≥2 hits on adjacent column — O(k × col_notes) column-grouped
   let clCount = 0;
   const HANDS: [number, number][] = [[0, 1], [2, 3]];
+  const notesByCol: NoteInfo[][] = [notes.filter(n => n.col === 0), notes.filter(n => n.col === 1), notes.filter(n => n.col === 2), notes.filter(n => n.col === 3)];
+  // Pre-sort for potential binary search (though linear scan is fine for typical column density)
+  for (const colNotes of notesByCol) colNotes.sort((a, b) => a.start - b.start);
   for (const ln of lns) {
     const hand = HANDS.find(h => h[0] === ln.col || h[1] === ln.col);
     if (!hand) continue;
     const adjCol = hand[0] === ln.col ? hand[1] : hand[0];
     let hits = 0;
-    for (const n of notes) {
-      if (n.col === adjCol && n.start >= ln.start && n.start <= ln.end) hits++;
+    for (const n of notesByCol[adjCol]!) {
+      if (n.start > ln.end) break; // past LN body
+      if (n.start >= ln.start) hits++;
+      if (hits >= 2) break;
     }
     if (hits >= 2) clCount++;
   }
   const columnLock = lns.length > 0 ? (clCount / lns.length) * 100 : 0;
 
-  // JS/HS density: directional row movement (all notes, not just LN)
-  const allByTime = new Map<number, number[]>();
-  for (const n of notes) {
-    let key = n.start;
-    for (const k of allByTime.keys()) { if (Math.abs(k - n.start) <= 5) { key = k; break; } }
-    const cols = allByTime.get(key) ?? [];
-    if (!cols.includes(n.col)) cols.push(n.col);
-    allByTime.set(key, cols);
+  // JS/HS density: directional row movement — O(m log m) via merge-sort grouping
+  const sortedNotes = [...notes].sort((a, b) => a.start - b.start);
+  const rowGroups: Array<{ time: number; cols: number[] }> = [];
+  for (const n of sortedNotes) {
+    if (rowGroups.length > 0 && n.start - rowGroups[rowGroups.length - 1]!.time <= 5) {
+      const last = rowGroups[rowGroups.length - 1]!;
+      if (!last.cols.includes(n.col)) last.cols.push(n.col);
+    } else {
+      rowGroups.push({ time: n.start, cols: [n.col] });
+    }
   }
-  const sortedRows = [...allByTime.entries()].sort((a, b) => a[0] - b[0]);
+  const sortedRows = rowGroups.map(r => [r.time, r.cols] as [number, number[]]);
   let jsCnt = 0, hsCnt = 0;
   for (let i = 1; i < sortedRows.length; i++) {
     const prevCols = sortedRows[i - 1]![1];
@@ -740,12 +762,16 @@ type LNNote = { col: number; start: number; end: number };
 interface LNEdge { from: LNNote; to: LNNote }
 
 function buildEdges(lns: LNNote[]): LNEdge[] {
+  if (lns.length < 2) return [];
+  const sorted = [...lns].sort((a, b) => a.start - b.start);
+  const starts = sorted.map(l => l.start);
   const edges: LNEdge[] = [];
-  for (let i = 0; i < lns.length; i++) {
-    for (let j = 0; j < lns.length; j++) {
-      if (i === j) continue;
-      const gap = lns[j]!.start - lns[i]!.end;
-      if (gap >= 0 && gap < 21) edges.push({ from: lns[i]!, to: lns[j]! });
+  for (const ln of lns) {
+    const lo = lowerBound(starts, ln.end);
+    const hi = lowerBound(starts, ln.end + 21);
+    for (let i = lo; i < hi; i++) {
+      const target = sorted[i]!;
+      if (target !== ln) edges.push({ from: ln, to: target });
     }
   }
   return edges;
@@ -1359,7 +1385,7 @@ function decomposeStreamRun(
 export function analyzeGrid(beatmap: ParsedBeatmap, signal?: AbortSignal): GridAnalysisResult | null {
   // Safety: skip grid analysis for extremely long maps (100000+ notes)
   // to prevent pathological cases from causing issues.
-  if (beatmap.noteStarts.length > 100000) return null;
+  // if (beatmap.noteStarts.length > 100000) return null;
 
   // Grid layout uses the FIRST timing point's beat length.
   // Each cell then uses its own active timing point for BPM/beatLength.
