@@ -69,12 +69,18 @@ function buildBeatmap(
   const lastNote = sortedStarts[sortedStarts.length - 1] ?? 0;
   const duration = opts?.duration ?? lastNote - firstNote + 2000;
 
+  const prebuiltNotes = sortedStarts.map((start, i) => {
+    const isLN = (sortedTypes[i]! & 128) !== 0;
+    return { col: sortedCols[i]!, start, end: isLN ? sortedEnds[i]! : start, isLN };
+  });
+
   return {
     columnCount: 4,
     columns: sortedCols,
     noteStarts: sortedStarts,
     noteEnds: sortedEnds,
     noteTypes: sortedTypes,
+    notes: prebuiltNotes,
     od: 8,
     metadata: {
       title: opts?.title ?? "Test Map",
