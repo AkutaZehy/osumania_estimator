@@ -17,12 +17,13 @@ import type { PatternSummary } from "../types/patterns.js";
 
 /** LN subtypes with thresholds */
 export const LN_SUBTYPES = {
-  reverse: { name: "LN Reverse", threshold: { inverse: 20 } },
+  reverse: { name: "LN Inverse", threshold: { inverse: 20 } },
   releasehell: { name: "Timing Hell", threshold: { overlay: 30, ar: 20 } },
   density: { name: "Density", threshold: { tapLN: 40 } },
   ouroboros: { name: "Ouroboros", threshold: { ouroboros: 30 } },
-  speedywc: { name: "Speedy WC", threshold: { speedyWC: 10 } },
-  jackywc: { name: "Jacky WC", threshold: { jackyWC: 10 } },
+  tree: { name: "LN Tree", threshold: { tree: 1 } },
+  speedywc: { name: "Speedy WC", threshold: { speedyWC: 50 } },
+  jackywc: { name: "Jacky WC", threshold: { jackyWC: 20 } },
   unknown: { name: "Unknown", threshold: {} },
 } as const;
 
@@ -54,6 +55,7 @@ export interface SegmentLNMetrics {
   ar: number;
   tapLN: number;
   ouroboros: number;
+  tree: number;
   speedyWC: number;
   jackyWC: number;
 }
@@ -349,6 +351,88 @@ function detectAnomalies(
 }
 
 // ---------------------------------------------------------------------------
+// Strict Ouroboros & Tree helpers (v3.1.0)
+// ---------------------------------------------------------------------------
+
+type LNNote = { col: number; start: number; end: number };
+
+interface LNEdge { from: LNNote; to: LNNote }
+
+function buildEdges(lns: LNNote[]): LNEdge[] {
+  const edges: LNEdge[] = [];
+  for (let i = 0; i < lns.length; i++) {
+    for (let j = 0; j < lns.length; j++) {
+      if (i === j) continue;
+      const gap = lns[j]!.start - lns[i]!.end;
+      if (gap >= 0 && gap < 21) edges.push({ from: lns[i]!, to: lns[j]! });
+    }
+  }
+  return edges;
+}
+
+function findComponents(lns: LNNote[], edges: LNEdge[]): LNNote[][] {
+  const nodeIdx = new Map<LNNote, number>();
+  lns.forEach((ln, i) => nodeIdx.set(ln, i));
+  const adj: number[][] = Array.from({ length: lns.length }, () => []);
+  for (const e of edges) { const fi = nodeIdx.get(e.from)!, ti = nodeIdx.get(e.to)!; adj[fi]!.push(ti); adj[ti]!.push(fi); }
+  const visited = new Array(lns.length).fill(false);
+  const components: LNNote[][] = [];
+  for (let i = 0; i < lns.length; i++) {
+    if (visited[i]) continue;
+    const comp: LNNote[] = []; const stack = [i]; visited[i] = true;
+    while (stack.length) { const v = stack.pop()!; comp.push(lns[v]!); for (const nb of adj[v]!) { if (!visited[nb]) { visited[nb] = true; stack.push(nb); } } }
+    components.push(comp);
+  }
+  return components;
+}
+
+function spansAllColumns(lnSet: LNNote[], edges: LNEdge[]): boolean {
+  const cols = new Set<number>();
+  for (const e of edges) { if (lnSet.includes(e.from) && lnSet.includes(e.to)) { cols.add(e.from.col); cols.add(e.to.col); } }
+  return cols.size === 4;
+}
+
+function hasFullSpan(lns: LNNote[], edges: LNEdge[]): boolean {
+  return findComponents(lns, edges).some(c => spansAllColumns(c, edges));
+}
+
+function findLongestPath(lns: LNNote[], edges: LNEdge[]): LNNote[] {
+  const adj = new Map<LNNote, LNNote[]>(); for (const ln of lns) adj.set(ln, []); for (const e of edges) adj.get(e.from)!.push(e.to);
+  const sorted = [...lns].sort((a, b) => a.start - b.start);
+  const idx = new Map(sorted.map((ln, i) => [ln, i]));
+  const dpDur = new Array(sorted.length).fill(0), dpLen = new Array(sorted.length).fill(1), dpStart = new Array(sorted.length).fill(0), dpPrev = new Array<number | null>(sorted.length).fill(null), dpAvgCol = new Array(sorted.length).fill(0);
+  for (let i = 0; i < sorted.length; i++) {
+    const ln = sorted[i]!; dpDur[i] = ln.end - ln.start; dpStart[i] = ln.start; dpAvgCol[i] = ln.col;
+    for (const e of edges) { if (e.to === ln) { const pi = idx.get(e.from)!; const candDur = ln.end - dpStart[pi]!, candLen = dpLen[pi]! + 1, candCol = (dpAvgCol[pi]! * dpLen[pi]! + ln.col) / candLen; if (candDur > dpDur[i]! || (candDur === dpDur[i]! && candLen > dpLen[i]!) || (candDur === dpDur[i]! && candLen === dpLen[i]! && candCol < dpAvgCol[i]!)) { dpDur[i] = candDur; dpLen[i] = candLen; dpStart[i] = dpStart[pi]!; dpPrev[i] = pi; dpAvgCol[i] = candCol; } } }
+  }
+  let bestEnd = 0; for (let i = 1; i < sorted.length; i++) { if (dpDur[i]! > dpDur[bestEnd]! || (dpDur[i]! === dpDur[bestEnd]! && dpLen[i]! > dpLen[bestEnd]!) || (dpDur[i]! === dpDur[bestEnd]! && dpLen[i]! === dpLen[bestEnd]! && dpAvgCol[i]! < dpAvgCol[bestEnd]!)) bestEnd = i; }
+  const path: LNNote[] = []; let curr: number | null = bestEnd; while (curr !== null) { path.unshift(sorted[curr]!); curr = dpPrev[curr] ?? null; } return path;
+}
+
+function allConnected(lns: LNNote[], edges: LNEdge[]): boolean {
+  const connected = new Set<LNNote>(); for (const e of edges) { connected.add(e.from); connected.add(e.to); }
+  return connected.size === lns.length;
+}
+
+function computeStrictOuroboros(lns: LNNote[]): number {
+  if (lns.length < 2) return 0;
+  const edges = buildEdges(lns); if (edges.length === 0) return 0;
+  const components = findComponents(lns, edges);
+  const fullComps = components.filter(c => spansAllColumns(c, edges));
+  if (fullComps.length === 0) return 0;
+  const longestPath = findLongestPath(lns, edges);
+  const pathSet = new Set(longestPath);
+  const remaining = lns.filter(ln => !pathSet.has(ln));
+  if (remaining.length === 0) { let count = 0; for (const c of fullComps) count += c.length; return (count / lns.length) * 100; }
+  const remEdges = edges.filter(e => !pathSet.has(e.from) && !pathSet.has(e.to));
+  if (!hasFullSpan(remaining, remEdges)) return 0;
+  const remComps = findComponents(remaining, remEdges);
+  for (const comp of remComps) { const compE = remEdges.filter(e => comp.includes(e.from) && comp.includes(e.to)); if (compE.length > 0 && !spansAllColumns(comp, remEdges)) return 0; }
+  let count = 0; for (const c of fullComps) count += c.length;
+  return (count / lns.length) * 100;
+}
+
+// ---------------------------------------------------------------------------
 // LN Analysis
 // ---------------------------------------------------------------------------
 
@@ -360,7 +444,7 @@ function analyzeLNMetrics(
   beatLength: number,
 ): SegmentLNMetrics {
   const lns = notes.filter((n) => n.isLN);
-  const ZERO = { inverse: 0, overlay: 0, ar: 0, tapLN: 0, ouroboros: 0, speedyWC: 0, jackyWC: 0 };
+  const ZERO = { inverse: 0, overlay: 0, ar: 0, tapLN: 0, ouroboros: 0, tree: 0, speedyWC: 0, jackyWC: 0 };
   if (lns.length === 0) return ZERO;
 
   // Tap LN: duration <= beatLength/4
@@ -402,19 +486,20 @@ function analyzeLNMetrics(
   }
   const ar = lns.length > 0 ? (arCount / lns.length) * 100 : 0;
 
-  // Ouroboros: head-to-tail connections (one LN ends, another starts immediately)
-  let ouroborosCount = 0;
-  for (let i = 0; i < lns.length; i++) {
-    for (let j = 0; j < lns.length; j++) {
-      if (i === j) continue;
-      const a = lns[i]!;
-      const b = lns[j]!;
-      if (Math.abs(a.end - b.start) < 5) {
-        ouroborosCount++;
-      }
+  // Ouroboros: strict path-removal resilience (v3.1.0)
+  const lnsOnly: LNNote[] = lns.map(n => ({ col: n.col, start: n.start, end: n.end }));
+  const ouroboros = computeStrictOuroboros(lnsOnly);
+
+  // Tree: ≥75% LNs connected in T→H graph, but NOT strict ouroboros
+  let tree = 0;
+  if (ouroboros < 30) {
+    const tEdges = buildEdges(lns.map(n => ({ col: n.col, start: n.start, end: n.end })));
+    if (tEdges.length > 0) {
+      const connected = new Set<number>();
+      for (const e of tEdges) { connected.add(e.from.col * 100000 + e.from.start); connected.add(e.to.col * 100000 + e.to.start); }
+      if (connected.size / Math.max(1, lns.length) >= 0.75) tree = 100;
     }
   }
-  const ouroboros = lns.length > 0 ? (ouroborosCount / lns.length) * 100 : 0;
 
   // Speedy WC / Jacky WC: directional/same-column row analysis on all notes
   const allByTime = new Map<number, number[]>();
@@ -438,15 +523,19 @@ function analyzeLNMetrics(
   const speedyWC = (speedy / rowCount) * 100;
   const jackyWC = (jacky / rowCount) * 100;
 
-  return { inverse, overlay, ar, tapLN, ouroboros, speedyWC, jackyWC };
+  return { inverse, overlay, ar, tapLN, ouroboros, tree, speedyWC, jackyWC };
 }
 
 /**
  * Determine LN subtype based on metrics (first match wins).
+ * v3.1.0 priority: Ouroboros → Tree → Timing Hell → Inverse → Density → Speedy WC → Jacky WC
  */
 function determineLNSubtype(metrics: SegmentLNMetrics): string {
-  if (metrics.inverse >= LN_SUBTYPES.reverse.threshold.inverse) {
-    return LN_SUBTYPES.reverse.name;
+  if (metrics.ouroboros >= LN_SUBTYPES.ouroboros.threshold.ouroboros!) {
+    return LN_SUBTYPES.ouroboros.name;
+  }
+  if (metrics.tree >= LN_SUBTYPES.tree.threshold.tree!) {
+    return LN_SUBTYPES.tree.name;
   }
   if (
     metrics.overlay >= LN_SUBTYPES.releasehell.threshold.overlay! &&
@@ -454,11 +543,11 @@ function determineLNSubtype(metrics: SegmentLNMetrics): string {
   ) {
     return LN_SUBTYPES.releasehell.name;
   }
+  if (metrics.inverse >= LN_SUBTYPES.reverse.threshold.inverse) {
+    return LN_SUBTYPES.reverse.name;
+  }
   if (metrics.tapLN >= LN_SUBTYPES.density.threshold.tapLN!) {
     return LN_SUBTYPES.density.name;
-  }
-  if (metrics.ouroboros >= LN_SUBTYPES.ouroboros.threshold.ouroboros!) {
-    return LN_SUBTYPES.ouroboros.name;
   }
   if (metrics.speedyWC >= LN_SUBTYPES.speedywc.threshold.speedyWC!) {
     return LN_SUBTYPES.speedywc.name;
@@ -505,6 +594,13 @@ function determineTriggeredLNTypes(
       key: "ouroboros",
       name: LN_SUBTYPES.ouroboros.name,
       value: `${Math.round(metrics.ouroboros)}%`,
+    });
+  }
+  if (metrics.tree >= LN_SUBTYPES.tree.threshold.tree!) {
+    triggered.push({
+      key: "tree",
+      name: LN_SUBTYPES.tree.name,
+      value: "Tree",
     });
   }
   if (metrics.speedyWC >= LN_SUBTYPES.speedywc.threshold.speedyWC!) {
@@ -714,7 +810,7 @@ function resolvePatternStr(
 
   if (category === "ln") {
     // Compute average LN metrics across segment
-    const avgMetrics: SegmentLNMetrics = { inverse: 0, overlay: 0, ar: 0, tapLN: 0, ouroboros: 0, speedyWC: 0, jackyWC: 0 };
+    const avgMetrics: SegmentLNMetrics = { inverse: 0, overlay: 0, ar: 0, tapLN: 0, ouroboros: 0, tree: 0, speedyWC: 0, jackyWC: 0 };
     let metricCount = 0;
     for (const mm of measures) {
       if (mm.lnMetrics) {
@@ -723,6 +819,7 @@ function resolvePatternStr(
         avgMetrics.ar += mm.lnMetrics.ar;
         avgMetrics.tapLN += mm.lnMetrics.tapLN;
         avgMetrics.ouroboros += mm.lnMetrics.ouroboros;
+        avgMetrics.tree += mm.lnMetrics.tree;
         avgMetrics.speedyWC += mm.lnMetrics.speedyWC;
         avgMetrics.jackyWC += mm.lnMetrics.jackyWC;
         metricCount++;
@@ -734,6 +831,7 @@ function resolvePatternStr(
       avgMetrics.ar = Math.round(avgMetrics.ar / metricCount);
       avgMetrics.tapLN = Math.round(avgMetrics.tapLN / metricCount);
       avgMetrics.ouroboros = Math.round(avgMetrics.ouroboros / metricCount);
+      avgMetrics.tree = Math.round(avgMetrics.tree / metricCount);
       avgMetrics.speedyWC = Math.round(avgMetrics.speedyWC / metricCount);
       avgMetrics.jackyWC = Math.round(avgMetrics.jackyWC / metricCount);
     }
@@ -874,7 +972,7 @@ export function analyzeSections(
       // LN triggered types (for segment)
       let triggeredLNTypes: Array<{ key: string; name: string; value: string }> = [];
       if (m0.category === "ln") {
-      const avgMetrics: SegmentLNMetrics = { inverse: 0, overlay: 0, ar: 0, tapLN: 0, ouroboros: 0, speedyWC: 0, jackyWC: 0 };
+      const avgMetrics: SegmentLNMetrics = { inverse: 0, overlay: 0, ar: 0, tapLN: 0, ouroboros: 0, tree: 0, speedyWC: 0, jackyWC: 0 };
       let metricCount = 0;
       for (const mm of chunk) {
         if (mm.lnMetrics) {
@@ -883,6 +981,7 @@ export function analyzeSections(
           avgMetrics.ar += mm.lnMetrics.ar;
           avgMetrics.tapLN += mm.lnMetrics.tapLN;
           avgMetrics.ouroboros += mm.lnMetrics.ouroboros;
+          avgMetrics.tree += mm.lnMetrics.tree;
           avgMetrics.speedyWC += mm.lnMetrics.speedyWC;
           avgMetrics.jackyWC += mm.lnMetrics.jackyWC;
           metricCount++;
@@ -894,6 +993,7 @@ export function analyzeSections(
         avgMetrics.ar = Math.round(avgMetrics.ar / metricCount);
         avgMetrics.tapLN = Math.round(avgMetrics.tapLN / metricCount);
         avgMetrics.ouroboros = Math.round(avgMetrics.ouroboros / metricCount);
+        avgMetrics.tree = Math.round(avgMetrics.tree / metricCount);
         avgMetrics.speedyWC = Math.round(avgMetrics.speedyWC / metricCount);
         avgMetrics.jackyWC = Math.round(avgMetrics.jackyWC / metricCount);
       }

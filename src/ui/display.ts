@@ -284,8 +284,8 @@ export function showResult(result: DifficultyResult): void {
     if (sa) {
       for (const m of sa.measures) {
         if (!m.lnMetrics) continue;
-        if (m.lnMetrics.jackyWC >= 10) jackyCnt++;
-        if (m.lnMetrics.speedyWC >= 10) speedyCnt++;
+        if (m.lnMetrics.jackyWC >= 20) jackyCnt++;
+        if (m.lnMetrics.speedyWC >= 50) speedyCnt++;
       }
     }
     if (jackyCnt > 0 || speedyCnt > 0) {
@@ -337,17 +337,13 @@ export function showResult(result: DifficultyResult): void {
   ];
   if (d.perColumn.length === 4) bpmItems.push(mrow("Cols", d.perColumn.map((c) => `${c.meanDensity.toFixed(1)}`).join(" | ")));
   r.push(col("BPM / DENSITY", ...bpmItems));
-  if (ln.ratio > 0.01 || ln.shieldCount > 0 || ln.columnLockCount > 0 || ln.inverseCount > 0 || ln.asyncReleaseCount > 0 || ln.releaseCount > 0 || ln.tapLNCount > 0 || ln.overlayCount > 0) {
+  if (ln.ratio > 0.01 || ln.overlapCount > 0 || ln.tapLNCount > 0) {
     const lnItems = [mrow("Ratio", `${(ln.ratio * 100).toFixed(0)}% (${(ln.strictLNRatio * 100).toFixed(0)}%)`)];
-    if (ln.overlayCount > 0) {
-      const overlayPct = ln.totalLN > 0 ? (ln.overlayCount / ln.totalLN * 100).toFixed(0) : "0";
-      lnItems.push(mrow("Overlay", `${ln.overlayCount} (${overlayPct}%)`));
+    if (ln.overlapCount > 0) {
+      const overlapPct = ln.totalLN > 0 ? (ln.overlapCount / ln.totalLN * 100).toFixed(0) : "0";
+      lnItems.push(mrow("Overlap", `${ln.overlapCount} (${overlapPct}%)`));
     }
     if (ln.tapLNCount > 0) lnItems.push(mrow("Tap LN", `${ln.tapLNCount}`));
-    if (ln.shieldCount > 0 || ln.antiShieldCount > 0) lnItems.push(mrow("Shield/R", `${ln.shieldCount}/${ln.antiShieldCount}`));
-    if (ln.columnLockCount > 0) lnItems.push(mrow("ColLock", `${ln.columnLockCount}`));
-    if (ln.asyncReleaseCount > 0 || ln.releaseCount > 0) lnItems.push(mrow("A/R", `${ln.asyncReleaseCount}/${ln.releaseCount}`));
-    if (ln.inverseCount > 0) lnItems.push(mrow("Inverse", `${ln.inverseCount}`));
     if (ln.coordinationPoolScore > 0 || ln.densityPoolScore > 0 || ln.wildcardPoolScore > 0 || ln.technicalPoolScore > 0) {
       const poolStr = `CO ${ln.coordinationPoolScore.toFixed(1)} \u00b7 DE ${ln.densityPoolScore.toFixed(1)} \u00b7 WC ${ln.wildcardPoolScore.toFixed(1)} \u00b7 TE ${ln.technicalPoolScore.toFixed(1)}`;
       lnItems.push(mrow("P-Score", poolStr));
@@ -703,6 +699,7 @@ const LN_TYPE_COLORS: Record<string, string> = {
   releasehell: "#e74c3c",
   density: "#3498db",
   ouroboros: "#1abc9c",
+  tree: "#2ecc71",
   unknown: "#7f8c8d",
 };
 
