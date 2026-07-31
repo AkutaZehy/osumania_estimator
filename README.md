@@ -1,4 +1,4 @@
-# osumania-estimator v4.0.0
+# osumania-estimator v4.0.3
 
 A tosu overlay plugin for osu!mania 4K key pattern analysis and difficulty estimation.
 
@@ -170,11 +170,13 @@ Shown when LN ratio > 1% or patterns detected.
 | Med     | P50 density x longest stretch above P50      |
 | Med tot | Total time above P50                         |
 | Ratio   | % of map above P50                           |
-| Switch  | Max jack/stream transitions in 16-row window |
+| Switch  | Max jack/stream transitions in a 16-beat window + descriptor (Steady/Mixed/Rhythmic/Intense) |
+
+The switch metric is computed over uneven rows clustered from actual note timestamps (not a fixed grid); consecutive rows sharing any column count as a jack pair, same-type pairs merge into runs, and the score is the maximum run-type transitions inside a sliding 16-beat window. LN heads participate as single notes at their start time. Descriptors: Steady ≤15, Mixed ≤25, Rhythmic ≤35, Intense >35. Low values = sustained single-mode sections (pure stream/jumpstream/jack); high values = frequent stable switching (minijack-style maps).
 
 ## Technical Notes
 
-### Architecture (v4.0.0)
+### Architecture (v4.0.3)
 
 The analysis pipeline is decomposed into focused modules:
 
@@ -234,6 +236,17 @@ The map is divided into a beat grid where each cell spans one row (4 notes in 4K
 - **Pattern**: detected via column analysis (jack, chord, trill, roll, etc.)
 - **Category**: stream (<=2 cols/row), jack (same-col density), LN, break
 - **Effective BPM**: `cellRawBPM * denom / 4 * speedRate`
+
+### Switch Metric (gridSwitch)
+
+The switch metric measures how frequently the map alternates between jack-type and stream-type rows, distinguishing sustained single-mode sections (pure stream / jumpstream) from frequent stable switching (chordjack-style maps).
+
+1. **Uneven rows**: All rice notes (LN heads included as single notes at their start time) are clustered into rows by actual timestamps (≤8ms apart merge into one row) — not a fixed grid.
+2. **J/S pairing**: Consecutive rows sharing any column → J (jack), otherwise S (stream). Lenient: single-column jacks and chord overlaps both count.
+3. **Runs**: Consecutive same-type pairs merge into runs.
+4. **Sliding window**: A 16-beat window (16 × beatLength) slides across the map; `gridSwitch` = max run-type transitions inside any window.
+
+Descriptor thresholds: **Steady** ≤15, **Mixed** ≤25, **Rhythmic** ≤35, **Intense** >35. Displayed in the STAMINA panel as `Switch` (e.g. `54 (Intense)`).
 
 ### Key Type System (A4 tiers)
 
