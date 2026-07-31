@@ -413,7 +413,7 @@ export function showResult(result: DifficultyResult): void {
     mrow("Med", `${st.medDensity.toFixed(1)}\u00d7${(st.medDuration / 1000).toFixed(1)}s`),
     mrow("Med tot", `${(st.medTotalTime / 1000).toFixed(1)}s`),
     mrow("Ratio", `${(st.stretchRatio * 100).toFixed(0)}%`),
-    mrow("Switch", `${ga?.gridSwitch ?? st.switchFrequency}`),
+    mrow("Switch", `${ga?.gridSwitch ?? st.switchFrequency}${ga?.gridSwitchLabel ? ` (${ga.gridSwitchLabel})` : ""}`),
   ];
   r.push(col("STAMINA", ...stamItems));
   r.push(`</div>`);

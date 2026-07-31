@@ -92,8 +92,10 @@ export interface GridAnalysisResult {
   bpmRange: { min: number; max: number };
   /** Per-run per-cell key type breakdown for display (e.g. "SS 34% + Low JS 33%") */
   streamBreakdown: string;
-  /** Grid-based switch: max jack↔stream transitions in any 4-cell (16-row) window */
+  /** Grid-based switch: max lenient jack↔stream run transitions in a 16-cell (64-row) window */
   gridSwitch: number;
+  /** Descriptor for gridSwitch: Steady / Mixed / Rhythmic / Intense */
+  gridSwitchLabel: string;
   /** Vibro classification label */
   vibroLabel: string;
 }
@@ -1730,41 +1732,78 @@ export function analyzeGrid(beatmap: ParsedBeatmap, signal?: AbortSignal): GridA
     .map(([kt, c]) => `${kt} ${(c / totalSC * 100).toFixed(0)}%`)
     .join(" + ") || "Stream";
 
-  // Grid-based switch: max jack↔stream transitions in a 4-cell (16-row) window.
-  // 4 cells = 16 rows → 15 adjacent row pairs (including cross-cell boundaries).
-  // For each row pair: jack = same column active in both rows.
+  // Grid-based switch: rows = actual note timestamps (uneven), NOT a fixed
+  // grid. A jack pair = two consecutive time points sharing any column
+  // (lenient: same-column repeats, whether single-column jacks or chord
+  // overlaps — this captures frequent stable alternation like What Is Love).
+  // Consecutive same-type pairs merge into runs; switch = run-type transitions
+  // inside a sliding time window of 16 cells (16 beats). gridSwitch = max over
+  // all window positions. High = frequent stable switching (rhythmic jacks);
+  // low = sustained single-mode sections (pure stream/jumpstream).
   let gridSwitch = 0;
-  // Collect all rows' active columns from pre-cached cell._notes (within 4-row window)
-  const allRowCols: Set<number>[] = [];
-  for (const cell of cells) {
-    if (cell.category === "break" || cell.category === "ln") continue;
-    const bpm = cell.effectiveBPM > 0 ? cell.effectiveBPM : 120;
-    const rowDur = 60000 / bpm / 4;
-    const rowEnd = cell.startTime + 4 * rowDur;
-    const rowCols: Set<number>[] = [new Set(), new Set(), new Set(), new Set()];
-    for (const n of cell._notes) {
-      if (n.start >= rowEnd) break; // past the 4-row window
-      const relTime = n.start - cell.startTime;
-      const r = Math.min(3, Math.max(0, Math.floor(relTime / rowDur)));
-      rowCols[r]!.add(n.col);
-    }
-    for (const cols of rowCols) allRowCols.push(cols);
-  }
-  // Build pair types (jack/stream) for ALL consecutive row pairs
-  const pairTypes: ("jack" | "stream")[] = [];
-  for (let i = 0; i < allRowCols.length - 1; i++) {
-    const overlap = [...allRowCols[i]!].some((c) => allRowCols[i + 1]!.has(c));
-    pairTypes.push(overlap ? "jack" : "stream");
-  }
-  // Slide 15-pair window (= 16 rows = 4 cells)
-  const WINDOW_PAIRS = 15;
-  if (pairTypes.length >= WINDOW_PAIRS) {
-    for (let i = 0; i <= pairTypes.length - WINDOW_PAIRS; i++) {
-      let sw = 0;
-      for (let j = i + 1; j < i + WINDOW_PAIRS; j++) {
-        if (pairTypes[j] !== pairTypes[j - 1]) sw++;
+  {
+    // Gather all rice notes (LN heads included as single notes at their start
+    // time), cluster into uneven rows by actual timestamp.
+    const rows: { t: number; cols: Set<number> }[] = [];
+    for (const cell of cells) {
+      if (cell.category === "break") continue;
+      const cellNotes = cell._notes
+        .filter((n) => n.start >= cell.startTime && n.start < cell.endTime)
+        .sort((a, b) => a.start - b.start);
+      for (const n of cellNotes) {
+        const last = rows[rows.length - 1];
+        if (last !== undefined && n.start - last.t <= 8) last.cols.add(n.col);
+        else rows.push({ t: n.start, cols: new Set([n.col]) });
       }
-      if (sw > gridSwitch) gridSwitch = sw;
+    }
+    if (rows.length < 2) {
+      gridSwitch = 0;
+    } else {
+      // Pair each consecutive time point: shared column -> J, else S.
+      const pairTypes: ("J" | "S")[] = [];
+      const pairTimes: number[] = [];
+      for (let i = 0; i < rows.length - 1; i++) {
+        const a = rows[i]!.cols, b = rows[i + 1]!.cols;
+        if (!a.size || !b.size) continue;
+        pairTypes.push([...a].some((c) => b.has(c)) ? "J" : "S");
+        pairTimes.push(rows[i + 1]!.t);
+      }
+      // Merge consecutive same-type pairs into runs.
+      const runs: { t: "J" | "S"; s: number; e: number }[] = [];
+      {
+        let cur: "J" | "S" | null = null;
+        let start = 0;
+        const flush = (end: number) => { if (cur !== null) { runs.push({ t: cur, s: start, e: end }); cur = null; } };
+        for (let i = 0; i <= pairTypes.length; i++) {
+          const p = i < pairTypes.length ? pairTypes[i]! : null;
+          if (p === null) { flush(i - 1); continue; }
+          if (cur === null) { cur = p; start = i; continue; }
+          if (p !== cur) { flush(i - 1); cur = p; start = i; }
+        }
+        flush(pairTypes.length - 1);
+      }
+      // Sliding time window of 16 cells = 16 beats.
+      const beatLength = getFirstBeatLength(beatmap);
+      const winMs = 16 * beatLength;
+      const lb = (arr: number[], x: number) => {
+        let lo = 0, hi = arr.length;
+        while (lo < hi) { const mid = (lo + hi) >> 1; if (arr[mid]! < x) lo = mid + 1; else hi = mid; }
+        return lo;
+      };
+      const lastT = pairTimes[pairTimes.length - 1]!;
+      for (let t0 = rows[0]!.t; t0 <= lastT; t0 += beatLength) {
+        const tEnd = t0 + winMs;
+        const lo = lb(pairTimes, t0), hi = lb(pairTimes, tEnd);
+        if (hi - lo < 2) continue;
+        let prevT: "J" | "S" | null = null;
+        let sw = 0;
+        for (const r of runs) {
+          if (r.e < lo || r.s >= hi) continue;
+          if (prevT !== null && r.t !== prevT) sw++;
+          prevT = r.t;
+        }
+        if (sw > gridSwitch) gridSwitch = sw;
+      }
     }
   }
 
@@ -1779,7 +1818,17 @@ export function analyzeGrid(beatmap: ParsedBeatmap, signal?: AbortSignal): GridA
     vibroLabel = `Vibro(${vibroResult.displayCvRate ?? 0}%) B${fmt(vibroResult.burstMs)}/C${fmt(vibroResult.controlMs)}`;
   }
 
-  return { cells, segments, bpmKeyTypes, mainKeyType, bpmRange, streamBreakdown, gridSwitch, vibroLabel };
+  // Switch descriptor: high switch = frequent stable alternation (rhythmic
+  // jacks), low = sustained single-mode sections. Steady = stable stream /
+  // jumpstream with few transitions; Mixed = some switching inside streams;
+  // Rhythmic = frequent, regular alternation; Intense = dense chordjack-style
+  // switching.
+  const gridSwitchLabel = gridSwitch <= 15 ? "Steady"
+    : gridSwitch <= 25 ? "Mixed"
+    : gridSwitch <= 35 ? "Rhythmic"
+    : "Intense";
+
+  return { cells, segments, bpmKeyTypes, mainKeyType, bpmRange, streamBreakdown, gridSwitch, gridSwitchLabel, vibroLabel };
 }
 
 // Re-export colors for display
