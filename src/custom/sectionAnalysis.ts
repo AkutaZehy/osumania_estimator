@@ -375,66 +375,48 @@ function buildEdges(lns: LNNote[]): LNEdge[] {
   return edges;
 }
 
-function findComponents(lns: LNNote[], edges: LNEdge[]): LNNote[][] {
-  const nodeIdx = new Map<LNNote, number>();
-  lns.forEach((ln, i) => nodeIdx.set(ln, i));
-  const adj: number[][] = Array.from({ length: lns.length }, () => []);
-  for (const e of edges) { const fi = nodeIdx.get(e.from)!, ti = nodeIdx.get(e.to)!; adj[fi]!.push(ti); adj[ti]!.push(fi); }
-  const visited = new Array(lns.length).fill(false);
-  const components: LNNote[][] = [];
-  for (let i = 0; i < lns.length; i++) {
-    if (visited[i]) continue;
-    const comp: LNNote[] = []; const stack = [i]; visited[i] = true;
-    while (stack.length) { const v = stack.pop()!; comp.push(lns[v]!); for (const nb of adj[v]!) { if (!visited[nb]) { visited[nb] = true; stack.push(nb); } } }
-    components.push(comp);
-  }
-  return components;
+function maxBipartiteMatch(n: number, adj: number[][]): number[] {
+  const matchR = new Array(n).fill(-1);
+  const dfs = (u: number, visited: boolean[]): boolean => {
+    for (const v of adj[u]!) {
+      if (visited[v]) continue;
+      visited[v] = true;
+      if (matchR[v] === -1 || dfs(matchR[v]!, visited)) { matchR[v] = u; return true; }
+    }
+    return false;
+  };
+  for (let u = 0; u < n; u++) { const visited = new Array(n).fill(false); dfs(u, visited); }
+  return matchR;
 }
 
-function spansAllColumns(lnSet: LNNote[], edges: LNEdge[]): boolean {
-  const cols = new Set<number>();
-  for (const e of edges) { if (lnSet.includes(e.from) && lnSet.includes(e.to)) { cols.add(e.from.col); cols.add(e.to.col); } }
-  return cols.size === 4;
-}
-
-function hasFullSpan(lns: LNNote[], edges: LNEdge[]): boolean {
-  return findComponents(lns, edges).some(c => spansAllColumns(c, edges));
-}
-
-function findLongestPath(lns: LNNote[], edges: LNEdge[]): LNNote[] {
-  const adj = new Map<LNNote, LNNote[]>(); for (const ln of lns) adj.set(ln, []); for (const e of edges) adj.get(e.from)!.push(e.to);
-  const sorted = [...lns].sort((a, b) => a.start - b.start);
-  const idx = new Map(sorted.map((ln, i) => [ln, i]));
-  const dpDur = new Array(sorted.length).fill(0), dpLen = new Array(sorted.length).fill(1), dpStart = new Array(sorted.length).fill(0), dpPrev = new Array<number | null>(sorted.length).fill(null), dpAvgCol = new Array(sorted.length).fill(0);
-  for (let i = 0; i < sorted.length; i++) {
-    const ln = sorted[i]!; dpDur[i] = ln.end - ln.start; dpStart[i] = ln.start; dpAvgCol[i] = ln.col;
-    for (const e of edges) { if (e.to === ln) { const pi = idx.get(e.from)!; const candDur = ln.end - dpStart[pi]!, candLen = dpLen[pi]! + 1, candCol = (dpAvgCol[pi]! * dpLen[pi]! + ln.col) / candLen; if (candDur > dpDur[i]! || (candDur === dpDur[i]! && candLen > dpLen[i]!) || (candDur === dpDur[i]! && candLen === dpLen[i]! && candCol < dpAvgCol[i]!)) { dpDur[i] = candDur; dpLen[i] = candLen; dpStart[i] = dpStart[pi]!; dpPrev[i] = pi; dpAvgCol[i] = candCol; } } }
-  }
-  let bestEnd = 0; for (let i = 1; i < sorted.length; i++) { if (dpDur[i]! > dpDur[bestEnd]! || (dpDur[i]! === dpDur[bestEnd]! && dpLen[i]! > dpLen[bestEnd]!) || (dpDur[i]! === dpDur[bestEnd]! && dpLen[i]! === dpLen[bestEnd]! && dpAvgCol[i]! < dpAvgCol[bestEnd]!)) bestEnd = i; }
-  const path: LNNote[] = []; let curr: number | null = bestEnd; while (curr !== null) { path.unshift(sorted[curr]!); curr = dpPrev[curr] ?? null; } return path;
-}
-
-function allConnected(lns: LNNote[], edges: LNEdge[]): boolean {
-  const connected = new Set<LNNote>(); for (const e of edges) { connected.add(e.from); connected.add(e.to); }
-  return connected.size === lns.length;
-}
-
-function computeStrictOuroboros(lns: LNNote[]): number {
+/**
+ * Strict Ouroboros on a single measure window.
+ * Returns 100 if the window's LNs form vertex-disjoint chains (path cover) with
+ * no orphan LNs, after exempting "base" LNs (long orphans covering the window).
+ * Returns 0 otherwise (shared paths / tree / orphan structure).
+ */
+function computeStrictOuroboros(lns: LNNote[], windowMs: number): number {
   if (lns.length < 2) return 0;
-  const edges = buildEdges(lns); if (edges.length === 0) return 0;
-  const components = findComponents(lns, edges);
-  const fullComps = components.filter(c => spansAllColumns(c, edges));
-  if (fullComps.length === 0) return 0;
-  const longestPath = findLongestPath(lns, edges);
-  const pathSet = new Set(longestPath);
-  const remaining = lns.filter(ln => !pathSet.has(ln));
-  if (remaining.length === 0) { let count = 0; for (const c of fullComps) count += c.length; return (count / lns.length) * 100; }
-  const remEdges = edges.filter(e => !pathSet.has(e.from) && !pathSet.has(e.to));
-  if (!hasFullSpan(remaining, remEdges)) return 0;
-  const remComps = findComponents(remaining, remEdges);
-  for (const comp of remComps) { const compE = remEdges.filter(e => comp.includes(e.from) && comp.includes(e.to)); if (compE.length > 0 && !spansAllColumns(comp, remEdges)) return 0; }
-  let count = 0; for (const c of fullComps) count += c.length;
-  return (count / lns.length) * 100;
+  const edges = buildEdges(lns);
+  const inn = new Set<LNNote>(); const outn = new Set<LNNote>();
+  for (const e of edges) { inn.add(e.to); outn.add(e.from); }
+  // Exempt long base LNs: orphans covering ≥75% of the window don't break chains
+  const exempt = new Set(lns.filter(l => !inn.has(l) && !outn.has(l) && (l.end - l.start) >= windowMs * 0.75));
+  const active = lns.filter(l => !exempt.has(l));
+  if (active.length < 2) return 0;
+  const idx = new Map<LNNote, number>(); active.forEach((l, i) => idx.set(l, i));
+  const aEdges = edges.filter(e => idx.has(e.from) && idx.has(e.to));
+  const aIn = new Set<LNNote>(); const aOut = new Set<LNNote>();
+  for (const e of aEdges) { aIn.add(e.to); aOut.add(e.from); }
+  if (active.some(l => !aIn.has(l) && !aOut.has(l))) return 0;
+  const outAdj: number[][] = Array.from({ length: active.length }, () => []);
+  for (const e of aEdges) outAdj[idx.get(e.from)!]!.push(idx.get(e.to)!);
+  const matchR = maxBipartiteMatch(active.length, outAdj);
+  const ho = new Array(active.length).fill(false), hi = new Array(active.length).fill(false);
+  for (let v = 0; v < active.length; v++) if (matchR[v] !== -1) { ho[matchR[v]!] = true; hi[v] = true; }
+  let covered = 0;
+  for (let i = 0; i < active.length; i++) if (ho[i] || hi[i]) covered++;
+  return covered === active.length ? 100 : 0;
 }
 
 // ---------------------------------------------------------------------------
@@ -457,22 +439,81 @@ function analyzeLNMetrics(
   const tapLNCount = lns.filter((ln) => ln.end - ln.start <= maxTapLN).length;
   const tapLN = lns.length > 0 ? (tapLNCount / lns.length) * 100 : 0;
 
-  // Inverse: ≥2 columns with LN bodies
-  const colBodies = new Map<number, number>();
-  for (const ln of lns) {
-    colBodies.set(ln.col, (colBodies.get(ln.col) || 0) + 1);
-  }
-  const inverseCount = [...colBodies.values()].filter((v) => v >= 2).length;
-  const inverse = lns.length > 0 ? (inverseCount / lns.length) * 100 : 0;
+  // Inverse: genuine H-T-H-T alternation between two columns.
+  // Requirements:
+  //   1. LNs must be longer than beatLength/8 (filter ultra-short/tap LNs)
+  //   2. ≥3 cross-column T→H alignments between the column pair
+  //   3. Same-column start gaps must be consistent (≥65% within ±40% of median)
+  const invMinDur = beatLength / 8;
+  const invGapTol = 0.40; // relative tolerance for same-column gap consistency
+  const nonTapLNs = lns.filter(ln => ln.end - ln.start > invMinDur);
+  let inverseCount = 0;
+  for (let colA = 0; colA < 4; colA++) {
+    for (let colB = colA + 1; colB < 4; colB++) {
+      const aLNs = nonTapLNs.filter(ln => ln.col === colA).sort((a, b) => a.start - b.start);
+      const bLNs = nonTapLNs.filter(ln => ln.col === colB).sort((a, b) => a.start - b.start);
+      if (aLNs.length < 2 || bLNs.length < 2) continue;
 
-  // Overlay: overlapping LN pairs — O(k log k) via sweep-line
+      // Check same-column gap consistency on EACH column
+      const consistentColumn = (colLNs: typeof aLNs): boolean => {
+        if (colLNs.length < 2) return false;
+        const gaps = colLNs.slice(1).map((ln, i) => ln.start - colLNs[i]!.start);
+        const med = [...gaps].sort((a, b) => a - b)[Math.floor(gaps.length / 2)] ?? 0;
+        if (med <= 0) return false;
+        const consistent = gaps.filter(g => Math.abs(g - med) / med < invGapTol);
+        // For 2 LNs (1 gap): all gaps must be consistent
+        // For 3+ LNs: ≥65% of gaps must be consistent
+        return gaps.length === 1 ? consistent.length === 1 : consistent.length >= gaps.length * 0.65;
+      };
+      if (!consistentColumn(aLNs) || !consistentColumn(bLNs)) continue;
+
+      // Count T→H alignments: A.tail → B.head (no RC between them)
+      let aligned = 0;
+      const usedB = new Set<number>();
+      for (const a of aLNs) {
+        for (let bi = 0; bi < bLNs.length; bi++) {
+          if (usedB.has(bi)) continue;
+          if (Math.abs(a.end - bLNs[bi]!.start) < 21) {
+            const hasRC = notes.some(n => !n.isLN && n.start >= a.end && n.start <= bLNs[bi]!.start);
+            if (!hasRC) { aligned++; usedB.add(bi); break; }
+          }
+        }
+      }
+      // Count reverse: B.tail → A.head
+      const usedA = new Set<number>();
+      for (let ai = 0; ai < aLNs.length; ai++) {
+        for (const b of bLNs) {
+          if (usedA.has(ai)) continue;
+          if (Math.abs(b.end - aLNs[ai]!.start) < 21) {
+            const hasRC = notes.some(n => !n.isLN && n.start >= b.end && n.start <= aLNs[ai]!.start);
+            if (!hasRC) { aligned++; usedA.add(ai); break; }
+          }
+        }
+      }
+      if (aligned < 3) continue;
+
+      const invLNs = new Set([...aLNs, ...bLNs]);
+      inverseCount += invLNs.size;
+    }
+  }
+  const inverse = nonTapLNs.length > 0 ? Math.min(100, (inverseCount / nonTapLNs.length) * 100) : 0;
+
+  // Overlay: strict forward overlap (a.start < b.start && a.end > b.start) — O(k log k)
   let overlayCount = 0;
   if (lns.length >= 2) {
     const sorted = [...lns].sort((a, b) => a.start - b.start);
     const starts = sorted.map(l => l.start);
+    // nextDistinct[i]: first index whose start is strictly greater than sorted[i].start
+    // (excludes same-start chords, which are not overlays)
+    const nextDistinct = new Array<number>(sorted.length);
+    let k = sorted.length;
+    for (let i = sorted.length - 1; i >= 0; i--) {
+      nextDistinct[i] = k;
+      if (i === 0 || starts[i - 1] !== starts[i]) k = i;
+    }
     for (let i = 0; i < sorted.length; i++) {
       const hi = lowerBound(starts, sorted[i]!.end);
-      overlayCount += Math.max(0, hi - i - 1);
+      overlayCount += Math.max(0, hi - nextDistinct[i]!);
     }
   }
   const overlay = lns.length > 0 ? (overlayCount / lns.length) * 100 : 0;
@@ -498,18 +539,18 @@ function analyzeLNMetrics(
   }
   const ar = lns.length > 0 ? (arCount / lns.length) * 100 : 0;
 
-  // Ouroboros: strict path-removal resilience (v3.1.0)
+  // Ouroboros: strict path-cover on this measure window (v3.1.0)
   const lnsOnly: LNNote[] = lns.map(n => ({ col: n.col, start: n.start, end: n.end }));
-  const ouroboros = computeStrictOuroboros(lnsOnly);
+  const ouroboros = computeStrictOuroboros(lnsOnly, beatLength * 4);
 
-  // Tree: ≥75% LNs connected in T→H graph, but NOT strict ouroboros
+  // Tree: all LNs participate in T→H edges but NOT strict ouroboros
   let tree = 0;
   if (ouroboros < 30) {
     const tEdges = buildEdges(lns.map(n => ({ col: n.col, start: n.start, end: n.end })));
     if (tEdges.length > 0) {
-      const connected = new Set<number>();
-      for (const e of tEdges) { connected.add(e.from.col * 100000 + e.from.start); connected.add(e.to.col * 100000 + e.to.start); }
-      if (connected.size / Math.max(1, lns.length) >= 0.75) tree = 100;
+      const connected = new Set<LNNote>();
+      for (const e of tEdges) { connected.add(e.from); connected.add(e.to); }
+      if (connected.size === lns.length) tree = 100;
     }
   }
 
@@ -534,7 +575,10 @@ function analyzeLNMetrics(
     if (cMax < pMin || cMin > pMax) speedy++;
   }
   const rowCount = Math.max(1, sortedRows.length - 1);
-  const speedyWC = (speedy / rowCount) * 100;
+  // Speedy requires at least 8th-note density (≥2 rows/beat).
+  // Slower alternating patterns (quarter-note/half-BPM) aren't "speedy."
+  const rowsPerBeat = sortedRows.length / 4;
+  const speedyWC = rowsPerBeat >= 2 ? (speedy / rowCount) * 100 : 0;
   const jackyWC = (jacky / rowCount) * 100;
 
   return { inverse, overlay, ar, tapLN, ouroboros, tree, speedyWC, jackyWC };
@@ -542,11 +586,14 @@ function analyzeLNMetrics(
 
 /**
  * Determine LN subtype based on metrics (first match wins).
- * v3.1.0 priority: Ouroboros → Tree → Timing Hell → Inverse → Density → Speedy WC → Jacky WC
+ * Priority: Ouroboros → Inverse → Tree → Timing Hell → Density → Speedy WC → Jacky WC
  */
 function determineLNSubtype(metrics: SegmentLNMetrics): string {
   if (metrics.ouroboros >= LN_SUBTYPES.ouroboros.threshold.ouroboros!) {
     return LN_SUBTYPES.ouroboros.name;
+  }
+  if (metrics.inverse >= LN_SUBTYPES.reverse.threshold.inverse) {
+    return LN_SUBTYPES.reverse.name;
   }
   if (metrics.tree >= LN_SUBTYPES.tree.threshold.tree!) {
     return LN_SUBTYPES.tree.name;
@@ -556,9 +603,6 @@ function determineLNSubtype(metrics: SegmentLNMetrics): string {
     metrics.ar >= LN_SUBTYPES.releasehell.threshold.ar!
   ) {
     return LN_SUBTYPES.releasehell.name;
-  }
-  if (metrics.inverse >= LN_SUBTYPES.reverse.threshold.inverse) {
-    return LN_SUBTYPES.reverse.name;
   }
   if (metrics.tapLN >= LN_SUBTYPES.density.threshold.tapLN!) {
     return LN_SUBTYPES.density.name;

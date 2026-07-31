@@ -553,14 +553,22 @@ function analyzeLNCell(notes: NoteInfo[], beatLength: number): LNMetrics {
   const invCols = [...colBodies.values()].filter((v) => v >= 2).length;
   const inverse = (invCols / lns.length) * 100;
 
-  // Overlay — O(k log k) via sweep-line
+  // Overlay: strict forward overlap (a.start < b.start && a.end > b.start) — O(k log k)
   let overlayCount = 0;
   if (lns.length >= 2) {
     const sorted = [...lns].sort((a, b) => a.start - b.start);
     const starts = sorted.map(l => l.start);
+    // nextDistinct[i]: first index whose start is strictly greater than sorted[i].start
+    // (excludes same-start chords, which are not overlays)
+    const nextDistinct = new Array<number>(sorted.length);
+    let k = sorted.length;
+    for (let i = sorted.length - 1; i >= 0; i--) {
+      nextDistinct[i] = k;
+      if (i === 0 || starts[i - 1] !== starts[i]) k = i;
+    }
     for (let i = 0; i < sorted.length; i++) {
       const hi = lowerBound(starts, sorted[i]!.end);
-      overlayCount += Math.max(0, hi - i - 1);
+      overlayCount += Math.max(0, hi - nextDistinct[i]!);
     }
   }
   const overlay = (overlayCount / lns.length) * 100;
@@ -586,10 +594,22 @@ function analyzeLNCell(notes: NoteInfo[], beatLength: number): LNMetrics {
   }
   const ar = (arCount / lns.length) * 100;
 
-  // Ouroboros: head/tail gap < 21ms — O(k log k) via optimized buildEdges
-  const lnsAsNodes: LNNote[] = lns.map(n => ({ col: n.col, start: n.start, end: n.end }));
-  const ouroEdges = buildEdges(lnsAsNodes);
-  const ouroboros = lns.length > 0 ? (ouroEdges.length / lns.length) * 100 : 0;
+  // Ouroboros: per-measure window path-cover hit ratio (unified with sectionAnalysis)
+  const winMs = beatLength * 4;
+  const lnsAsNodes: LNNote[] = lns.map(n => ({ col: n.col, start: n.start, end: n.end })).sort((a, b) => a.start - b.start);
+  let ouroHits = 0, ouroWindows = 0;
+  if (lnsAsNodes.length > 0) {
+    const t0 = lnsAsNodes[0]!.start;
+    const buckets = new Map<number, LNNote[]>();
+    for (const ln of lnsAsNodes) {
+      const wi = Math.floor((ln.start - t0) / winMs);
+      const g = buckets.get(wi) ?? [];
+      g.push(ln);
+      buckets.set(wi, g);
+    }
+    for (const [, wlns] of buckets) { ouroWindows++; if (computeStrictOuroboros(wlns, winMs) > 0) ouroHits++; }
+  }
+  const ouroboros = ouroWindows > 0 ? (ouroHits / ouroWindows) * 100 : 0;
 
   // Shield: normal → LN same column within LN_WIN — O(k + n) column-grouped
   const [normByCol, lnByCol] = [Array.from({ length: 4 }, () => [] as NoteInfo[]), Array.from({ length: 4 }, () => [] as NoteInfo[])];
@@ -605,7 +625,7 @@ function analyzeLNCell(notes: NoteInfo[], beatLength: number): LNMetrics {
       if (li < cLn.length && cLn[li]!.start - n.start <= LN_WIN) shieldCount++;
     }
   }
-  const shield = lns.length > 0 ? (shieldCount / lns.length) * 100 : 0;
+  const shield = lns.length > 0 ? (shieldCount / Math.max(1, normals.length)) * 100 : 0;
 
   // Reversed shield: LN tail → normal same column within LN_WIN — O(k + n)
   let revShieldCount = 0;
@@ -741,12 +761,13 @@ function classifyLNCell(
     triggered.push({ key: "density", name: "Density", value: `Tap${Math.round(metrics.tapLN)}%` });
   }
 
-  // Primary subtype: v3.1.0 strict priority (Ouroboros → Tree → Timing Hell → Inverse → Speedy WC → Jacky WC)
+  // Primary subtype: aligned with section priority (Ouroboros → Inverse → Tree → Timing Hell → Density → Speedy WC → Jacky WC)
   let lnSubtype = "LN Unknown";
   if (metrics.ouroboros >= 30) lnSubtype = "Ouroboros";
+  else if (metrics.inverse >= 20) lnSubtype = "LN Inverse";
   else if (metrics.tree >= 1) lnSubtype = "LN Tree";
   else if (metrics.overlay >= 30 && metrics.ar >= 20) lnSubtype = "Timing Hell";
-  else if (metrics.inverse >= 20) lnSubtype = "LN Inverse";
+  else if (metrics.tapLN >= 40) lnSubtype = "Density";
   else if (metrics.speedyWC >= 50) lnSubtype = "Speedy WC";
   else if (metrics.jackyWC >= 20) lnSubtype = "Jacky WC";
 
@@ -777,66 +798,48 @@ function buildEdges(lns: LNNote[]): LNEdge[] {
   return edges;
 }
 
-function findComponents(lns: LNNote[], edges: LNEdge[]): LNNote[][] {
-  const nodeIdx = new Map<LNNote, number>();
-  lns.forEach((ln, i) => nodeIdx.set(ln, i));
-  const adj: number[][] = Array.from({ length: lns.length }, () => []);
-  for (const e of edges) { const fi = nodeIdx.get(e.from)!, ti = nodeIdx.get(e.to)!; adj[fi]!.push(ti); adj[ti]!.push(fi); }
-  const visited = new Array(lns.length).fill(false);
-  const components: LNNote[][] = [];
-  for (let i = 0; i < lns.length; i++) {
-    if (visited[i]) continue;
-    const comp: LNNote[] = []; const stack = [i]; visited[i] = true;
-    while (stack.length) { const v = stack.pop()!; comp.push(lns[v]!); for (const nb of adj[v]!) { if (!visited[nb]) { visited[nb] = true; stack.push(nb); } } }
-    components.push(comp);
-  }
-  return components;
+function maxBipartiteMatch(n: number, adj: number[][]): number[] {
+  const matchR = new Array(n).fill(-1);
+  const dfs = (u: number, visited: boolean[]): boolean => {
+    for (const v of adj[u]!) {
+      if (visited[v]) continue;
+      visited[v] = true;
+      if (matchR[v] === -1 || dfs(matchR[v]!, visited)) { matchR[v] = u; return true; }
+    }
+    return false;
+  };
+  for (let u = 0; u < n; u++) { const visited = new Array(n).fill(false); dfs(u, visited); }
+  return matchR;
 }
 
-function spansAllColumns(lnSet: LNNote[], edges: LNEdge[]): boolean {
-  const cols = new Set<number>();
-  for (const e of edges) { if (lnSet.includes(e.from) && lnSet.includes(e.to)) { cols.add(e.from.col); cols.add(e.to.col); } }
-  return cols.size === 4;
-}
-
-function hasFullSpan(lns: LNNote[], edges: LNEdge[]): boolean {
-  return findComponents(lns, edges).some(c => spansAllColumns(c, edges));
-}
-
-function findLongestPath(lns: LNNote[], edges: LNEdge[]): LNNote[] {
-  const adj = new Map<LNNote, LNNote[]>(); for (const ln of lns) adj.set(ln, []); for (const e of edges) adj.get(e.from)!.push(e.to);
-  const sorted = [...lns].sort((a, b) => a.start - b.start);
-  const idx = new Map(sorted.map((ln, i) => [ln, i]));
-  const dpDur = new Array(sorted.length).fill(0), dpLen = new Array(sorted.length).fill(1), dpStart = new Array(sorted.length).fill(0), dpPrev = new Array<number | null>(sorted.length).fill(null), dpAvgCol = new Array(sorted.length).fill(0);
-  for (let i = 0; i < sorted.length; i++) {
-    const ln = sorted[i]!; dpDur[i] = ln.end - ln.start; dpStart[i] = ln.start; dpAvgCol[i] = ln.col;
-    for (const e of edges) { if (e.to === ln) { const pi = idx.get(e.from)!; const candDur = ln.end - dpStart[pi]!, candLen = dpLen[pi]! + 1, candCol = (dpAvgCol[pi]! * dpLen[pi]! + ln.col) / candLen; if (candDur > dpDur[i]! || (candDur === dpDur[i]! && candLen > dpLen[i]!) || (candDur === dpDur[i]! && candLen === dpLen[i]! && candCol < dpAvgCol[i]!)) { dpDur[i] = candDur; dpLen[i] = candLen; dpStart[i] = dpStart[pi]!; dpPrev[i] = pi; dpAvgCol[i] = candCol; } } }
-  }
-  let bestEnd = 0; for (let i = 1; i < sorted.length; i++) { if (dpDur[i]! > dpDur[bestEnd]! || (dpDur[i]! === dpDur[bestEnd]! && dpLen[i]! > dpLen[bestEnd]!) || (dpDur[i]! === dpDur[bestEnd]! && dpLen[i]! === dpLen[bestEnd]! && dpAvgCol[i]! < dpAvgCol[bestEnd]!)) bestEnd = i; }
-  const path: LNNote[] = []; let curr: number | null = bestEnd; while (curr !== null) { path.unshift(sorted[curr]!); curr = dpPrev[curr] ?? null; } return path;
-}
-
-function allConnected(lns: LNNote[], edges: LNEdge[]): boolean {
-  const connected = new Set<LNNote>(); for (const e of edges) { connected.add(e.from); connected.add(e.to); }
-  return connected.size === lns.length;
-}
-
-function computeStrictOuroboros(lns: LNNote[]): number {
+/**
+ * Strict Ouroboros on a single measure window.
+ * Returns 100 if the window's LNs form vertex-disjoint chains (path cover) with
+ * no orphan LNs, after exempting "base" LNs (long orphans covering the window).
+ * Returns 0 otherwise (shared paths / tree / orphan structure).
+ */
+function computeStrictOuroboros(lns: LNNote[], windowMs: number): number {
   if (lns.length < 2) return 0;
-  const edges = buildEdges(lns); if (edges.length === 0) return 0;
-  const components = findComponents(lns, edges);
-  const fullComps = components.filter(c => spansAllColumns(c, edges));
-  if (fullComps.length === 0) return 0;
-  const longestPath = findLongestPath(lns, edges);
-  const pathSet = new Set(longestPath);
-  const remaining = lns.filter(ln => !pathSet.has(ln));
-  if (remaining.length === 0) { let count = 0; for (const c of fullComps) count += c.length; return (count / lns.length) * 100; }
-  const remEdges = edges.filter(e => !pathSet.has(e.from) && !pathSet.has(e.to));
-  if (!hasFullSpan(remaining, remEdges)) return 0;
-  const remComps = findComponents(remaining, remEdges);
-  for (const comp of remComps) { const compE = remEdges.filter(e => comp.includes(e.from) && comp.includes(e.to)); if (compE.length > 0 && !spansAllColumns(comp, remEdges)) return 0; }
-  let count = 0; for (const c of fullComps) count += c.length;
-  return (count / lns.length) * 100;
+  const edges = buildEdges(lns);
+  const inn = new Set<LNNote>(); const outn = new Set<LNNote>();
+  for (const e of edges) { inn.add(e.to); outn.add(e.from); }
+  // Exempt long base LNs: orphans covering ≥75% of the window don't break chains
+  const exempt = new Set(lns.filter(l => !inn.has(l) && !outn.has(l) && (l.end - l.start) >= windowMs * 0.75));
+  const active = lns.filter(l => !exempt.has(l));
+  if (active.length < 2) return 0;
+  const idx = new Map<LNNote, number>(); active.forEach((l, i) => idx.set(l, i));
+  const aEdges = edges.filter(e => idx.has(e.from) && idx.has(e.to));
+  const aIn = new Set<LNNote>(); const aOut = new Set<LNNote>();
+  for (const e of aEdges) { aIn.add(e.to); aOut.add(e.from); }
+  if (active.some(l => !aIn.has(l) && !aOut.has(l))) return 0;
+  const outAdj: number[][] = Array.from({ length: active.length }, () => []);
+  for (const e of aEdges) outAdj[idx.get(e.from)!]!.push(idx.get(e.to)!);
+  const matchR = maxBipartiteMatch(active.length, outAdj);
+  const ho = new Array(active.length).fill(false), hi = new Array(active.length).fill(false);
+  for (let v = 0; v < active.length; v++) if (matchR[v] !== -1) { ho[matchR[v]!] = true; hi[v] = true; }
+  let covered = 0;
+  for (let i = 0; i < active.length; i++) if (ho[i] || hi[i]) covered++;
+  return covered === active.length ? 100 : 0;
 }
 
 // ---------------------------------------------------------------------------
@@ -1691,7 +1694,13 @@ export function analyzeGrid(beatmap: ParsedBeatmap, signal?: AbortSignal): GridA
     }
     const fb = [...fbBPM.values()].sort((a, b) => b.bpm - a.bpm);
     const fbPass = fb.find(e => e.cellCount >= threshold(e.keyType, e.bpm));
-    mainKeyType = fbPass ?? fb.reduce((a, b) => a.cellCount >= b.cellCount ? a : b);
+    if (fb.length === 0) {
+      // All-LN map: no non-LN fallback exists — pick the highest-cellCount key type overall
+      mainKeyType = [...bpmKeyTypes].sort((a, b) => b.cellCount - a.cellCount)[0]
+        ?? { keyType: "Unknown", bpm: 0, cellCount: 0, percentage: 0 };
+    } else {
+      mainKeyType = fbPass ?? fb.reduce((a, b) => a.cellCount >= b.cellCount ? a : b);
+    }
   }
   // Recompute percentage for the winner (relative to total non-LN)
   const nonLNCells = bpmKeyTypes.filter(e => !LN_TYPES.has(e.keyType)).reduce((s, e) => s + e.cellCount, 0);
