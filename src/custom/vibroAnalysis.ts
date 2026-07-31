@@ -12,7 +12,15 @@ export interface VibroResult {
   /** Total canVibro (fractional) */
   totalCV: number;
   /** Verdict */
-  verdict: "no_vibro" | "forced_jack" | "vibro";
+  verdict: "no_vibro" | "suspicious" | "vibro";
+  /** Burst-type lian4 count (neat/aligned: single-col jack or same-grid columns) */
+  burst: number;
+  /** Control-type lian4 count (staggered/offset columns) */
+  control: number;
+  /** Total time (ms) covered by Burst sequences */
+  burstMs: number;
+  /** Total time (ms) covered by Control sequences */
+  controlMs: number;
   /** Dominant qualifying type for display */
   displayType: string | null;
   /** CanVibro rate of the display type */
@@ -31,21 +39,26 @@ export function analyzeVibro(notes: Note[], bpm: number): VibroResult {
       totalLian4: 0, totalCV: 0,
       types: { S: 0, H: 0, F: 0, C: 0 },
       typeCv: { S: 0, H: 0, F: 0, C: 0 },
-      verdict: "no_vibro", displayType: null, displayCvRate: null,
+      verdict: "no_vibro", burst: 0, control: 0, burstMs: 0, controlMs: 0, displayType: null, displayCvRate: null,
     };
   }
 
   const typeData: Record<string, { n: number; cv: number }> = { S: { n: 0, cv: 0 }, H: { n: 0, cv: 0 }, F: { n: 0, cv: 0 }, C: { n: 0, cv: 0 } };
   let totalCV = 0;
+  let burstN = 0, controlN = 0;
+  let burstMs = 0, controlMs = 0;
 
   for (const s of all) {
     const { col, t: tt } = s;
     const L = tt.length, st = tt[0]!, et = tt[L-1]!, sd = (et - st) / Math.max(1, L - 1);
     const occ = [new Set<number>(), new Set<number>(), new Set<number>(), new Set<number>()];
+    // Other-column note offsets relative to the main-column grid, in units of sd
+    const offs: number[] = [];
     for (const n of notes) {
       if (n.t < st || n.t > et) continue;
       const pos = Math.round((n.t - st) / sd);
       if (pos >= 0 && pos < L) occ[n.col]!.add(pos);
+      if (n.col !== col) offs.push((((n.t - st) % sd) + sd) % sd / sd);
     }
     const d = occ.map(o => o.size / L);
     const dc = d.filter(x => x >= 0.6).length;
@@ -70,13 +83,24 @@ export function analyzeVibro(notes: Note[], bpm: number): VibroResult {
     typeData[tp]!.n++;
     typeData[tp]!.cv += canV ? seqWeight : 0;
     totalCV += canV ? seqWeight : 0;
+
+    // Burst/Control: burst = pure single-col jack, or other columns on the same grid
+    let isBurst: boolean;
+    if (offs.length === 0) isBurst = true;
+    else {
+      const aligned = offs.filter(o => o < 0.15 || o > 0.85).length;
+      const staggered = offs.filter(o => o >= 0.35 && o <= 0.65).length;
+      isBurst = aligned > staggered;
+    }
+    if (isBurst) { burstN++; burstMs += et - st; }
+    else { controlN++; controlMs += et - st; }
   }
 
   const t = all.length;
   const cvPct = totalCV / t;
 
   // Verdict
-  let verdict: "no_vibro" | "forced_jack" | "vibro" = "forced_jack";
+  let verdict: "no_vibro" | "suspicious" | "vibro" = "suspicious";
   if (t === 0) verdict = "no_vibro";
   else if (cvPct > 0.35 && bpm >= 150) {
     const hOk = typeData.H.n >= 5 && typeData.H.cv / typeData.H.n > 0.6;
@@ -118,6 +142,10 @@ export function analyzeVibro(notes: Note[], bpm: number): VibroResult {
     typeCv: { S: typeData.S!.cv, H: typeData.H!.cv, F: typeData.F!.cv, C: typeData.C!.cv },
     totalCV,
     verdict,
+    burst: burstN,
+    control: controlN,
+    burstMs,
+    controlMs,
     displayType: verdict === "vibro" ? displayType : null,
     displayCvRate: verdict === "vibro" ? displayCvRate : null,
   };

@@ -1773,8 +1773,11 @@ export function analyzeGrid(beatmap: ParsedBeatmap, signal?: AbortSignal): GridA
   const vibroResult = analyzeVibro(notes, firstBPM);
   let vibroLabel: string;
   if (vibroResult.verdict === "no_vibro") vibroLabel = "No Vibro";
-  else if (vibroResult.verdict === "forced_jack") vibroLabel = "Forced Jack";
-  else vibroLabel = `${vibroResult.displayType ?? ""} Vibro(${vibroResult.displayCvRate ?? 0}%)`;
+  else if (vibroResult.verdict === "suspicious") vibroLabel = "Vibro Suspicious";
+  else {
+    const fmt = (ms: number) => (ms / 1000).toFixed(1) + "s";
+    vibroLabel = `Vibro(${vibroResult.displayCvRate ?? 0}%) B${fmt(vibroResult.burstMs)}/C${fmt(vibroResult.controlMs)}`;
+  }
 
   return { cells, segments, bpmKeyTypes, mainKeyType, bpmRange, streamBreakdown, gridSwitch, vibroLabel };
 }
