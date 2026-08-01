@@ -3,4 +3,4 @@ Author: Akuta Zehy
 Usecase: ingame
 CompatibleWith: tosu
 Resolution: 640x960
-Version: 4.0.0
+Version: 4.0.3

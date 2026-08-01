@@ -49,11 +49,15 @@ function computeDensityForTimes(
  *
  * @param beatmap  - Parsed beatmap data (must be 4K).
  * @param windowMs - Sliding window width in milliseconds (default 1000).
+ * @param speedRate - Rate multiplier (1.0 = nomod). Density counts are
+ *   computed on the original map window, then multiplied by speedRate to
+ *   express notes per real (modded) second.
  * @returns Density metrics for each column, each hand, and both hands.
  */
 export function computeDensityMetrics(
   beatmap: ParsedBeatmap,
   windowMs: number = 1000,
+  speedRate: number = 1,
 ): DensityMetrics {
   const { columns, noteStarts } = beatmap;
   const n = noteStarts.length;
@@ -74,7 +78,12 @@ export function computeDensityMetrics(
       columnTimes[col]!,
       windowMs,
     );
-    perColumn.push({ column: col, maxDensity, medianDensity, meanDensity });
+    perColumn.push({
+      column: col,
+      maxDensity: maxDensity * speedRate,
+      medianDensity: medianDensity * speedRate,
+      meanDensity: meanDensity * speedRate,
+    });
   }
 
   // Per-hand: left = columns 0-1, right = columns 2-3.
@@ -88,9 +97,15 @@ export function computeDensityMetrics(
   const allTimes = [...leftTimes, ...rightTimes].sort((a, b) => a - b);
   const bothHands = computeDensityForTimes(allTimes, windowMs);
 
+  const scale = (m: { maxDensity: number; medianDensity: number; meanDensity: number }) => ({
+    maxDensity: m.maxDensity * speedRate,
+    medianDensity: m.medianDensity * speedRate,
+    meanDensity: m.meanDensity * speedRate,
+  });
+
   return {
     perColumn,
-    perHand: { left, right },
-    bothHands,
+    perHand: { left: scale(left), right: scale(right) },
+    bothHands: scale(bothHands),
   };
 }

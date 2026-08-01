@@ -3,6 +3,7 @@
 // ============================================================
 
 import type { TosuStateMessage } from "../types/tosu.js";
+import { parseModsFromData } from "./mods.js";
 
 export type BeatmapChangeHandler = (msg: TosuStateMessage) => void;
 export type StateChangeHandler = (msg: TosuStateMessage) => void;
@@ -14,6 +15,7 @@ export class WebSocketManager {
   private onBeatmapChange: BeatmapChangeHandler;
   private onStateChange: StateChangeHandler;
   private lastBeatmapMd5 = "";
+  private lastModSig = "";
 
   constructor(endpoint: string, onBeatmapChange: BeatmapChangeHandler, onStateChange: StateChangeHandler) {
     this.endpoint = endpoint;
@@ -74,8 +76,20 @@ export class WebSocketManager {
 
       // Detect beatmap change via MD5 or checksum
       const md5 = (beatmap.md5 ?? beatmap.checksum ?? "").toLowerCase();
-      if (md5 && md5 !== this.lastBeatmapMd5) {
-        this.lastBeatmapMd5 = md5;
+      const beatmapChanged = !!md5 && md5 !== this.lastBeatmapMd5;
+
+      // Detect mod change (DT/NC/HT/IN/HO/rate/...): only trust the mod
+      // signature when this packet carries explicit mod info OR explicitly
+      // reports "no mods" (so closing a mod back to nomod also re-triggers).
+      // Partial packets without a mods payload don't spuriously re-trigger.
+      const modData = parseModsFromData(msg as Record<string, unknown>);
+      const modChanged =
+        (modData.hasModInfo || modData.hasExplicitNoMod) &&
+        modData.modSignature !== this.lastModSig;
+
+      if (beatmapChanged || modChanged) {
+        if (beatmapChanged) this.lastBeatmapMd5 = md5;
+        if (modChanged) this.lastModSig = modData.modSignature;
         this.onBeatmapChange(msg);
       }
     } catch {

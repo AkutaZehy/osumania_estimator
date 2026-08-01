@@ -225,10 +225,31 @@ export function analyzeBeatmap(
   const modFlags: ModFlags = { ...DEFAULT_MOD_FLAGS, ...options?.modFlags };
 
   // ---- Step 1: Parse ----
+  let parser: OsuFileParser;
   let beatmap: ParsedBeatmap;
   try {
-    const parser = new OsuFileParser(osuText);
+    parser = new OsuFileParser(osuText);
     parser.process();
+    // Apply IN/HO conversion on the same parser so all downstream analysis
+    // (patterns, custom, grid, sections) sees the converted chart.
+    if (modFlags.in) {
+      try {
+        parser.modIN();
+      } catch {
+        // keep original on convert error
+      }
+    }
+    if (modFlags.ho) {
+      try {
+        parser.modHO();
+      } catch {
+        // keep original on convert error
+      }
+    }
+    if (modFlags.in || modFlags.ho) {
+      parser.getNoteTimes();
+      parser.getObjectIntervals();
+    }
     beatmap = parser.getParsedData();
   } catch {
     return buildErrorResult(
@@ -283,7 +304,7 @@ export function analyzeBeatmap(
   // ---- Step 3: Pattern Analysis ----
   let patterns: PatternSummary;
   try {
-    patterns = analyzePatterns(beatmap, opts.speedRate);
+    patterns = analyzePatterns(beatmap);
   } catch {
     patterns = defaultPatternSummary(beatmap.duration, beatmap.lnRatio);
   }
@@ -293,7 +314,7 @@ export function analyzeBeatmap(
   // Computed early so custom metrics can use its BPM for anchor analysis.
   let gridAnalysis;
   try {
-    gridAnalysis = analyzeGrid(beatmap, signal);
+    gridAnalysis = analyzeGrid(beatmap, signal, opts.speedRate);
   } catch (err) {
     if (err instanceof AnalysisCancelledError) throw err;
     console.error("[GridAnalysis] failed", err);

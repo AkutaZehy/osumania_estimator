@@ -43,7 +43,7 @@ export function computeCustomMetrics(
   gridAnalysis?: GridAnalysisResult | null,
 ): CustomMetrics {
   // Density metrics (used by multiple sub-modules).
-  const density = computeDensityMetrics(parsed);
+  const density = computeDensityMetrics(parsed, 1000, speedRate);
 
   // Equivalent BPM based on pattern type and note division.
   const equivalentBPM = computeEquivalentBPM(parsed, patterns, speedRate);

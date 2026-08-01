@@ -1,4 +1,4 @@
-# osumania-estimator v4.0.3
+# osumania-estimator v4.1.0
 
 A tosu overlay plugin for osu!mania 4K key pattern analysis and difficulty estimation.
 
@@ -176,7 +176,7 @@ The switch metric is computed over uneven rows clustered from actual note timest
 
 ## Technical Notes
 
-### Architecture (v4.0.3)
+### Architecture (v4.1.0)
 
 The analysis pipeline is decomposed into focused modules:
 
@@ -348,9 +348,13 @@ Jack imbalance uses 16r/64r windows; stream imbalance excludes jack rows.
 
 ### MOD Support
 
-DT/NC (1.5x), HT/DC (0.75x), lazer custom rates.
+Mod changes trigger a live re-analysis (no manual refresh needed):
 
-> Notice: MODs could NOT be effective once you toggled then since tosu didn't send any signal, this could be a bug, you should refresh manually by switching maps.
+- **Speed mods**: DT/NC (1.5x), HT (0.75x), lazer custom rates (e.g. DC via `speed_change`), and the tosu `rate` field take priority. BPM and other time-based metrics scale by `speedRate`; pattern/key-type classification stays speed-invariant (structure is analyzed at nominal speed, only the resulting numbers scale).
+- **Conversion mods**: IN (tap→hold) and HO (hold→tap) re-run the parser with the converted chart so all downstream analysis (patterns, grid, sections, custom) sees the modded notes.
+- **OD mods**: HR/EZ are detected (`odFlag`) for difficulty weighting.
+
+The mod signature is `speedRate | odFlag | cvtFlag`, and any signature change re-triggers analysis — including toggling back to no-mod.
 
 ### Performance
 
@@ -372,7 +376,7 @@ npm test                         # Vitest suite
 
 Output: `deploy/osumania-estimator by Akuta Zehy/`
 
-Test maps are in `maps/` (10 dan packs + SV test maps). Test scripts in `scripts/` and test suites in `test/`.
+Test maps are in `maps/` (dan packs + SV test maps). Test suites in `test/` (vitest suites live under `test/*.test.ts`; the rest are one-off diagnostic scripts).
 
 ### Acknowledgments
 

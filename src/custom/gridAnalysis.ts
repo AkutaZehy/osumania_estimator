@@ -1387,7 +1387,11 @@ function decomposeStreamRun(
 /**
  * Run the full cell-based grid analysis on a parsed beatmap.
  */
-export function analyzeGrid(beatmap: ParsedBeatmap, signal?: AbortSignal): GridAnalysisResult | null {
+export function analyzeGrid(
+  beatmap: ParsedBeatmap,
+  signal?: AbortSignal,
+  speedRate: number = 1,
+): GridAnalysisResult | null {
   // Safety: skip grid analysis for extremely long maps (100000+ notes)
   // to prevent pathological cases from causing issues.
   // if (beatmap.noteStarts.length > 100000) return null;
@@ -1827,6 +1831,24 @@ export function analyzeGrid(beatmap: ParsedBeatmap, signal?: AbortSignal): GridA
     : gridSwitch <= 25 ? "Mixed"
     : gridSwitch <= 35 ? "Rhythmic"
     : "Intense";
+
+  // Apply speedRate to time-based fields only. Structure (category,
+  // subdivision, noteCount, grades, gridSwitch, startTime/endTime) is
+  // speed-independent and stays on the original map's grid.
+  if (speedRate !== 1) {
+    for (const cell of cells) {
+      cell.effectiveBPM = Math.round(cell.effectiveBPM * speedRate);
+    }
+    for (const seg of segments) {
+      seg.effectiveBPM = Math.round(seg.effectiveBPM * speedRate);
+    }
+    for (const kt of bpmKeyTypes) {
+      kt.bpm = Math.round(kt.bpm * speedRate);
+    }
+    mainKeyType.bpm = Math.round(mainKeyType.bpm * speedRate);
+    bpmRange.min = Math.round(bpmRange.min * speedRate);
+    bpmRange.max = Math.round(bpmRange.max * speedRate);
+  }
 
   return { cells, segments, bpmKeyTypes, mainKeyType, bpmRange, streamBreakdown, gridSwitch, gridSwitchLabel, vibroLabel };
 }

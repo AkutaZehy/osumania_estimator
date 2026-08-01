@@ -5,7 +5,7 @@ import { OsuFileParser } from "../src/parser/osuFileParser.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const MAPS_DIR = path.resolve(__dirname, "../maps");
+const MAPS_DIR = path.resolve(__dirname, "../maps/JACK");
 
 // Stage VII M25-M40
 const file = "Peng Gue-Xiang - Dan Signicial's Jack Pack (signupredir111) [Stage VII - Saltwater Chicken & Duck, Roasted Chicken & Duck (Ice Techno Remix)].osu";

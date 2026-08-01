@@ -54,7 +54,7 @@ function strictOuroboros(lns: LNNote[]): number {
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const file = path.resolve(__dirname, "../maps/Hitori Tori - perthed again (yambabom remix) (TheToaphster) [Advanced].osu");
+const file = path.resolve(__dirname, "../maps/LN2/Hitori Tori - perthed again (yambabom remix) (TheToaphster) [Advanced].osu");
 const osuText = fs.readFileSync(file, "utf-8");
 const parser = new OsuFileParser(osuText); parser.process();
 const beatmap = parser.getParsedData();

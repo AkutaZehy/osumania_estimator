@@ -34,39 +34,14 @@ export function calculateSunny(
   options?: { withGraph?: boolean },
   signal?: AbortSignal,
 ): SunnyResult {
-  // Handle cvtFlag compatibility — IN and HO mods
-  let cvtFlag: string | null = null;
-  if (modFlags.in) cvtFlag = (cvtFlag ?? "") + "IN";
-  if (modFlags.ho) cvtFlag = (cvtFlag ?? "") + "HO";
-
   // Create parser and process
   const parser = new OsuFileParser(osuText);
   parser.process();
 
-  // Apply mods to parser before preprocessing
-  if (cvtFlag) {
-    if (cvtFlag.includes("IN")) {
-      try {
-        parser.modIN();
-      } catch {
-        // keep original on convert error
-      }
-    }
-    if (cvtFlag.includes("HO")) {
-      try {
-        parser.modHO();
-      } catch {
-        // keep original on convert error
-      }
-    }
-    // Refresh side-data after mods (matching JS ref lines 221-224)
-    parser.getNoteTimes();
-    parser.getObjectIntervals();
-  }
-
   signal?.throwIfAborted();
 
-  // preprocessFile handles HR/EZ internally via modFlags, and IN/HO via the parser
+  // preprocessFile applies HR/EZ OD adjustments internally, and applies
+  // IN/HO conversion via the parser (single application, matching JS ref).
   const preprocessed: PreprocessResult = preprocessFile(
     parser.getParsedData(),
     speedRate,

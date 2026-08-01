@@ -8,11 +8,11 @@ const __dirname = path.dirname(__filename);
 const MAPS_DIR = path.resolve(__dirname, "../maps");
 
 const files = [
-  ["Stage VI", "Toby Fox - Dan Signicial's Jack Pack (signupredir111) [Stage VI - Another Medium].osu"],
-  ["Stage VII", "Peng Gue-Xiang - Dan Signicial's Jack Pack (signupredir111) [Stage VII - Saltwater Chicken & Duck, Roasted Chicken & Duck (Ice Techno Remix)].osu"],
-  ["CrossOver", "Various Artists - Dan ~ REFORM ~ JackMap Pack (DDMythical) [CrossOver ~ 4th ~ (Marathon)].osu"],
-  ["Disconnected Trance", "Various Artists - Dan ~ REFORM ~ SpeedMap Pack (DDMythical) [Disconnected Trance ~ 9th ~ (Marathon)].osu"],
-  ["Eternal Drain", "Various Artists - Dan ~ REFORM ~ StaminaMap Pack (DDMythical) [Eternal Drain ~ 2nd ~ (Marathon)].osu"],
+  ["Stage VI", "JACK/Toby Fox - Dan Signicial's Jack Pack (signupredir111) [Stage VI - Another Medium].osu"],
+  ["Stage VII", "JACK/Peng Gue-Xiang - Dan Signicial's Jack Pack (signupredir111) [Stage VII - Saltwater Chicken & Duck, Roasted Chicken & Duck (Ice Techno Remix)].osu"],
+  ["CrossOver", "JACK/Various Artists - Dan ~ REFORM ~ JackMap Pack (DDMythical) [CrossOver ~ 4th ~ (Marathon)].osu"],
+  ["Disconnected Trance", "STREAM-SS/Various Artists - Dan ~ REFORM ~ SpeedMap Pack (DDMythical) [Disconnected Trance ~ 9th ~ (Marathon)].osu"],
+  ["Eternal Drain", "STREAM-HJS/Various Artists - Dan ~ REFORM ~ StaminaMap Pack (DDMythical) [Eternal Drain ~ 2nd ~ (Marathon)].osu"],
 ];
 
 for (const [label, file] of files) {

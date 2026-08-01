@@ -34,12 +34,13 @@ export interface TosuStateMessage {
     combo?: { current: number; max: number };
     hits?: Record<string, number>;
     time?: number;
-    mods?: number;
+    mods?: TosuMods;
     [key: string]: unknown;
   };
   menu?: {
     gameMode?: number;
     state?: number;
+    mods?: TosuMods;
     [key: string]: unknown;
   };
   files?: {
@@ -50,4 +51,24 @@ export interface TosuStateMessage {
     beatmapFile?: string;
     [key: string]: unknown;
   };
+}
+
+/** Tosu v2 mods object: { checksum, number, name, array, rate } */
+export interface TosuMods {
+  checksum?: string;
+  /** Stable-style bitfield */
+  number?: number;
+  /** Combined acronym string, e.g. "DTNC" (stable) */
+  name?: string;
+  /** Lazer mod list; each item has acronym + settings */
+  array?: Array<TosuModItem | string>;
+  /** Exact clock rate, e.g. 1.5 (DT) / 0.75 (HT) — most reliable field */
+  rate?: number;
+  [key: string]: unknown;
+}
+
+export interface TosuModItem {
+  acronym?: string;
+  settings?: Record<string, unknown>;
+  [key: string]: unknown;
 }

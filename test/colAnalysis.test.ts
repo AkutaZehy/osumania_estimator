@@ -8,11 +8,11 @@ const __dirname = path.dirname(__filename);
 const MAPS_DIR = path.resolve(__dirname, "../maps");
 
 const files = [
-  "Toby Fox - Dan Signicial's Jack Pack (signupredir111) [Stage VI - Another Medium].osu",
-  "Peng Gue-Xiang - Dan Signicial's Jack Pack (signupredir111) [Stage VII - Saltwater Chicken & Duck, Roasted Chicken & Duck (Ice Techno Remix)].osu",
-  "Various Artists - Dan ~ REFORM ~ SpeedMap Pack (DDMythical) [Disconnected Trance ~ 9th ~ (Marathon)].osu",
-  "Various Artists - Dan ~ REFORM ~ StaminaMap Pack (DDMythical) [Eternal Drain ~ 2nd ~ (Marathon)].osu",
-  "Various Artists - Dan ~ REFORM ~ JackMap Pack (DDMythical) [CrossOver ~ 4th ~ (Marathon)].osu",
+  "JACK/Toby Fox - Dan Signicial's Jack Pack (signupredir111) [Stage VI - Another Medium].osu",
+  "JACK/Peng Gue-Xiang - Dan Signicial's Jack Pack (signupredir111) [Stage VII - Saltwater Chicken & Duck, Roasted Chicken & Duck (Ice Techno Remix)].osu",
+  "STREAM-SS/Various Artists - Dan ~ REFORM ~ SpeedMap Pack (DDMythical) [Disconnected Trance ~ 9th ~ (Marathon)].osu",
+  "STREAM-HJS/Various Artists - Dan ~ REFORM ~ StaminaMap Pack (DDMythical) [Eternal Drain ~ 2nd ~ (Marathon)].osu",
+  "JACK/Various Artists - Dan ~ REFORM ~ JackMap Pack (DDMythical) [CrossOver ~ 4th ~ (Marathon)].osu",
 ];
 
 for (const file of files) {

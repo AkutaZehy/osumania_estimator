@@ -176,9 +176,19 @@ export function computeStaminaMetrics(beatmap: ParsedBeatmap, _density: unknown,
   const series = buildDensityTimeSeries(primitives, stepMs);
   const result = analyzeDensitySeries(series, stepMs);
 
-  // Compute real stretchRatio and switchFrequency
+  // stretchRatio is a pure ratio — computed before duration scaling so it
+  // stays speed-invariant (both numerator and denominator shrink by the
+  // same factor).
   result.stretchRatio = beatmap.duration > 0 ? result.medTotalTime / beatmap.duration : 0;
   result.switchFrequency = computeSwitchFrequency(primitives);
+
+  // Durations are in map-time; under speedRate physical duration shrinks.
+  // Densities (4-row note counts) are structural and stay put.
+  if (speedRate !== 1) {
+    result.maxDuration = Math.round(result.maxDuration / speedRate);
+    result.medDuration = Math.round(result.medDuration / speedRate);
+    result.medTotalTime = Math.round(result.medTotalTime / speedRate);
+  }
 
   return result;
 }

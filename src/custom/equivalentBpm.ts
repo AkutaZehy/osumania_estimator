@@ -87,8 +87,8 @@ export function computeEquivalentBPM(beatmap: ParsedBeatmap, patterns: PatternSu
   }
 
   return {
-    rawBPM: Math.round(raw * 100) / 100,
-    adjustedBPM: Math.round(adjustedBPM * 100) / 100,
+    rawBPM: Math.round((raw * speedRate) * 100) / 100,
+    adjustedBPM: Math.round((adjustedBPM * speedRate) * 100) / 100,
     dominantDivision: div,
     patternType,
   };

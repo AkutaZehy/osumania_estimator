@@ -5,7 +5,7 @@ import { OsuFileParser } from "../src/parser/osuFileParser.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const MAPS_DIR = path.resolve(__dirname, "../maps");
+const MAPS_DIR = path.resolve(__dirname, "../maps/JACK");
 
 const file = "Toby Fox - Dan Signicial's Jack Pack (signupredir111) [Stage VI - Another Medium].osu";
 const osuText = fs.readFileSync(path.join(MAPS_DIR, file), "utf-8");
