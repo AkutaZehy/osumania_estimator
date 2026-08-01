@@ -1,0 +1,356 @@
+{
+  "version": 1,
+  "estimator": "akutav0",
+  "labels": {
+    "03f9e568613652262c83a24f8e58d880": {
+      "isvibro": false,
+      "isLN": false,
+      "RC": -2,
+      "LN": null,
+      "note": ""
+    },
+    "ecda7479d16dc557aa1fbd18fc88be3e": {
+      "isvibro": false,
+      "isLN": false,
+      "RC": 3,
+      "LN": null,
+      "note": ""
+    },
+    "f379683d06689f5b4f7ca0bd49ec4e98": {
+      "isvibro": false,
+      "isLN": false,
+      "RC": 2.7,
+      "LN": null,
+      "note": ""
+    },
+    "e9c5b3918c35619961e17e58fb55c548": {
+      "isvibro": false,
+      "isLN": false,
+      "RC": 2,
+      "LN": null,
+      "note": ""
+    },
+    "a40066c8b68c2d943f3d17642cbdf621": {
+      "isvibro": false,
+      "isLN": false,
+      "RC": 2,
+      "LN": null,
+      "note": ""
+    },
+    "129ef1f433e477efd6159bed16e7230a": {
+      "isvibro": false,
+      "isLN": false,
+      "RC": 3,
+      "LN": null,
+      "note": ""
+    },
+    "9188ea66627c8f75b2017fe3f64988df": {
+      "isvibro": false,
+      "isLN": false,
+      "RC": 2.8,
+      "LN": null,
+      "note": ""
+    },
+    "1319e7a00884ae51268a1bae243abce0": {
+      "isvibro": false,
+      "isLN": false,
+      "RC": 3,
+      "LN": null,
+      "note": ""
+    },
+    "5a3b3092c6739745ead23f20bc56e870": {
+      "isvibro": false,
+      "isLN": false,
+      "RC": 3.2,
+      "LN": null,
+      "note": ""
+    },
+    "70d428f49da5ef97d2b8154c6750c9c7": {
+      "isvibro": false,
+      "isLN": false,
+      "RC": 4,
+      "LN": null,
+      "note": ""
+    },
+    "b541745b97e8f7784abae1fe681eed2b": {
+      "isvibro": false,
+      "isLN": false,
+      "RC": 3.7,
+      "LN": null,
+      "note": ""
+    },
+    "75970ebae5d8714851535fa4c938d96d": {
+      "isvibro": false,
+      "isLN": false,
+      "RC": 3.2,
+      "LN": null,
+      "note": ""
+    },
+    "7a88ad442b0321f47d5351a9b2585816": {
+      "isvibro": false,
+      "isLN": false,
+      "RC": 4,
+      "LN": null,
+      "note": ""
+    },
+    "b631f2c6d0684230725865b2ea13fbde": {
+      "isvibro": false,
+      "isLN": false,
+      "RC": 4,
+      "LN": null,
+      "note": ""
+    },
+    "bdafc4768ae7df16addfbd254577cca2": {
+      "isvibro": false,
+      "isLN": false,
+      "RC": 5,
+      "LN": null,
+      "note": ""
+    },
+    "ba3f456e819a153bf804a093db1c990f": {
+      "isvibro": false,
+      "isLN": false,
+      "RC": 5,
+      "LN": null,
+      "note": ""
+    },
+    "83d038cfa0cee51354e01baa34e92257": {
+      "isvibro": false,
+      "isLN": false,
+      "RC": 4.2,
+      "LN": null,
+      "note": ""
+    },
+    "da93d3c5454f1802f254954c861d4f55": {
+      "isvibro": false,
+      "isLN": false,
+      "RC": 5,
+      "LN": null,
+      "note": ""
+    },
+    "c5a3d06701df91dbcd6297574fd19ecb": {
+      "isvibro": false,
+      "isLN": false,
+      "RC": 5,
+      "LN": null,
+      "note": ""
+    },
+    "da12834d7a9b39f6923a2be755333876": {
+      "isvibro": false,
+      "isLN": false,
+      "RC": 6,
+      "LN": null,
+      "note": ""
+    },
+    "d8be9266d493791a3823b00b24b33d76": {
+      "isvibro": false,
+      "isLN": false,
+      "RC": 5.5,
+      "LN": null,
+      "note": ""
+    },
+    "920066988cf14eb6217268b2360f6a0d": {
+      "isvibro": false,
+      "isLN": false,
+      "RC": 4.2,
+      "LN": null,
+      "note": ""
+    },
+    "336698dadf3945a30a3f4d80a2e58b37": {
+      "isvibro": false,
+      "isLN": false,
+      "RC": 5.5,
+      "LN": null,
+      "note": ""
+    },
+    "208110c33b11847c0ddc47ce14085e9c": {
+      "isvibro": false,
+      "isLN": false,
+      "RC": 4,
+      "LN": null,
+      "note": ""
+    },
+    "392304f950cd4145545ee6aff6882873": {
+      "isvibro": false,
+      "isLN": false,
+      "RC": 5.2,
+      "LN": null,
+      "note": ""
+    },
+    "75cca5302801d4c13d8eb6289cff8aaa": {
+      "isvibro": false,
+      "isLN": false,
+      "RC": 5.2,
+      "LN": null,
+      "note": ""
+    },
+    "f6ac4cb51442a35ed74d4e7a3caf28ba": {
+      "isvibro": false,
+      "isLN": false,
+      "RC": 3.8,
+      "LN": null,
+      "note": ""
+    },
+    "b71f7fcfe91553130ae20c2b67bef44a": {
+      "isvibro": false,
+      "isLN": false,
+      "RC": 4.5,
+      "LN": null,
+      "note": ""
+    },
+    "c8210a9c6cd5d003b4c3bb2efa4862de": {
+      "isvibro": false,
+      "isLN": false,
+      "RC": 5.5,
+      "LN": null,
+      "note": ""
+    },
+    "5412ace2c911b679420dd859aa3eda44": {
+      "isvibro": false,
+      "isLN": true,
+      "RC": -2,
+      "LN": 1,
+      "note": ""
+    },
+    "204c5d39f22680e399886ef84d835d9a": {
+      "isvibro": false,
+      "isLN": false,
+      "RC": 2.7,
+      "LN": null,
+      "note": ""
+    },
+    "5f5554eb9cbd9db9da0bb6913bdd3453": {
+      "isvibro": false,
+      "isLN": false,
+      "RC": 3,
+      "LN": null,
+      "note": ""
+    },
+    "3d3ffb379a0f5c58ff363ec5fdabf4b7": {
+      "isvibro": false,
+      "isLN": false,
+      "RC": 2.8,
+      "LN": null,
+      "note": ""
+    },
+    "51bb19e8053a2d38afa8d980bd4d6d4e": {
+      "isvibro": false,
+      "isLN": true,
+      "RC": 0,
+      "LN": 2,
+      "note": ""
+    },
+    "b35e350410a21a9c1cc56043b2d01a38": {
+      "isvibro": false,
+      "isLN": true,
+      "RC": 3,
+      "LN": 4,
+      "note": ""
+    },
+    "53d117f7b8832d8a7776e52a713eed8c": {
+      "isvibro": false,
+      "isLN": true,
+      "RC": 1,
+      "LN": 3,
+      "note": ""
+    },
+    "560b92eaf5ce7a49582c68c74b937d4f": {
+      "isvibro": false,
+      "isLN": true,
+      "RC": 3,
+      "LN": 2.2,
+      "note": ""
+    },
+    "32cdcf914eb76da6234b2d7959f0f323": {
+      "isvibro": false,
+      "isLN": false,
+      "RC": 1,
+      "LN": 4,
+      "note": ""
+    },
+    "aef6e483e128046a5ac2b618e5f5e1d8": {
+      "isvibro": false,
+      "isLN": false,
+      "RC": 1.2,
+      "LN": 2.3,
+      "note": ""
+    },
+    "1b85b1e687cc39d20bd7e8eb05d9448f": {
+      "isvibro": false,
+      "isLN": false,
+      "RC": 3.3,
+      "LN": 3,
+      "note": ""
+    },
+    "d44128b5aa7e50d152c30bcc6ad28d6a": {
+      "isvibro": false,
+      "isLN": true,
+      "RC": 4,
+      "LN": 5,
+      "note": ""
+    },
+    "1be165064fe854fd68f4ca65cb91b528": {
+      "isvibro": false,
+      "isLN": true,
+      "RC": 4.2,
+      "LN": 3,
+      "note": ""
+    },
+    "280fbffc4c6b089bbe3f5e339d4511ff": {
+      "isvibro": false,
+      "isLN": true,
+      "RC": 4,
+      "LN": 4,
+      "note": ""
+    },
+    "ab11a0a6f58d646c1d2cc23e6f6dbee2": {
+      "isvibro": false,
+      "isLN": true,
+      "RC": 5,
+      "LN": 5,
+      "note": ""
+    },
+    "f728cc073eefabdfe83e780e87281a0f": {
+      "isvibro": false,
+      "isLN": true,
+      "RC": 5.2,
+      "LN": 5,
+      "note": ""
+    },
+    "0290b3f01b756a25d3086849f076acc6": {
+      "isvibro": false,
+      "isLN": false,
+      "RC": 5,
+      "LN": null,
+      "note": ""
+    },
+    "39c9dccbb891e015518a0b845f90a82a": {
+      "isvibro": false,
+      "isLN": true,
+      "RC": 2.8,
+      "LN": 2,
+      "note": ""
+    },
+    "7ab4105615d9faed4ab61a01641deecd": {
+      "isvibro": false,
+      "isLN": true,
+      "RC": 4.8,
+      "LN": 5,
+      "note": ""
+    },
+    "e1c38f4208c8f8023a8f62b07c9ee36d": {
+      "isvibro": false,
+      "isLN": true,
+      "RC": 3.4,
+      "LN": 3,
+      "note": ""
+    },
+    "c629d56ee5e60cb9112dda568503fb59": {
+      "isvibro": false,
+      "isLN": true,
+      "RC": 4,
+      "LN": 4.5,
+      "note": ""
+    }
+  }
+}

@@ -8,6 +8,7 @@ import type { DensityMetrics, AnchorTier, LNMetrics } from "../types/custom.js";
 import type { PatternCluster } from "../types/patterns.js";
 import type { SectionAnalysis, SegmentCategory } from "../custom/sectionAnalysis.js";
 import type { GridAnalysisResult, SegmentResult, CellResult } from "../custom/gridAnalysis.js";
+import { estimateDifficulty, formatAkuta } from "../estimate.js";
 
 const DEBUG = true;
 function debugLog(...args: unknown[]): void {
@@ -202,6 +203,7 @@ function measureColor(category: SegmentCategory, subType?: string): string {
 export function showLoading(): void {
   setText("status", "Analyzing...");
   setText("star-rating", "--"); setText("star-value", "");
+  setText("akuta-value", "");
   setText("bpm", "-- BPM"); setText("ln-ratio", "LN --");
   setHtml("patterns", ""); setHtml("custom-metrics", "");
 }
@@ -263,6 +265,10 @@ export function showResult(result: DifficultyResult): void {
     sunnyText += ` (${diffPct >= 0 ? "+" : ""}${diffPct.toFixed(1)}%)`;
   }
   setText("star-value", sunnyText);
+
+  // AKUTA difficulty estimate (RC/LN dan with sub-tier), right under sunny
+  const akuta = estimateDifficulty(result);
+  setText("akuta-value", formatAkuta(akuta));
 
   // Status/title
   const titleText = `${meta.artist} \u2014 ${meta.title} [${meta.version}]`;
@@ -705,7 +711,7 @@ const LN_TYPE_COLORS: Record<string, string> = {
 
 export function showWaiting(): void {
   setText("status", "Connected \u2014 waiting for beatmap...");
-  setText("star-rating", "--"); setText("star-value", "");
+  setText("star-rating", "--"); setText("star-value", ""); setText("akuta-value", "");
   setText("bpm", "-- BPM"); setText("ln-ratio", "LN --");
   setHtml("patterns", ""); setHtml("custom-metrics", "");
 }

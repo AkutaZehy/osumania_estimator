@@ -9,7 +9,10 @@
     "dev": "node esbuild.config.mjs --watch",
     "typecheck": "tsc --noEmit",
     "test": "vitest run --passWithNoTests",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "calib:export": "esbuild calib/scripts/exportDataset.ts --bundle --platform=node --format=esm --outfile=calib/.tmp/export.mjs && node calib/.tmp/export.mjs",
+    "calib:scan": "esbuild calib/scripts/scan.ts --bundle --platform=node --format=esm --outfile=calib/.tmp/scan.mjs && node calib/.tmp/scan.mjs",
+    "calib:fit": "esbuild calib/scripts/fit.ts --bundle --platform=node --format=esm --outfile=calib/.tmp/fit.mjs && node calib/.tmp/fit.mjs"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",

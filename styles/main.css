@@ -74,6 +74,18 @@ html, body {
   transition: color 0.3s ease;
 }
 
+#akuta-value {
+  font-size: 13px;
+  color: #e0a3ff;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  margin-top: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: color 0.3s ease;
+}
+
 /* Star color by difficulty tier */
 .star-easy    { color: #66bb6a; }  /* 0.00 - 2.49 */
 .star-normal  { color: #42a5f5; }  /* 2.50 - 3.99 */
