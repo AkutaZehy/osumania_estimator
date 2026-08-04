@@ -203,12 +203,13 @@ function buildErrorResult(
  *
  * Full pipeline:
  * 1. Parse .osu text → ParsedBeatmap
- * 2. Create Chart intermediate representation
- * 3. Run Sunny Rework star rating algorithm
- * 4. Build pattern summary (placeholder; defaults used)
- * 5. Compute custom density metrics
+ * 2. Run Sunny Rework star rating algorithm
+ * 3. Build pattern summary
+ * 4. Grid analysis (cell-based key type classification)
+ * 5. Compute custom metrics (density, jack, stream, tech, stamina, LN, anchor)
  * 6. Aggregate Sunny + Custom into final star rating
- * 7. Build result with metadata and graph
+ * 7. Section analysis (segment-based pattern breakdown)
+ * 8. Build result with metadata and graph
  *
  * @param osuText  - Raw .osu file content as string.
  * @param options  - Partial AnalysisOptions (speedRate, modFlags, densityWindowMs).

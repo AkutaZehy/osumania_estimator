@@ -12,12 +12,12 @@ Copy the entire `osumania-estimator by Akuta Zehy` folder into tosu's `static/` 
 
 ### View Mode (Settings)
 
-Configured via tosu settings panel. `settings.json` provides two view modes:
+Configured via tosu settings panel. `settings.json` provides two toggles:
 
-| Mode     | Description                                                  |
-| -------- | ------------------------------------------------------------ |
-| Simple   | Section bar timeline only (compact, suitable during gameplay) |
-| Detailed | Full structure grid + segment table + metrics panels         |
+| Setting           | Description                                             |
+| ----------------- | ------------------------------------------------------- |
+| Show Pattern Breakdown | Toggle pattern type bars and structure grid/segment table |
+| Show Custom Metrics    | Toggle density, jack, stream, tech, stamina, LN panels  |
 
 ### In-Game Bar (gameplay overlay)
 
@@ -84,7 +84,7 @@ Color-coded measure-by-measure timeline showing pattern type per measure. Playhe
 
 #### Main Display (top line)
 
-Shows the effective BPM and dominant pattern type. On vibro maps detected by the built-in vibro analyzer, displays "VIBRO" in red with the dominant subtype (Single/Hand/Full/Common). BPM is `rawBPM * division / 4 * speedRate`. For SV maps with multiple BPM zones, per-cell active timing point lookup provides accurate BPM per segment.
+Shows the effective BPM and dominant pattern type. On vibro maps detected by the built-in vibro analyzer, displays "Vibro" in red. BPM is `rawBPM * division / 4 * speedRate`. For SV maps with multiple BPM zones, per-cell active timing point lookup provides accurate BPM per segment.
 
 #### Sunny (second line)
 
@@ -92,15 +92,15 @@ Sunny Rework star rating. If the algorithm returns below 0.01, a density-based e
 
 #### Pattern Breakdown Bars
 
-Up to 4 bars. Bar width = pattern amount / max amount. Types include: Stream, JumpStream, HandStream, MiniJacks, ChordJacks, LongJacks, MiniTrills, Rolls, Trills, SplitTrill, JumpTrill, ColumnLock, Shield, Release, Inverse, Inversi, Doublestep, Anchor.
+Up to 4 bars. Bar width = pattern amount / max amount. Types include: Stream, JumpStream, HandStream, MiniJacks, ChordJacks, LongJacks, MiniTrills, Rolls, Trills, SplitTrill, JumpTrill, ColumnLock, Shield, Release, Inverse.
 
 #### Structure Grid
 
-Cards summarizing each detected pattern cluster: BPM, cell count, density metrics, and segment distribution. Hidden by default in Simple mode. Key type names use full form (e.g. "Mid Chordjack @ 150 BPM").
+Cards summarizing each detected pattern cluster: BPM, cell count, density metrics, and segment distribution. Hidden when Show Pattern Breakdown is off. Key type names use full form (e.g. "Mid Chordjack @ 150 BPM").
 
 #### Segment Table
 
-Detailed row-level breakdown of every segment: type, BPM, cell count, category (stream/jack/LN), grid note total, and duration. Hidden by default in Simple mode.
+Detailed row-level breakdown of every segment: type, BPM, cell count, category (stream/jack/LN), grid note total, and duration. Hidden when Show Pattern Breakdown is off.
 
 #### BPM / DENSITY Panel
 
@@ -138,7 +138,7 @@ Shown when LN ratio > 1% or patterns detected.
 | Finger  | Max per-column density / max both-hands (1.0 balanced, >1.5 biased)            |
 | Hand    | Max(left,right) peak density / max both-hands (1.0 balanced, >1.5 biased)      |
 | Imbal   | 16-row / 64-row / overall hand imbalance. Direction label: L/R/S                |
-| Vibro   | 连4 + canVibro SHFC classification. Display: "VIBRO {Single/Hand/Full/Common}"  |
+| Vibro   | Vibro verdict + cvRate + burst/control timing. Display: `Vibro(cvRate%) Bx.xs/Cx.xs` |
 
 #### STREAM Panel
 
@@ -184,48 +184,48 @@ The analysis pipeline is decomposed into focused modules:
                              analyzer.ts (pipeline orchestrator)
                              ┌──────────────────────────────────────┐
                              │ parse → Sunny → patterns → grid →    │
-                             │   section → custom → aggregate       │
+                             │   custom → aggregate → section       │
                              └──────┬───────────────┬───────────────┘
                                     │               │
           sectionAnalysis.ts        │    gridAnalysis.ts         vibroAnalysis.ts
    ┌─────────────────────┐         │   ┌─────────────────────┐   ┌───────────────────┐
-   │ Beat-grid slicing   │──┬──────│───│ Cell-level subclass │   │ 连4 detection     │
-   │ Segment aggregation │  │      │   │ Pattern class.      │   │ SHFC classification│
-   │ Cross-segment stats │  │      │   │ Jack/stream detect  │   │ canVibro algorithm │
-   │ Summary reports     │  │      │   │ LN metrics          │   │ Verdict engine     │
-   └─────────────────────┘  │      │   │ Grace/flam detect   │   └───────────────────┘
-                            │      │   │ Cross-cell jack     │
-                            │      │   │ Key type (A4 tiers) │
-                            │      │   │ Vibro label         │
-                            │      │   └─────────────────────┘
-                            │      │
-              lnAnalysis.ts │      ├── Per-cell timing lookup:
-   ┌──────────────────────┐ │      │   getActiveTimingPoint(time)
-   │ LN metrics           │ │      │   → correct BPM for SV maps
-   │ Pool scores (CO/DE/  │ │      │     with multiple BPM zones
-   │   WC/TE)             │ │      │
-   │ Release difficulty   │ │      └── Grade helpers:
-   └──────────────────────┘ │          gradeJack(), gradeStream()
-                            │
-        anchorAnalysis.ts   │
-   ┌──────────────────────┐ │
-   │ SF/SH/DH stamina     │ │
-   │ Bridge/P100 tolerance│ │
-   │ Strict P90/P50       │ │
-   └──────────────────────┘ │
-                            │
-   jackAnalysis.ts          │    streamAnalysis.ts
-   ┌──────────────────────┐ │    ┌──────────────────────┐
-   │ Jack-specific metrics│ │    │ Stream classification│
-   │ Finger/Hand pressure │ │    │ Grade / Imbalance    │
-   │ Hand bias (L/R/S)   │ │    │ Broken stream        │
-   └──────────────────────┘ │    │ Hand bias (L/R/S)    │
-                            │    └──────────────────────┘
-                            │
-                     ┌──────┴──────────┐
-                     │  customMetrics   │
-                     │  (aggregator)    │
-                     └─────────────────┘
+   │ Segment slicing     │         │   │ Cell-level subclass │   │ 连4 detection     │
+   │ Pattern analysis    │         │   │ Pattern class.      │   │ SHFC classification│
+   │ LN subtypes         │         │   │ Jack/stream detect  │   │ canVibro algorithm │
+   │ Anomaly detection   │         │   │ LN metrics          │   │ Verdict engine     │
+   └─────────────────────┘         │   │ Grace/flam detect   │   └───────────────────┘
+                                   │   │ Cross-cell jack     │
+                                   │   │ Key type (A4 tiers) │
+                                   │   │ Vibro label         │
+                                   │   └─────────────────────┘
+                                   │
+              lnAnalysis.ts        ├── Per-cell timing lookup:
+   ┌──────────────────────┐        │   getActiveTimingPoint(time)
+   │ LN metrics           │        │   → correct BPM for SV maps
+   │ Pool scores (CO/DE/  │        │     with multiple BPM zones
+   │   WC/TE)             │        │
+   │ Release difficulty   │        └── Grade helpers:
+   └──────────────────────┘            gradeJack(), gradeStream()
+                                   │
+        anchorAnalysis.ts           │
+   ┌──────────────────────┐        │
+   │ SF/SH/DH stamina     │        │
+   │ Bridge/P100 tolerance│        │
+   │ Strict P90/P50       │        │
+   └──────────────────────┘        │
+                                   │
+   jackAnalysis.ts                 │    streamAnalysis.ts
+   ┌──────────────────────┐        │    ┌──────────────────────┐
+   │ Jack-specific metrics│        │    │ Stream classification│
+   │ Finger/Hand pressure │        │    │ Grade / Imbalance    │
+   │ Hand bias (L/R/S)   │        │    │ Broken stream        │
+   └──────────────────────┘        │    │ Hand bias (L/R/S)    │
+                                   │    └──────────────────────┘
+                                   │
+                          ┌────────┴──────────┐
+                          │  customMetrics     │
+                          │  (aggregator)      │
+                          └───────────────────┘
 ```
 
 ### Division-Based Grid
@@ -264,13 +264,7 @@ Main type selection uses BPM grouping (effBPM matching at double speed for jack�
 
 ### SV Map Support (Per-Cell Timing)
 
-Maps with scroll velocity changes (multiple uninherited timing points at different BPMs) no longer use only the first global timing point. Each grid cell looks up the active timing point at its start time:
-
-| Function                  | Purpose                              |
-| ------------------------- | ------------------------------------ |
-| `getActiveTimingPoint()`  | Find the timing point active at `t`  |
-| `getActiveBPM()`          | BPM from the active timing point     |
-| `getActiveBeatLength()`   | Beat length from the active timing point |
+Maps with scroll velocity changes (multiple uninherited timing points at different BPMs) no longer use only the first global timing point. Each grid cell looks up the active timing point at its start time via internal helpers (`getActiveTimingPoint`, `getActiveBPM`, `getActiveBeatLength` in `gridAnalysis.ts`).
 
 This ensures accurate BPM assignment for sections at different tempos within the same map.
 
@@ -304,14 +298,14 @@ BPM scaling: jack-type maps use base BPM for SF and 2× base for SH/DH; stream-t
 
 ### Vibro Detection
 
-Custom-built vibro analyzer replacing the former Etterna MinaCalc-based detection:
+Custom-built vibro analyzer replacing the former Etterna MinaCalc-based detection (MinaCalc WASM is still loaded in `index.html` but no longer referenced by the analysis code):
 
 1. **连4 detection**: Finds same-column 4+ note sequences with trill-aware gap tolerance
 2. **SHFC classification**: Each sequence classified as Single / Hand / Full / Common based on column occupancy density
 3. **canVibro validation**: Per-type adjacency check using column pattern analysis with anti-mash filtering and complex split handling
 4. **Verdict**: "vibro" when weighted canVibro rate > 35% at ≥150 BPM with per-type qualifying thresholds
 
-Vibro verdict and dominant subtype (Single/Hand/Full/Common) are displayed in the JACK panel as `VIBRO {type} ({cvRate}%)`.
+Vibro verdict and burst/control timing breakdown are displayed in the JACK panel. The main display shows "Vibro" in red when verdict is "vibro", or "Vibro Suspicious" when borderline.
 
 ### Grace Detection (Cell-Aware)
 
@@ -344,7 +338,7 @@ Jack imbalance uses 16r/64r windows; stream imbalance excludes jack rows.
 - **Grid Analysis** — Beat-grid cell classification, A4 tier key type system, BPM-first main selection
 - **Pattern Detection** — Interlude sliding-window, 6 core + 22+ specific patterns
 - **Custom Metrics** — Beat-grid density, speed, stamina, tech analysis, anchor (SF/SH/DH) analysis, hand bias, LN pools
-- **Vibro Detection** — Custom 连4 + SHFC + canVibro pipeline (no external dependency)
+- **Vibro Detection** — Custom 连4 + SHFC + canVibro pipeline
 
 ### MOD Support
 
