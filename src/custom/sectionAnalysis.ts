@@ -190,8 +190,8 @@ function computeBeatStructure(
     const relTime = note.start - measureStart;
     const rawBeat = relTime / beatLength;
     const beatIdx = Math.min(3, Math.max(0, Math.floor(rawBeat + 0.001)));
-    structure[beatIdx]++;
-    occupancy[beatIdx].add(note.col);
+    structure[beatIdx]!++;
+    occupancy[beatIdx]!.add(note.col);
   }
   return { structure, occupancy };
 }
@@ -209,7 +209,7 @@ function computeBeatStructure(
  */
 function detectMinijacks(
   notes: Array<{ col: number; start: number }>,
-  beatOccupancy: Array<Set<number>>,
+  _beatOccupancy: Array<Set<number>>,
   beatLength: number,
   measureStart: number,
 ): Map<number, number> {

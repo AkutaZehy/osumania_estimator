@@ -18,7 +18,6 @@ const SETTINGS_ENDPOINT = "http://localhost:24050/api/counters/settings/osumania
 // ---- State ----
 let lastMd5 = "";
 let lastModSig = "";
-let isAnalyzing = false;
 let analysisId = 0;
 let totalDurationMs = 0;
 let gridStartTimeMs = 0;
@@ -60,7 +59,6 @@ async function onBeatmapChange(msg: TosuStateMessage): Promise<void> {
 
   // Cancel previous analysis if still running
   const myId = ++analysisId;
-  isAnalyzing = true;
 
   try {
     const osuText = await fetchBeatmap();
@@ -136,8 +134,6 @@ async function onBeatmapChange(msg: TosuStateMessage): Promise<void> {
     if (myId !== analysisId) return;
     const message = err instanceof Error ? err.message : "Unknown error";
     showError(`Analysis failed: ${message}`);
-  } finally {
-    if (myId === analysisId) isAnalyzing = false;
   }
 }
 

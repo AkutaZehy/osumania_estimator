@@ -103,10 +103,10 @@ export function analyzeVibro(notes: Note[], bpm: number): VibroResult {
   let verdict: "no_vibro" | "suspicious" | "vibro" = "suspicious";
   if (t === 0) verdict = "no_vibro";
   else if (cvPct > 0.35 && bpm >= 150) {
-    const hOk = typeData.H.n >= 5 && typeData.H.cv / typeData.H.n > 0.6;
-    const fOk = typeData.F.n >= 10 && typeData.F.cv / typeData.F.n > 0.5;
-    const cOk = typeData.C.n >= 5 && typeData.C.cv / typeData.C.n > 0.7;
-    const sOk = typeData.S.n >= 5 && typeData.S.cv / typeData.S.n > 0.5;
+    const hOk = typeData.H!.n >= 5 && typeData.H!.cv / typeData.H!.n > 0.6;
+    const fOk = typeData.F!.n >= 10 && typeData.F!.cv / typeData.F!.n > 0.5;
+    const cOk = typeData.C!.n >= 5 && typeData.C!.cv / typeData.C!.n > 0.7;
+    const sOk = typeData.S!.n >= 5 && typeData.S!.cv / typeData.S!.n > 0.5;
     if (hOk || fOk || cOk || sOk) verdict = "vibro";
   }
 
@@ -114,19 +114,19 @@ export function analyzeVibro(notes: Note[], bpm: number): VibroResult {
     let displayType: string | null = null;
     let displayCvRate: number | null = null;
     if (verdict === "vibro") {
-      const hCvRate = typeData.H.n > 0 ? typeData.H.cv / typeData.H.n : 0;
-      const fCvRate = typeData.F.n > 0 ? typeData.F.cv / typeData.F.n : 0;
-      const cCvRate = typeData.C.n > 0 ? typeData.C.cv / typeData.C.n : 0;
-      const sCvRate = typeData.S.n > 0 ? typeData.S.cv / typeData.S.n : 0;
-      const hOk2 = typeData.H.n >= 5 && hCvRate > 0.6;
-      const fOk2 = typeData.F.n >= 10 && fCvRate > 0.5;
-      const cOk2 = typeData.C.n >= 5 && cCvRate > 0.7;
-      const sOk2 = typeData.S.n >= 5 && sCvRate > 0.5;
+      const hCvRate = typeData.H!.n > 0 ? typeData.H!.cv / typeData.H!.n : 0;
+      const fCvRate = typeData.F!.n > 0 ? typeData.F!.cv / typeData.F!.n : 0;
+      const cCvRate = typeData.C!.n > 0 ? typeData.C!.cv / typeData.C!.n : 0;
+      const sCvRate = typeData.S!.n > 0 ? typeData.S!.cv / typeData.S!.n : 0;
+      const hOk2 = typeData.H!.n >= 5 && hCvRate > 0.6;
+      const fOk2 = typeData.F!.n >= 10 && fCvRate > 0.5;
+      const cOk2 = typeData.C!.n >= 5 && cCvRate > 0.7;
+      const sOk2 = typeData.S!.n >= 5 && sCvRate > 0.5;
       const candidates: { label: string; ok: boolean; n: number; cvRate: number }[] = [
-        { label: "Hand", ok: hOk2, n: typeData.H.n, cvRate: hCvRate },
-        { label: "Full", ok: fOk2, n: typeData.F.n, cvRate: fCvRate },
-        { label: "Common", ok: cOk2, n: typeData.C.n, cvRate: cCvRate },
-        { label: "Single", ok: sOk2, n: typeData.S.n, cvRate: sCvRate },
+        { label: "Hand", ok: hOk2, n: typeData.H!.n, cvRate: hCvRate },
+        { label: "Full", ok: fOk2, n: typeData.F!.n, cvRate: fCvRate },
+        { label: "Common", ok: cOk2, n: typeData.C!.n, cvRate: cCvRate },
+        { label: "Single", ok: sOk2, n: typeData.S!.n, cvRate: sCvRate },
       ];
       const best = candidates.filter(c => c.ok).sort((a, b) => b.n - a.n)[0]
         ?? candidates.filter(c => c.n > 0).sort((a, b) => b.n - a.n)[0];

@@ -419,7 +419,7 @@ function computeBeatStructure(
   for (const n of notes) {
     const relTime = n.start - cellStart;
     const idx = Math.min(3, Math.max(0, Math.floor(relTime / subBeat + 0.001)));
-    structure[idx]++;
+    structure[idx]!++;
   }
   const maxBeat = Math.max(...structure);
   return { structure, maxBeat };
@@ -937,7 +937,7 @@ function fallbackGrid(
       if (n.start >= rowEnd) break; // past the 4-row window
       const relTime = n.start - cell.startTime;
       const r = Math.min(3, Math.max(0, Math.floor(relTime / rowDuration)));
-      rowNotes[r]++;
+      rowNotes[r]!++;
     }
     const total = rowNotes.reduce((a, b) => a + b, 0);
     if (total > bestTotal) { bestTotal = total; bestRowNotes = rowNotes; bestMaxBeat = Math.max(...rowNotes, 1); }
@@ -1219,7 +1219,7 @@ function analyzeStreamRuns(
         if (n.start >= rowEnd) break; // past the 4-row window (notes are sorted)
         const relTime = n.start - cell.startTime;
         const r = Math.min(3, Math.max(0, Math.floor(relTime / rd)));
-        rn[r]++;
+        rn[r]!++;
       }
       return { notes: rn.reduce((a, b) => a + b, 0), maxBeat: Math.max(...rn, 1) };
     };

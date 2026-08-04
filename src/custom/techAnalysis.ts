@@ -3,7 +3,7 @@
 // roll/trill classification from primitive data.
 // ============================================================
 
-import type { TechMetrics, RollTrillStats } from "../types/custom.js";
+import type { RollTrillStats } from "../types/custom.js";
 import type { ParsedBeatmap } from "../types/beatmap.js";
 import type { PatternSummary } from "../types/patterns.js";
 import type { GridAnalysisResult, CellResult } from "./gridAnalysis.js";
@@ -15,26 +15,6 @@ import { Direction } from "../types/primitives.js";
 // ---------------------------------------------------------------------------
 // Burst KPS helpers (unchanged)
 // ---------------------------------------------------------------------------
-
-/**
- * Max KPS (notes per second) across all columns.
- * Slides a window of `windowMs` across note start times and finds the peak.
- */
-function maxKPS(times: number[], windowMs: number): number {
-  if (times.length === 0) return 0;
-
-  let maxCount = 0;
-  for (let i = 0; i < times.length; i++) {
-    const windowEnd = times[i]! + windowMs;
-    let count = 0;
-    for (let j = i; j < times.length && times[j]! < windowEnd; j++) {
-      count++;
-    }
-    if (count > maxCount) maxCount = count;
-  }
-
-  return (maxCount / windowMs) * 1000;
-}
 
 /** P10 interval (ms) — the 10th percentile fastest spacing, ignoring chords (dt < 5ms).
  *  Grace notes (< 50ms) don't drag this down as much as plain minimum would. */

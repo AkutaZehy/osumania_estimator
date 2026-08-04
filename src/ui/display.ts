@@ -7,7 +7,7 @@ import type { DifficultyResult } from "../types/result.js";
 import type { DensityMetrics, AnchorTier, LNMetrics } from "../types/custom.js";
 import type { PatternCluster } from "../types/patterns.js";
 import type { SectionAnalysis, SegmentCategory } from "../custom/sectionAnalysis.js";
-import type { GridAnalysisResult, SegmentResult, CellResult } from "../custom/gridAnalysis.js";
+import type { GridAnalysisResult, CellResult } from "../custom/gridAnalysis.js";
 
 const DEBUG = true;
 function debugLog(...args: unknown[]): void {
@@ -153,13 +153,6 @@ function mrow(label: string, value: string): string {
 }
 function col(head: string, ...items: string[]): string {
   return `<div class="grid-col"><div class="metric-head">${head}</div>${items.join("")}</div>`;
-}
-
-function median(arr: number[]): number {
-  if (!arr.length) return 0;
-  const s = [...arr].sort((a, b) => a - b);
-  const m = Math.floor(s.length / 2);
-  return s.length % 2 ? s[m]! : (s[m - 1]! + s[m]!) / 2;
 }
 
 /** Format an AnchorTier for display: `P100 / P90=v×n / P50=v×n` */
@@ -428,281 +421,6 @@ export function showResult(result: DifficultyResult): void {
   }
 }
 
-// ---------------------------------------------------------------------------
-// Section Analysis Rendering
-// ---------------------------------------------------------------------------
-
-/** Render the timeline bar with colored measure blocks */
-function renderSectionBar(sa: SectionAnalysis): void {
-  show("section-bar");
-  const bar = el("measure-bar");
-  const axis = el("time-axis");
-  if (!bar || !axis) return;
-
-  const total = sa.measures.length;
-  const durationSec = sa.totalDuration / 1000;
-
-  // Time axis ticks (8 ticks)
-  let axisHtml = "";
-  for (let i = 0; i <= 8; i++) {
-    const pct = (i / 8) * 100;
-    const sec = (i / 8) * durationSec;
-    const m = Math.floor(sec / 60);
-    const s = Math.floor(sec % 60);
-    axisHtml += `<div class="time-tick" style="left:${pct}%">${m}:${String(s).padStart(2, "0")}</div>`;
-  }
-  axis.innerHTML = axisHtml;
-
-  // Measure blocks — use sub-type color when available
-  let blocksHtml = "";
-  for (const m of sa.measures) {
-    const colorClass = m.subType ? `c-${m.category}-${m.subType}` : `c-${m.category}`;
-    const color = measureColor(m.category, m.subType);
-    const tooltip = `M${m.index + 1}: ${m.category}${m.subType ? "/" + m.subType : ""}`;
-    let dots = "";
-    for (const a of m.anomalies) {
-      dots += `<div class="anomaly-dot dot-${a}"></div>`;
-    }
-    blocksHtml += `<div class="measure-block ${colorClass}" style="background:${color}" title="${tooltip}">${dots}</div>`;
-  }
-  bar.innerHTML = blocksHtml;
-
-  // Pattern labels (segments with 2+ measures)
-  const wrapper = el("measure-bar-wrapper");
-  if (!wrapper) return;
-  // Remove old labels
-  wrapper.querySelectorAll(".pattern-label").forEach((n) => n.remove());
-}
-
-/** Render structure grid cards (skip break segments) */
-function renderStructureGrid(sa: SectionAnalysis): void {
-  const grid = el("structure-grid");
-  if (!grid) return;
-
-  const nonBreakSegs = sa.segments.filter((s) => s.category !== "break");
-  if (nonBreakSegs.length === 0) {
-    hide("structure-grid");
-    return;
-  }
-  show("structure-grid");
-
-  let html = "";
-  for (const seg of nonBreakSegs) {
-    const color = measureColor(seg.category, seg.measures[0]?.subType);
-    const anomCnt: Record<string, number> = { grace: 0, broken: 0, mixed: 0 };
-    for (const mm of seg.measures) {
-      for (const a of mm.anomalies) anomCnt[a] = (anomCnt[a] ?? 0) + 1;
-    }
-    const anomTags = Object.entries(anomCnt)
-      .filter(([, v]) => v > 0)
-      .map(([k, v]) => {
-        const labels: Record<string, string> = { grace: "G", broken: "B", mixed: "M" };
-        return `<span class="tag tag-${k}">${labels[k]}${v > 1 ? "\u00d7" + v : ""}</span>`;
-      })
-      .join(" ");
-
-    const bpms = [...new Set(seg.measures.map((mm) => mm.bpm))];
-    const bpmStr = bpms.length === 1 ? String(bpms[0]) : bpms.join("/");
-
-    let bodyHtml = "";
-    let detailHtml = "";
-
-    if (seg.category === "stream") {
-      const bulks = seg.measures.filter((mm) => mm.subType === "bulk");
-      const jss = seg.measures.filter((mm) => mm.subType === "js");
-      const hss = seg.measures.filter((mm) => mm.subType === "hs");
-
-      if (seg.subType === "brokenjs") {
-        // Broken JS: show structure with 0s
-        bodyHtml = `<div class="beats">`;
-        for (const mm of seg.measures) {
-          bodyHtml += `<div style="display:flex;gap:2px;margin-right:3px">`;
-          for (const n of mm.structure ?? []) {
-            const cls = n >= 2 ? "chord" : n === 0 ? "break-beat" : "single";
-            bodyHtml += `<div class="beat ${cls}" style="--pc:${color}">${n}</div>`;
-          }
-          bodyHtml += `</div>`;
-        }
-        bodyHtml += `</div>`;
-        detailHtml = `<div class="detail-list">
-          <div class="item"><span class="label">Type</span><span class="value" style="color:#f39c12">Broken JS</span></div>
-          <div class="item"><span class="label">Note</span><span class="value">Has gaps (0s)</span></div>
-        </div>`;
-      } else if (bulks.length > 0) {
-        const ns = bulks.map((mm) => mm.n!).filter((n) => n != null);
-        bodyHtml = `<div class="beats"><div class="bulk-display">2+${median(ns)}</div></div>`;
-        detailHtml = `<div class="detail-list">
-          <div class="item"><span class="label">range</span><span class="value">${Math.min(...ns)}-${Math.max(...ns)}</span></div>
-        </div>`;
-      } else if (jss.length > 0 || hss.length > 0) {
-        // JS/HS: show structure numbers
-        bodyHtml = `<div class="beats">`;
-        for (const mm of seg.measures) {
-          bodyHtml += `<div style="display:flex;gap:2px;margin-right:3px">`;
-          for (const n of mm.structure ?? []) {
-            const cls = n >= 2 ? "chord" : "single";
-            bodyHtml += `<div class="beat ${cls}" style="--pc:${color}">${n}</div>`;
-          }
-          bodyHtml += `</div>`;
-        }
-        bodyHtml += `</div>`;
-        const typeStr = jss.length > hss.length ? "JS" : "HS";
-        detailHtml = `<div class="detail-list">
-          <div class="item"><span class="label">Type</span><span class="value">${typeStr}</span></div>
-        </div>`;
-      } else {
-        bodyHtml = `<div class="beats"><div class="bulk-display" style="color:#555">Single</div></div>`;
-      }
-    } else if (seg.category === "jack") {
-      const allAnchors = seg.measures.flatMap((mm) => mm.anchors);
-      const cjs = seg.measures.filter((mm) => mm.subType === "cj-low" || mm.subType === "cj-high");
-      const mjs = seg.measures.filter((mm) => mm.subType === "minijack");
-
-      bodyHtml = `<div class="beats">`;
-      for (const mm of seg.measures) {
-        bodyHtml += `<div style="display:flex;gap:2px;margin-right:3px">`;
-        for (const n of mm.structure ?? []) {
-          const cls = n >= 2 ? "chord" : "single";
-          bodyHtml += `<div class="beat ${cls}" style="--pc:${color}">${n}</div>`;
-        }
-        bodyHtml += `</div>`;
-      }
-      bodyHtml += `</div>`;
-
-      detailHtml = `<div class="detail-list">
-        <div class="item"><span class="label">CJ/MJ</span><span class="value">${cjs.length}/${mjs.length}</span></div>
-        ${allAnchors.length ? `<div class="item"><span class="label">Anchor</span><span class="value">max:${Math.max(...allAnchors)} med:${median(allAnchors)}</span></div>` : ""}
-      </div>`;
-    } else if (seg.category === "ln") {
-      // LN: colored bars per measure
-      bodyHtml = `<div class="beats" style="flex-direction:column;gap:4px">`;
-      for (const mm of seg.measures) {
-        const lnColor = mm.lnSubtype ? LN_TYPE_COLORS[mm.lnSubtype] ?? "#6c3483" : "#6c3483";
-        bodyHtml += `<div style="height:8px;border-radius:2px;background:${lnColor};width:100%"></div>`;
-      }
-      bodyHtml += `</div>`;
-
-      // Triggered LN types
-      if (seg.triggeredLNTypes.length > 0) {
-        detailHtml = `<div class="detail-list">
-          <div class="item"><span class="label">LN Subtypes</span><span class="value"></span></div>
-          ${seg.triggeredLNTypes.map((t) => `
-            <div class="item">
-              <span class="label" style="color:${LN_TYPE_COLORS[t.key] ?? "#7f8c8d"}">${t.name}</span>
-              <span class="value">${t.value}</span>
-            </div>
-          `).join("")}
-        </div>`;
-      } else {
-        detailHtml = `<div class="detail-list">
-          <div class="item"><span class="label" style="color:#7f8c8d">Unknown</span><span class="value">-</span></div>
-        </div>`;
-      }
-    } else if (seg.category === "tech") {
-      const techSub = seg.techSubType;
-      if (techSub === "speedy") {
-        bodyHtml = `<div class="beats"><div class="bulk-display" style="color:#3498db;font-size:12px">Speedy Tech</div></div>`;
-        detailHtml = `<div class="detail-list">
-          <div class="item"><span class="label">Type</span><span class="value" style="color:#3498db">Speedy</span></div>
-          <div class="item"><span class="label">Note</span><span class="value">rolls/trills</span></div>
-        </div>`;
-      } else {
-        const allAnchors = seg.measures.flatMap((mm) => mm.anchors);
-        bodyHtml = `<div class="beats">`;
-        for (const mm of seg.measures) {
-          bodyHtml += `<div style="display:flex;gap:2px;margin-right:3px">`;
-          for (const n of mm.structure ?? []) {
-            const cls = n >= 2 ? "chord" : "single";
-            bodyHtml += `<div class="beat ${cls}" style="--pc:${color}">${n}</div>`;
-          }
-          bodyHtml += `</div>`;
-        }
-        bodyHtml += `</div>`;
-        detailHtml = `<div class="detail-list">
-          <div class="item"><span class="label">Type</span><span class="value" style="color:#e74c3c">Jacky</span></div>
-          ${allAnchors.length ? `<div class="item"><span class="label">Anchor</span><span class="value">max:${Math.max(...allAnchors)} med:${median(allAnchors)}</span></div>` : ""}
-        </div>`;
-      }
-    }
-
-    html += `<div class="struct-card">
-      <div class="head">
-        <div class="dot" style="background:${color}"></div>
-        M${seg.startMeasure + 1}-${seg.endMeasure}
-        <span class="bpm-badge">${bpmStr} BPM</span>
-        ${anomTags}
-      </div>
-      ${bodyHtml}
-      ${detailHtml}
-    </div>`;
-  }
-
-  grid.innerHTML = html;
-}
-
-/** Render segment table (skip break segments) */
-function renderSegmentTable(sa: SectionAnalysis): void {
-  const body = el("segment-body");
-  if (!body) return;
-
-  const nonBreakSegs = sa.segments.filter((s) => s.category !== "break");
-  if (nonBreakSegs.length === 0) {
-    hide("segment-table");
-    return;
-  }
-  show("segment-table");
-
-  const beatLength = sa.measures.length > 0
-    ? (sa.measures[0]!.endTime - sa.measures[0]!.startTime) / 4
-    : 500;
-
-  let html = "";
-  for (const seg of nonBreakSegs) {
-    const color = measureColor(seg.category, seg.measures[0]?.subType);
-    const catName = { stream: "Stream", jack: "Jack", ln: "LN", tech: "Tech", break: "Break" }[seg.category];
-
-    const startSec = (seg.startMeasure * 4 * beatLength) / 1000;
-    const endSec = (seg.endMeasure * 4 * beatLength) / 1000;
-    const fmtTime = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
-
-    const allAnchors = seg.measures.flatMap((mm) => mm.anchors);
-    const anchorStr = allAnchors.length > 0
-      ? `max:${Math.max(...allAnchors)} med:${median(allAnchors)}`
-      : "-";
-
-    const anomCnt: Record<string, number> = { grace: 0, broken: 0, mixed: 0 };
-    for (const mm of seg.measures) {
-      for (const a of mm.anomalies) anomCnt[a] = (anomCnt[a] ?? 0) + 1;
-    }
-    const anomStr = Object.entries(anomCnt)
-      .filter(([, v]) => v > 0)
-      .map(([k, v]) => `${k}:${v}`)
-      .join(" ") || "-";
-
-    html += `<div class="seg-row">
-      <span class="seg-time">${fmtTime(startSec)}-${fmtTime(endSec)}</span>
-      <span class="seg-measures">M${seg.startMeasure + 1}-${seg.endMeasure}</span>
-      <span class="seg-bpm">${seg.bpm}</span>
-      <span class="seg-category" style="background:${color}">${catName}</span>
-      <span class="seg-pattern">${seg.patternStr}</span>
-      <span class="seg-anchor">${anchorStr}</span>
-      <span class="seg-anomaly">${anomStr}</span>
-    </div>`;
-  }
-
-  body.innerHTML = html;
-}
-
-/** LN subtype color mapping */
-const LN_TYPE_COLORS: Record<string, string> = {
-  reverse: "#9b59b6",
-  releasehell: "#e74c3c",
-  density: "#3498db",
-  ouroboros: "#1abc9c",
-  tree: "#2ecc71",
-  unknown: "#7f8c8d",
-};
-
 export function showWaiting(): void {
   setText("status", "Connected \u2014 waiting for beatmap...");
   setText("star-rating", "--"); setText("star-value", "");
@@ -719,8 +437,6 @@ const CATEGORY_NAMES: Record<string, string> = {
 };
 let showPatterns = true;
 let showCustomMetrics = true;
-let lastSectionAnalysis: SectionAnalysis | null = null;
-let lastResult: DifficultyResult | null = null;
 
 /** Handle settings update from tosu dashboard (object format: { uniqueID: value }) */
 export function onSettingsUpdate(settings: Record<string, unknown>): void {
@@ -757,8 +473,6 @@ function applySectionVisibility(): void {
 
 let lastAnalysis: SectionAnalysis | null = null;
 let lastTotalDuration: number = 0;
-let lastGridCells: CellResult[] | null = null;
-let lastGridDuration: number = 0;
 
 /** Update game state — called from index.ts when tosu state changes */
 export function updateGameState(stateName: string): void {
@@ -864,8 +578,7 @@ function renderSectionAnalysisPatched(
   ga: GridAnalysisResult | null,
 ): void {
   lastAnalysis = sa;
-  lastSectionAnalysis = sa;
-    // Prefer grid duration for consistency with section bar time axis
+  // Prefer grid duration for consistency with section bar time axis
   lastTotalDuration = (ga && ga.cells.length > 0
     ? ga.cells[ga.cells.length - 1]!.endTime - ga.cells[0]!.startTime
     : sa?.totalDuration) ?? 0;
@@ -874,10 +587,6 @@ function renderSectionAnalysisPatched(
 
   // Use grid analysis if available
   if (ga && ga.segments.length > 0) {
-    lastGridCells = ga.cells;
-    lastGridDuration = ga.cells.length > 0
-      ? ga.cells[ga.cells.length - 1]!.endTime - ga.cells[0]!.startTime
-      : 0;
     renderGridSectionBar(ga.cells, ga.bpmRange);
     applySectionVisibility();
     resizeCard();
@@ -885,7 +594,6 @@ function renderSectionAnalysisPatched(
   }
 
   // Fallback: no grid or section analysis
-  lastGridCells = null;
   hide("section-bar");
   resizeCard();
 }
@@ -904,7 +612,7 @@ const GRID_COLORS: Record<string, string> = {
   "break":       "#2c2c2c",
 };
 
-function renderGridSectionBar(cells: CellResult[], bpmRange: { min: number; max: number }): void {
+function renderGridSectionBar(cells: CellResult[], _bpmRange: { min: number; max: number }): void {
   show("section-bar");
   const bar = el("measure-bar");
   const axis = el("time-axis");
@@ -976,95 +684,4 @@ function renderGridSectionBar(cells: CellResult[], bpmRange: { min: number; max:
     blocksHtml += `<div class="measure-block" style="background:${color}"></div>`;
   }
   bar.innerHTML = blocksHtml;
-}
-
-// ---------------------------------------------------------------------------
-// Grid-based Structure Grid (4×4 structure cards)
-// ---------------------------------------------------------------------------
-
-function renderGridStructure(segments: SegmentResult[]): void {
-  const grid = el("structure-grid");
-  if (!grid) return;
-
-  const nonBreak = segments.filter((s) => s.category !== "break");
-  if (nonBreak.length === 0) {
-    hide("structure-grid");
-    return;
-  }
-  show("structure-grid");
-
-  let html = "";
-  for (const seg of nonBreak) {
-    const color = GRID_COLORS[seg.category] ?? "#666";
-    const catName = seg.category.charAt(0).toUpperCase() + seg.category.slice(1);
-
-    // Build row note display
-    let rowDisplay = "";
-    for (let i = 0; i < 4; i++) {
-      const n = seg.rowNotes[i] ?? 0;
-      rowDisplay += `<div class="beat" style="--pc:${color};background:${n > 0 ? color : '#333'};width:20px;height:20px;border-radius:3px;display:inline-flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;margin:1px">${n || " "}</div>`;
-    }
-
-    // LN subtypes
-    let lnDetail = "";
-    if (seg.category === "ln" && seg.lnSubtypes.length > 0) {
-      lnDetail = `<div class="detail-list">${seg.lnSubtypes.map((t) =>
-        `<div class="item"><span class="label" style="color:${t.key === "reverse" ? "#9b59b6" : t.key === "releasehell" ? "#e74c3c" : t.key === "density" ? "#3498db" : "#1abc9c"}">${t.name}</span><span class="value">${t.value}</span></div>`
-      ).join("")}</div>`;
-    }
-
-    const mPerBeat = seg.avgPerRow.toFixed(1);
-    html += `<div class="struct-card">
-      <div class="head">
-        <div class="dot" style="background:${color}"></div>
-        ${abbrevKeyType(seg.keyType)}
-        <span class="bpm-badge">${seg.effectiveBPM} BPM</span>
-      </div>
-      <div class="stat-line">
-        <span class="stat-val">${seg.grade}</span>
-        <span style="margin-left:8px">avg:${mPerBeat} max:${seg.maxBeat}</span>
-      </div>
-      <div class="beats" style="display:flex;gap:2px;margin:4px 0">${rowDisplay}</div>
-      ${lnDetail}
-    </div>`;
-  }
-
-  grid.innerHTML = html;
-}
-
-// ---------------------------------------------------------------------------
-// Grid-based Segment Table
-// ---------------------------------------------------------------------------
-
-function renderGridSegmentTable(segments: SegmentResult[]): void {
-  const body = el("segment-body");
-  if (!body) return;
-
-  const nonBreak = segments.filter((s) => s.category !== "break");
-  if (nonBreak.length === 0) {
-    hide("segment-table");
-    return;
-  }
-  show("segment-table");
-
-  const fmtTime = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
-
-  let html = "";
-  for (const seg of nonBreak) {
-    const color = GRID_COLORS[seg.category] ?? "#666";
-    const startSec = seg.startTime / 1000;
-    const endSec = seg.endTime / 1000;
-
-    html += `<div class="seg-row">
-      <span class="seg-time">${fmtTime(startSec)}-${fmtTime(endSec)}</span>
-      <span class="seg-measures">B${seg.startBeat + 1}-${seg.endBeat}</span>
-      <span class="seg-bpm">${seg.effectiveBPM}</span>
-      <span class="seg-category" style="background:${color}">${abbrevKeyType(seg.keyType)}</span>
-      <span class="seg-pattern">${seg.grade}</span>
-      <span class="seg-anchor">avg:${seg.avgPerRow.toFixed(1)}</span>
-      <span class="seg-anomaly">max:${seg.maxBeat}</span>
-    </div>`;
-  }
-
-  body.innerHTML = html;
 }

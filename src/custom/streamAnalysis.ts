@@ -3,7 +3,6 @@
 // multi-scale hand imbalance, and broken stream detection.
 // ============================================================
 
-import type { StreamMetrics } from "../types/custom.js";
 import type { ParsedBeatmap } from "../types/beatmap.js";
 import { createChart } from "../parser/chartBuilder.js";
 import { calculatePrimitives } from "../patterns/primitives.js";
