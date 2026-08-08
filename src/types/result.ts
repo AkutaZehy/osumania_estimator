@@ -36,6 +36,8 @@ export interface DifficultyResult {
     /** In-game star rating from tosu (optional, only during gameplay) */
     gameStar?: number;
   };
+  /** Raw osu text for G estimate features (optional, set by analyzeBeatmap) */
+  osuText?: string;
 }
 
 /** Options for the analysis pipeline */

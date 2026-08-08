@@ -189,8 +189,8 @@ function rcKey(f: Features): number {
     + RCK.bpm * f.bpm;
 }
 
-function rcLow(f: Features): number {
-  return RCL.a + RCL.b * f.sunny + RCL.jackK * f.jackShare + RCL.lnK * f.lnRatio;
+function rcLow(f: Features, jackK = RCL.jackK): number {
+  return RCL.a + RCL.b * f.sunny + jackK * f.jackShare + RCL.lnK * f.lnRatio;
 }
 
 function rcHigh(f: Features): number {
@@ -211,21 +211,49 @@ function rcHigh(f: Features): number {
     + RCH.techTrills24 * f.techTrills24;
 }
 
-function rcEstimate(f: Features): number {
+function isSpeedDominant(segs: CellResult[]): boolean {
+  // Single-stream-heavy: rolls/minitrills/single-stream account for >70% of
+  // stream cells, total stream cells > 100. Speed maps are BPM-bound;
+  // grade reflects cleanliness not difficulty — skip rcKey's streamMedW term.
+  const singleTypes = new Set(["Rolls", "Minitrills", "Single Stream"]);
+  let singlesCells = 0, totalStream = 0;
+  for (const seg of segs) {
+    if (seg.category !== "stream") continue;
+    const n = seg.cells.length;
+    totalStream += n;
+    if (singleTypes.has(seg.keyType)) singlesCells += n;
+  }
+  return totalStream > 0 && singlesCells / totalStream > 0.70 && totalStream > 100;
+}
+
+function rcEstimate(
+  f: Features,
+  { segments, jackK }: { segments?: CellResult[]; jackK?: number } = {},
+): number {
+  const effectiveJackK = jackK ?? RCL.jackK;
   // very-low band: key-type model (no sunny term), capped by the user
   // line so it only corrects overestimates; smooth blend into the
   // user-perception line across sunny 3.5 -> 4.5, then the low-band line
   // until 5.5, and a 1-dan blend into the benchmark model up to 6.5
-  const key = Math.min(rcKey(f), rcLow(f));
+  const isSpeed = segments ? isSpeedDominant(segments) : false;
+  if (isSpeed) {
+    // Speed maps: skip rcKey entirely (streamMedW coefficient overweights
+    // single-stream difficulty; BPM matters more). Go straight to rcLow blend.
+    if (f.sunny <= RC_CUT) return rcLow(f, effectiveJackK);
+    if (f.sunny >= RC_CUT + 1) return rcHigh(f);
+    const w = f.sunny - RC_CUT;
+    return (1 - w) * rcLow(f, effectiveJackK) + w * rcHigh(f);
+  }
+  const key = Math.min(rcKey(f), rcLow(f, effectiveJackK));
   if (f.sunny <= KEY_CUT) return key;
   if (f.sunny <= KEY_BLEND) {
     const w = (f.sunny - KEY_CUT) / (KEY_BLEND - KEY_CUT);
-    return (1 - w) * key + w * rcLow(f);
+    return (1 - w) * key + w * rcLow(f, effectiveJackK);
   }
-  if (f.sunny <= RC_CUT) return rcLow(f);
+  if (f.sunny <= RC_CUT) return rcLow(f, effectiveJackK);
   if (f.sunny >= RC_CUT + 1) return rcHigh(f);
   const w = f.sunny - RC_CUT;
-  return (1 - w) * rcLow(f) + w * rcHigh(f);
+  return (1 - w) * rcLow(f, effectiveJackK) + w * rcHigh(f);
 }
 
 function lnHigh(r: DifficultyResult, f: Features): number {
@@ -247,22 +275,26 @@ function lnEstimate(r: DifficultyResult, f: Features): number {
 
 export function estimateDifficulty(r: DifficultyResult): EstimateResult {
   const f = extractFeatures(r);
+  const segments = r.gridAnalysis?.segments ?? [];
+  // ponytail: jack-heavy maps get a stronger jackK in rcLow; threshold 40%
+  // chosen from Reincarnation/CrossOver calibration (Human 3.0/3.8)
+  const jackK = f.jackShare > 0.40 ? 2.0 : RCL.jackK;
 
   // vibro: reference difficulty still computed (mode flag stays "vibro",
   // the overlay shows its own Vibro badge above the value)
   const vibro = r.gridAnalysis?.vibroLabel ?? "";
   const isVibro = vibro.includes("Vibro(");
   if (isVibro) {
-    return { mode: "vibro", rc: clamp(rcEstimate(f), LO, HI), ln: null };
+    return { mode: "vibro", rc: clamp(rcEstimate(f, { segments, jackK }), LO, HI), ln: null };
   }
 
   if (f.lnRatio > LN_RATIO_THRESHOLD) {
     const lnEst = clamp(lnEstimate(r, f), LO, HI);
-    const rcEst = clamp(rcEstimate(f), LO, HI);
+    const rcEst = clamp(rcEstimate(f, { segments, jackK }), LO, HI);
     return { mode: "ln", rc: rcEst, ln: lnEst };
   }
 
-  const rc = clamp(rcEstimate(f), LO, HI);
+  const rc = clamp(rcEstimate(f, { segments, jackK }), LO, HI);
   return { mode: "rc", rc, ln: null };
 }
 
@@ -328,5 +360,168 @@ export function formatDan(v: number | null): string {
   else if (frac <= 0.125) sub = "mid";
   else sub = "high";
   return `${base} ${sub} (${v.toFixed(2)})`;
+}
+
+// ============================================================
+// G estimate — density-map-based type classification + dan
+// ============================================================
+
+export interface GFeatures {
+  handMed: number;
+  nps: number;
+  jackRatio: number;
+  burstiness: number;
+  fingerMed: number;
+  MedTime: number;
+  totalTime: number;
+}
+
+export function extractFeaturesG(osuText: string): GFeatures | null {
+  const lines = osuText.split(/\r?\n/);
+  const notes: Array<{ time: number; col: number }> = [];
+  let inHitObjects = false;
+  for (const line of lines) {
+    if (line.trim() === "[HitObjects]") { inHitObjects = true; continue; }
+    if (line.startsWith("[")) { inHitObjects = false; continue; }
+    if (!inHitObjects || !line.trim()) continue;
+    const parts = line.split(",");
+    if (parts.length < 3) continue;
+    const time = parseInt(parts[2]);
+    const type = parseInt(parts[3]) || 0;
+    if ((type & 128) !== 0) continue;
+    const col = parseInt(parts[0]);
+    if (col < 64 || col > 448) continue;
+    notes.push({ time, col });
+  }
+  notes.sort((a, b) => a.time - b.time);
+  if (notes.length < 10) return null;
+
+  const totalTime = (notes[notes.length - 1].time - notes[0].time) / 1000;
+
+  const offset = 20, tauMs = 500, decay = Math.exp(-1 / tauMs);
+  let smoothed = 0, prevTime = notes[0].time;
+  const sv: number[] = [];
+  for (let i = 1; i < notes.length; i++) {
+    const dt = notes[i].time - notes[i - 1].time;
+    const pressure = 1 / (dt + offset);
+    const elapsed = notes[i].time - prevTime;
+    smoothed = smoothed * Math.pow(decay, elapsed) + pressure;
+    sv.push(smoothed);
+    prevTime = notes[i].time;
+  }
+  const sorted = [...sv].sort((a, b) => a - b);
+  const n = sorted.length;
+  const handMed = sorted[Math.floor(n * 0.5)];
+
+  let jackPairs = 0;
+  for (let i = 1; i < notes.length; i++) { if (notes[i].col === notes[i - 1].col) jackPairs++; }
+  const jackRatio = jackPairs / (notes.length - 1);
+  const handP95 = sorted[Math.floor(n * 0.95)];
+  const burstiness = handP95 / Math.max(handMed, 0.001);
+  const nps = notes.length / totalTime;
+
+  const fp: number[] = [];
+  for (let i = 1; i < notes.length; i++) { fp.push(1 / (notes[i].time - notes[i - 1].time + offset)); }
+  fp.sort((a, b) => a - b);
+  const fingerMed = fp[Math.floor(fp.length * 0.5)];
+
+  const dtimes: number[] = [];
+  for (let i = 1; i < notes.length; i++) dtimes.push(notes[i].time - notes[i - 1].time);
+  dtimes.sort((a, b) => a - b);
+  const MedTime = dtimes[Math.floor(dtimes.length * 0.5)];
+
+  return { handMed, nps, jackRatio, burstiness, fingerMed, MedTime, totalTime };
+}
+
+export function scoreTypeG(f: GFeatures): [string, number][] {
+  const { handMed, nps, jackRatio, burstiness, fingerMed, MedTime, totalTime } = f;
+  const isHighDan = nps > 15 || handMed > 0.2;
+
+  let jack = 0, speed = 0, stamina = 0, tech = 0;
+
+  if (isHighDan) {
+    if (jackRatio > 0.05) jack += 3;
+    else if (jackRatio > 0.04) jack += 2;
+    else if (jackRatio > 0.03) jack += 1;
+    if (fingerMed > 0.03) jack += 2;
+    else if (fingerMed > 0.02) jack += 1;
+    if (totalTime > 180) stamina += 3;
+    else if (totalTime > 160) stamina += 2;
+    else if (totalTime > 140) stamina += 1;
+    if (MedTime > 55) stamina += 2;
+    else if (MedTime > 50) stamina += 1;
+    if (jackRatio > 0.025 && burstiness > 1.4) tech += 2;
+    else if (jackRatio > 0.02 && burstiness > 1.35) tech += 1;
+    speed += 1;
+  } else {
+    if (jackRatio > 0.06) jack += 3;
+    else if (jackRatio > 0.05) jack += 2;
+    else if (jackRatio > 0.04) jack += 1;
+    if (fingerMed > 0.03) jack += 2;
+    else if (fingerMed > 0.02) jack += 1;
+    if (totalTime > 140) stamina += 2;
+    else if (totalTime > 130) stamina += 1;
+    if (MedTime > 95) stamina += 2;
+    else if (MedTime > 90) stamina += 1;
+    if (jackRatio > 0.035) tech += 2;
+    else if (jackRatio > 0.025) tech += 1;
+    if (burstiness > 1.7) tech += 1;
+    speed += 1;
+  }
+
+  const total = jack + speed + stamina + tech;
+  if (total === 0) return [["speed", 0.25], ["tech", 0.25], ["stamina", 0.25], ["jack", 0.25]];
+
+  const scores: [string, number][] = [
+    ["jack", jack / total],
+    ["speed", speed / total],
+    ["stamina", stamina / total],
+    ["tech", tech / total],
+  ];
+  scores.sort((a, b) => b[1] - a[1]);
+  return scores;
+}
+
+export function classifyTypeG(scores: [string, number][]): string {
+  const [p1, c1] = scores[0];
+  const [p2, c2] = scores[1];
+  const diff = c1 - c2;
+
+  if (diff < 0.1) return `${p1}·${p2}`;
+  return p1;
+}
+
+export function estimateDanG(rc: number, style: string, f: GFeatures): number {
+  let dan = rc;
+  const mainType = style.split("·")[0];
+  switch (mainType) {
+    case "jack":
+      if (f.handMed > 0.5) dan += 0.3;
+      else if (f.handMed < 0.3) dan -= 0.3;
+      break;
+    case "speed":
+      if (f.nps > 25) dan += 0.2;
+      else if (f.nps < 15) dan -= 0.2;
+      break;
+    case "stamina":
+      if (f.totalTime > 250) dan += 0.3;
+      else if (f.totalTime < 120) dan -= 0.2;
+      break;
+    case "tech":
+      if (f.burstiness > 1.5) dan += 0.2;
+      else if (f.burstiness < 1.3) dan -= 0.2;
+      break;
+  }
+  return Math.max(1, Math.min(20, dan));
+}
+
+export function formatGEstimate(dan: number, type: string): string {
+  const base = Math.round(dan);
+  const frac = dan - base;
+  const tier = frac <= -0.125 ? "low" : frac <= 0.125 ? "mid" : "high";
+  const name = base >= 11 ? (GREEK_BASE[base] ?? String(base)) : String(base);
+  const prefix = base <= 17 ? "Reform" : "";
+  const typeLabel = type.replace("·", "\u00b7");
+  return `${prefix ? prefix + " " : ""}${name} ${tier} (${dan.toFixed(2)})`;
 }
 

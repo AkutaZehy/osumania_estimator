@@ -8,7 +8,7 @@ import type { DensityMetrics, AnchorTier, LNMetrics } from "../types/custom.js";
 import type { PatternCluster } from "../types/patterns.js";
 import type { SectionAnalysis, SegmentCategory } from "../custom/sectionAnalysis.js";
 import type { GridAnalysisResult, SegmentResult, CellResult } from "../custom/gridAnalysis.js";
-import { estimateDifficulty, formatAkuta } from "../estimate.js";
+import { estimateDifficulty, formatAkuta, formatDanValue, extractFeaturesG, scoreTypeG, classifyTypeG, estimateDanG, formatGEstimate } from "../estimate.js";
 
 const DEBUG = true;
 function debugLog(...args: unknown[]): void {
@@ -223,7 +223,7 @@ export function showError(message: string): void {
 
 export function showResult(result: DifficultyResult): void {
   try {
-  const { finalStar, meta, custom, sunny, patterns } = result;
+  const { finalStar, meta, custom, sunny, patterns, osuText } = result;
   const d = custom.density; const j = custom.jack; const s = custom.stream;
   const t = custom.tech; const st = custom.stamina; const ln = custom.ln;
   const ga = result.gridAnalysis;
@@ -241,7 +241,23 @@ export function showResult(result: DifficultyResult): void {
       const se = el("star-rating"); if (se) se.style.color = "#ff4444";
     } else {
       const poolType = meta.lnRatio >= 0.15 ? dominantLNPool(ln) : null;
-      const displayType = poolType ?? mt.keyType;
+      let displayType = poolType ?? mt.keyType;
+
+      // G estimate tech title replacement: only when tech is top1
+      const gFeatures = extractFeaturesG(osuText);
+      if (gFeatures) {
+        const gScores = scoreTypeG(gFeatures);
+        const gType = classifyTypeG(gScores);
+        if (gType.startsWith("tech")) {
+          // tech·jack → Burst Tech, tech·speed/stamina → Reading Tech
+          if (gType.includes("jack")) {
+            displayType = "Burst Tech";
+          } else {
+            displayType = "Reading Tech";
+          }
+        }
+      }
+
       setText("star-rating", `${mt.bpm} ${displayType}`);
       const se = el("star-rating"); if (se) se.style.color = color;
     }
@@ -266,9 +282,28 @@ export function showResult(result: DifficultyResult): void {
   }
   setText("star-value", sunnyText);
 
-  // AKUTA difficulty estimate (RC/LN dan with sub-tier), right under sunny
+  // G estimate difficulty display
+  const gFeatures = extractFeaturesG(osuText);
   const akuta = estimateDifficulty(result);
-  setText("akuta-value", formatAkuta(akuta));
+  if (gFeatures) {
+    const gScores = scoreTypeG(gFeatures);
+    const gType = classifyTypeG(gScores);
+    const rc = akuta.rc ?? result.sunny.star;
+    const gDan = estimateDanG(rc, gType, gFeatures);
+    
+    // Format type with capitalization: "jack·tech" → "Jack·Tech"
+    const formatType = (t: string) => t.split("·").map(s => s.charAt(0).toUpperCase() + s.slice(1)).join("·");
+    const rcDisplay = `【${formatType(gType)}】${formatGEstimate(gDan, gType)}`;
+    
+    // LN channel: show both RC and LN estimates
+    if (akuta.ln != null) {
+      setText("akuta-value", `${rcDisplay}, ${formatDanValue(akuta.ln, true)}`);
+    } else {
+      setText("akuta-value", rcDisplay);
+    }
+  } else {
+    setText("akuta-value", formatAkuta(akuta));
+  }
 
   // Status/title
   const titleText = `${meta.artist} \u2014 ${meta.title} [${meta.version}]`;

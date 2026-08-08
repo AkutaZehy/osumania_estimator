@@ -1072,15 +1072,6 @@ function createSegment(
       keyType = result.keyType;
       grade = result.grade;
     }
-
-    // Tech reclassification: BPM ≥ 250
-    if (effectiveBPM >= 250) {
-      if (keyType === "Minijack") {
-        keyType = "Jacky Tech";
-      } else if (keyType === "Rolls" || keyType === "Minitrills") {
-        keyType = "Speedy Tech";
-      }
-    }
   }
 
   // LN segment

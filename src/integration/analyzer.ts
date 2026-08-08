@@ -376,6 +376,7 @@ export function analyzeBeatmap(
       lnRatio: beatmap.lnRatio,
       bpm: metaBpm,
     },
+    osuText,
   };
 
   return result;
