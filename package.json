@@ -8,6 +8,8 @@
     "build": "node esbuild.config.mjs",
     "dev": "node esbuild.config.mjs --watch",
     "typecheck": "tsc --noEmit",
+    "bench": "esbuild scripts/bench.ts --bundle --platform=node --format=esm --outfile=dist/bench.mjs && node dist/bench.mjs",
+    "bench:stages": "npm run bench -- --stages",
     "test": "vitest run --passWithNoTests",
     "test:watch": "vitest"
   },

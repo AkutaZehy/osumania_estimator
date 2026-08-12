@@ -7,6 +7,7 @@ import { OsuFileParser } from "../parser/osuFileParser.js";
 import { preprocessFile } from "./preprocess.js";
 import { calculate } from "./aggregation.js";
 import type { PreprocessResult } from "./preprocess.js";
+import type { ParsedBeatmap } from "../types/beatmap.js";
 import type { SunnyResult, ModFlags } from "../types/algorithm.js";
 
 /**
@@ -25,6 +26,11 @@ import type { SunnyResult, ModFlags } from "../types/algorithm.js";
  * @param speedRate - Playback speed multiplier (1.0 = normal, 1.5 = DT, 0.75 = HT)
  * @param modFlags - Mod flag set (dt, ht, hr, ez, da, in, ho)
  * @param options - Optional: withGraph to generate difficulty curve
+ * @param signal - Optional abort signal
+ * @param parsedBeatmap - Optional pre-parsed beatmap (the analyzer already
+ *   parsed + applied IN/HO mods; passing it skips the internal re-parse and
+ *   re-conversion, ~20% of this stage on dense maps). Must match osuText +
+ *   modFlags, otherwise results will differ from the full-parse path.
  * @returns SunnyResult with star rating, bars data, and optional graph
  */
 export function calculateSunny(
@@ -33,21 +39,21 @@ export function calculateSunny(
   modFlags: ModFlags,
   options?: { withGraph?: boolean },
   signal?: AbortSignal,
+  parsedBeatmap?: ParsedBeatmap,
 ): SunnyResult {
-  // Create parser and process
-  const parser = new OsuFileParser(osuText);
-  parser.process();
-
-  signal?.throwIfAborted();
-
   // preprocessFile applies HR/EZ OD adjustments internally, and applies
   // IN/HO conversion via the parser (single application, matching JS ref).
-  const preprocessed: PreprocessResult = preprocessFile(
-    parser.getParsedData(),
-    speedRate,
-    modFlags,
-    parser,
-  );
+  // With a pre-parsed beatmap the mods were already applied upstream, so no
+  // parser is handed over and IN/HO are not re-applied (also skips the
+  // internal re-parse of osuText entirely).
+  const preprocessed: PreprocessResult = parsedBeatmap
+    ? preprocessFile(parsedBeatmap, speedRate, modFlags, undefined)
+    : (() => {
+        const parser = new OsuFileParser(osuText);
+        parser.process();
+        signal?.throwIfAborted();
+        return preprocessFile(parser.getParsedData(), speedRate, modFlags, parser);
+      })();
   signal?.throwIfAborted();
 
   if (preprocessed.status === "Fail" || preprocessed.status === "NotMania") {

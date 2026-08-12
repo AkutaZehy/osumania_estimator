@@ -7,7 +7,11 @@ import { WebSocketManager } from "./tosu/websocket.js";
 import TosuSocketManager from "./tosu/socket.js";
 import { parseModsFromData } from "./tosu/mods.js";
 import { analyzeBeatmap } from "./integration/analyzer.js";
+import { createResultCache } from "./utils/resultCache.js";
+import { countHitObjects } from "./utils/countNotes.js";
+import { timed, makeTicker, DEBUG_TIMING } from "./utils/timing.js";
 import { showLoading, showResult, showError, showWaiting, updateGameState, updateInGameBar, onSettingsUpdate } from "./ui/display.js";
+import type { DifficultyResult } from "./types/result.js";
 import type { TosuStateMessage } from "./types/tosu.js";
 
 // ---- Config ----
@@ -23,6 +27,12 @@ let totalDurationMs = 0;
 let gridStartTimeMs = 0;
 let abortController: AbortController | null = null;
 
+// ---- Result cache ----
+// Key = md5 | modSignature. Re-entry on a previously-seen (map, mod) pair
+// skips the HTTP fetch and the full pipeline. Memory-only: clears on reload.
+// maxSize 50 covers typical play-session map switching (LRU evicts the rest).
+const resultCache = createResultCache<DifficultyResult>({ maxSize: 50 });
+
 // ---- Fetch .osu file from tosu ----
 async function fetchBeatmap(): Promise<string> {
   const res = await fetch(FETCH_ENDPOINT);
@@ -32,6 +42,19 @@ async function fetchBeatmap(): Promise<string> {
 
 // ---- Parse mod flags from tosu mod data (based on map analyser's getModData) ----
 // Moved to src/tosu/mods.ts (see parseModsFromData export).
+
+// ---- Apply a result: render + update playhead state ----
+function applyResult(result: DifficultyResult): void {
+  timed("render:applyResult", () => showResult(result));
+  // Determine total duration from section analysis or grid cells
+  const sa = result.sectionAnalysis;
+  const ga2 = result.gridAnalysis;
+  // Prefer grid duration (section bar uses cell range); fall back to section analysis
+  gridStartTimeMs = ga2 && ga2.cells.length > 0 ? ga2.cells[0]!.startTime : 0;
+  totalDurationMs = (ga2 && ga2.cells.length > 0
+    ? ga2.cells[ga2.cells.length - 1]!.endTime - ga2.cells[0]!.startTime
+    : sa?.totalDuration) ?? 0;
+}
 
 // ---- Main beatmap change handler ----
 async function onBeatmapChange(msg: TosuStateMessage): Promise<void> {
@@ -50,6 +73,25 @@ async function onBeatmapChange(msg: TosuStateMessage): Promise<void> {
 
   const gameStar = (msg as any)?.beatmap?.stats?.stars?.total as number | undefined;
 
+  // ---- Cache fast path ----
+  // Same (md5, mod signature) pair analyzed before → skip fetch + pipeline.
+  // The WS gate above already guarantees this only runs on a REAL beatmap or
+  // mod change (same map + same mod is filtered there), so realtime updates
+  // for map switches / mod toggles keep working — hits just resolve instantly.
+  if (md5) {
+    const cached = resultCache.get(`${md5}|${modSig}`);
+    if (cached) {
+      // Cancel any in-flight analysis and invalidate its write-back so a
+      // stale (older) result can never overwrite this cached one.
+      if (abortController) abortController.abort();
+      ++analysisId;
+      if (gameStar != null) cached.meta.gameStar = gameStar;
+      timed("cache:hit", () => applyResult(cached));
+      if (DEBUG_TIMING) console.log(`[perf] cache: hit ${md5}|${modSig}`);
+      return;
+    }
+  }
+
   showLoading();
 
   // Cancel previous analysis immediately
@@ -59,31 +101,18 @@ async function onBeatmapChange(msg: TosuStateMessage): Promise<void> {
 
   // Cancel previous analysis if still running
   const myId = ++analysisId;
+  const ticker = makeTicker("total-run");
 
   try {
+    ticker.start();
+    const fetchTicker = makeTicker("fetch-beatmap");
+    fetchTicker.start();
     const osuText = await fetchBeatmap();
+    fetchTicker.end();
     if (myId !== analysisId) return;
 
-    // Quick note count from osu text — no split/trim to avoid allocations on heavy maps
-    let noteCount = 0;
-    const hoIdx = osuText.indexOf("[HitObjects]");
-    if (hoIdx >= 0) {
-      let pos = hoIdx + 12;
-      while (pos < osuText.length) {
-        const next = osuText.indexOf("\n", pos);
-        const lineEnd = next >= 0 ? next : osuText.length;
-        // Scan line: skip whitespace, skip "//" comments, count real content
-        let hasNote = false;
-        for (let i = pos; i < lineEnd; i++) {
-          const c = osuText[i]!;
-          if (c === "/" && i + 1 < lineEnd && osuText[i + 1] === "/") break;
-          if (c !== " " && c !== "\t" && c !== "\r") { hasNote = true; break; }
-        }
-        if (hasNote) noteCount++;
-        if (next < 0) break;
-        pos = next + 1;
-      }
-    }
+    // Quick note count from osu text (shared util, no split/trim)
+    const noteCount = timed("count", () => countHitObjects(osuText));
     // Heavy map guard: skip analysis for extremely long maps
     if (noteCount > 30000) {
       showError(`Heavy map (${noteCount} notes > 30000) — skipped`);
@@ -114,22 +143,17 @@ async function onBeatmapChange(msg: TosuStateMessage): Promise<void> {
         in: modData.cvtFlag === "IN",
         ho: modData.cvtFlag === "HO",
       },
-    }, signal);
+    }, signal, noteCount);
 
     // Check again after analysis (which can be slow)
     if (myId !== analysisId) return;
 
     if (gameStar != null) result.meta.gameStar = gameStar;
 
-    showResult(result);
-    // Determine total duration from section analysis or grid cells
-    const sa = result.sectionAnalysis;
-    const ga2 = result.gridAnalysis;
-    // Prefer grid duration (section bar uses cell range); fall back to section analysis
-    gridStartTimeMs = ga2 && ga2.cells.length > 0 ? ga2.cells[0]!.startTime : 0;
-    totalDurationMs = (ga2 && ga2.cells.length > 0
-      ? ga2.cells[ga2.cells.length - 1]!.endTime - ga2.cells[0]!.startTime
-      : sa?.totalDuration) ?? 0;
+    applyResult(result);
+    // Cache for fast re-entry on the same (map, mod) pair
+    if (md5) timed("cache:put", () => resultCache.put(`${md5}|${modSig}`, result));
+    ticker.end();
   } catch (err) {
     if (myId !== analysisId) return;
     const message = err instanceof Error ? err.message : "Unknown error";

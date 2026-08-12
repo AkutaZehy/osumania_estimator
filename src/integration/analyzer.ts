@@ -12,7 +12,11 @@ import type { PatternSummary } from "../types/patterns.js";
 import type { ParsedBeatmap } from "../types/beatmap.js";
 
 import { OsuFileParser } from "../parser/osuFileParser.js";
+import { countHitObjects } from "../utils/countNotes.js";
+import { timed } from "../utils/timing.js";
 import { calculateSunny } from "../algorithm/sunnyRework.js";
+import { createChart } from "../parser/chartBuilder.js";
+import { calculatePrimitives } from "../patterns/primitives.js";
 import { analyzePatterns } from "../patterns/summary.js";
 import { computeDensityMetrics } from "../custom/density.js";
 import { computeCustomMetrics } from "../custom/customMetrics.js";
@@ -23,6 +27,16 @@ import { analyzeGrid } from "../custom/gridAnalysis.js";
 // ---- Cancellation support ----
 // A shared AbortSignal allows the UI to cancel a running analysis mid-flight.
 // Each major step checks the signal and throws AnalysisCancelledError if aborted.
+
+// ---- Hard guards ----
+const MAX_NOTES = 30000;   // reject above: index.ts mirrors this pre-fetch
+const MAX_LNS = 15000;     // reject above (LN-heavy maps)
+// ---- Heavy degradation ----
+// Above HEAVY_NOTES the pattern-analysis stage is skipped: its sliding-window
+// clustering is the most expensive secondary subsystem, and custom metrics +
+// the grid tolerate an empty summary (tech rolls/trills just report none).
+// Core stages (Sunny, grid, custom) always run at full precision.
+const HEAVY_NOTES = 15000;
 
 export class AnalysisCancelledError extends Error {
   constructor() {
@@ -214,12 +228,16 @@ function buildErrorResult(
  * @param osuText  - Raw .osu file content as string.
  * @param options  - Partial AnalysisOptions (speedRate, modFlags, densityWindowMs).
  * @param signal   - Optional AbortSignal to cancel the analysis mid-flight.
+ * @param noteCount - Optional pre-computed HitObjects count (skips the linear
+ *                    scan inside). Callers that already counted it (index.ts)
+ *                    pass it through; otherwise it is computed here.
  * @returns DifficultyResult with finalStar, components, graph, and meta.
  */
 export function analyzeBeatmap(
   osuText: string,
   options?: Partial<AnalysisOptions>,
   signal?: AbortSignal,
+  noteCount?: number,
 ): DifficultyResult {
   // Merge options with defaults
   const opts: AnalysisOptions = { ...DEFAULT_OPTIONS, ...options };
@@ -229,29 +247,29 @@ export function analyzeBeatmap(
   let parser: OsuFileParser;
   let beatmap: ParsedBeatmap;
   try {
-    parser = new OsuFileParser(osuText);
-    parser.process();
+    parser = timed("parse", () => new OsuFileParser(osuText));
+    timed("parse:process", () => parser.process());
     // Apply IN/HO conversion on the same parser so all downstream analysis
     // (patterns, custom, grid, sections) sees the converted chart.
     if (modFlags.in) {
       try {
-        parser.modIN();
+        timed("parse:modIN", () => parser.modIN());
       } catch {
         // keep original on convert error
       }
     }
     if (modFlags.ho) {
       try {
-        parser.modHO();
+        timed("parse:modHO", () => parser.modHO());
       } catch {
         // keep original on convert error
       }
     }
     if (modFlags.in || modFlags.ho) {
-      parser.getNoteTimes();
-      parser.getObjectIntervals();
+      timed("parse:getNoteTimes", () => parser.getNoteTimes());
+      timed("parse:getObjectIntervals", () => parser.getObjectIntervals());
     }
-    beatmap = parser.getParsedData();
+    beatmap = timed("parse:getParsedData", () => parser.getParsedData());
   } catch {
     return buildErrorResult(
       {
@@ -268,9 +286,27 @@ export function analyzeBeatmap(
   }
   signal?.throwIfAborted();
 
-  // Heavy map guard: reject maps with excessive LN count (>15000)
+  // Hard guard: reject maps with excessive note count (index.ts mirrors this
+  // pre-fetch so the .osu text is never even requested over HTTP).
+  const nNotes = noteCount ?? countHitObjects(osuText);
+  if (nNotes > MAX_NOTES) {
+    return buildErrorResult(
+      {
+        title: beatmap.metadata.title,
+        artist: beatmap.metadata.artist,
+        version: beatmap.metadata.version,
+        creator: beatmap.metadata.creator,
+        columnCount: beatmap.columnCount,
+        lnRatio: beatmap.lnRatio,
+        bpm: Math.round(computeBPM(beatmap)),
+      },
+      `Heavy map (${nNotes} notes > ${MAX_NOTES}) — skipped`,
+    );
+  }
+
+  // Heavy LN guard: reject maps with excessive LN count (>15000)
   const lnCount = Math.round(beatmap.noteStarts.length * beatmap.lnRatio);
-  if (lnCount > 15000) {
+  if (lnCount > MAX_LNS) {
     return buildErrorResult(
       {
         title: beatmap.metadata.title,
@@ -286,9 +322,11 @@ export function analyzeBeatmap(
   }
 
   // ---- Step 2: Sunny Rework ----
+  // Pass the already-parsed (and IN/HO-converted) beatmap so sunny skips its
+  // internal re-parse+convert (~20% of this stage on dense maps).
   let sunny: SunnyResult;
   try {
-    sunny = calculateSunny(osuText, opts.speedRate, modFlags, { withGraph: true }, signal);
+    sunny = timed("sunny", () => calculateSunny(osuText, opts.speedRate, modFlags, { withGraph: true }, signal, beatmap));
   } catch {
     sunny = {
       star: -1,
@@ -303,9 +341,24 @@ export function analyzeBeatmap(
   signal?.throwIfAborted();
 
   // ---- Step 3: Pattern Analysis ----
+  // Chart + primitives are built once here and shared by both the pattern
+  // stage and the custom stage — they previously each built their own copy
+  // (createChart+calculatePrimitives is ~40-55% of the patterns stage on
+  // dense maps). Note: patterns historically ran on unscaled primitives
+  // (speedRate 1); keep that exact behavior under mod speeds by falling
+  // back to the local build when speedRate != 1.
+  const primitives = timed("chart", () => {
+    const c = createChart(beatmap);
+    return calculatePrimitives(c, opts.speedRate);
+  });
+
+  // Heavy-map degradation: skip pattern clustering above HEAVY_NOTES (see
+  // module header). Custom metrics and the grid tolerate the empty summary.
   let patterns: PatternSummary;
   try {
-    patterns = analyzePatterns(beatmap);
+    patterns = nNotes > HEAVY_NOTES
+      ? defaultPatternSummary(beatmap.duration, beatmap.lnRatio)
+      : timed("patterns", () => analyzePatterns(beatmap, opts.speedRate, opts.speedRate === 1 ? primitives : undefined));
   } catch {
     patterns = defaultPatternSummary(beatmap.duration, beatmap.lnRatio);
   }
@@ -315,7 +368,7 @@ export function analyzeBeatmap(
   // Computed early so custom metrics can use its BPM for anchor analysis.
   let gridAnalysis;
   try {
-    gridAnalysis = analyzeGrid(beatmap, signal, opts.speedRate);
+    gridAnalysis = timed("grid", () => analyzeGrid(beatmap, signal, opts.speedRate));
   } catch (err) {
     if (err instanceof AnalysisCancelledError) throw err;
     console.error("[GridAnalysis] failed", err);
@@ -326,7 +379,7 @@ export function analyzeBeatmap(
   // ---- Step 5: Custom Metrics ----
   let custom: CustomMetrics;
   try {
-    custom = computeCustomMetrics(beatmap, sunny, patterns, opts.speedRate, gridAnalysis);
+    custom = timed("custom", () => computeCustomMetrics(beatmap, sunny, patterns, opts.speedRate, gridAnalysis, primitives));
   } catch (err) {
     console.error("[CustomMetrics] failed", err);
     custom = defaultCustomMetrics(
@@ -337,12 +390,12 @@ export function analyzeBeatmap(
   }
 
   // ---- Step 6: Aggregate ----
-  const { finalStar } = aggregateDifficulty(sunny, patterns, custom);
+  const { finalStar } = timed("aggregate", () => aggregateDifficulty(sunny, patterns, custom));
 
   // ---- Step 7: Section Analysis ----
   let sectionAnalysis;
   try {
-    sectionAnalysis = analyzeSections(beatmap, signal);
+    sectionAnalysis = timed("sections", () => analyzeSections(beatmap, signal));
   } catch (err) {
     if (err instanceof AnalysisCancelledError) throw err;
     console.error("[SectionAnalysis] failed", err);

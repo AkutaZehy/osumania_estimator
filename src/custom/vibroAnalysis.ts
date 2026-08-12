@@ -2,6 +2,8 @@
 // Vibro Analysis — 连4 + canVibro + SHFC classification
 // ============================================================
 
+import { lowerBound, upperBound } from "../utils/beatmapUtils.js";
+
 export interface VibroResult {
   /** Total 连4 sequences found */
   totalLian4: number;
@@ -32,7 +34,12 @@ interface Note { col: number; t: number }
 /** Main entry: analyze vibro from parsed notes + BPM */
 export function analyzeVibro(notes: Note[], bpm: number): VibroResult {
   const beatMs = 60000 / bpm;
-  const all = findLian4(notes, beatMs);
+  // Per-column sorted time arrays, shared by findLian4 and the per-sequence window scan.
+  const colNotes: number[][] = [[], [], [], []];
+  for (const n of notes) colNotes[n.col]!.push(n.t);
+  for (let c = 0; c < 4; c++) colNotes[c]!.sort((a, b) => a - b);
+
+  const all = findLian4(colNotes, beatMs);
 
   if (all.length === 0) {
     return {
@@ -54,11 +61,18 @@ export function analyzeVibro(notes: Note[], bpm: number): VibroResult {
     const occ = [new Set<number>(), new Set<number>(), new Set<number>(), new Set<number>()];
     // Other-column note offsets relative to the main-column grid, in units of sd
     const offs: number[] = [];
-    for (const n of notes) {
-      if (n.t < st || n.t > et) continue;
-      const pos = Math.round((n.t - st) / sd);
-      if (pos >= 0 && pos < L) occ[n.col]!.add(pos);
-      if (n.col !== col) offs.push((((n.t - st) % sd) + sd) % sd / sd);
+    // Window-scan only the notes inside [st, et] per column (binary search),
+    // instead of the whole map per sequence (O(seq × notes) on dense maps).
+    for (let c2 = 0; c2 < 4; c2++) {
+      const ctimes = colNotes[c2]!;
+      const lo = lowerBound(ctimes, st);
+      const hi = upperBound(ctimes, et);
+      for (let k = lo; k < hi; k++) {
+        const t2 = ctimes[k]!;
+        const pos = Math.round((t2 - st) / sd);
+        if (pos >= 0 && pos < L) occ[c2]!.add(pos);
+        if (c2 !== col) offs.push((((t2 - st) % sd) + sd) % sd / sd);
+      }
     }
     const d = occ.map(o => o.size / L);
     const dc = d.filter(x => x >= 0.6).length;
@@ -155,16 +169,7 @@ export function analyzeVibro(notes: Note[], bpm: number): VibroResult {
 
 // ========== 连4 detection ==========
 
-function findLian4(notes: Note[], beatMs: number) {
-  const colNotes: number[][] = [[], [], [], []];
-  const timeToCols = new Map<number, number[]>();
-  for (const n of notes) {
-    colNotes[n.col]!.push(n.t);
-    if (!timeToCols.has(n.t)) timeToCols.set(n.t, []);
-    timeToCols.get(n.t)!.push(n.col);
-  }
-  for (let c = 0; c < 4; c++) colNotes[c]!.sort((a, b) => a - b);
-
+function findLian4(colNotes: number[][], beatMs: number) {
   const maxGap = beatMs / 4 + 10;
   const result: { col: number; t: number[] }[] = [];
 
@@ -173,27 +178,44 @@ function findLian4(notes: Note[], beatMs: number) {
     let i = 0;
     while (i < times.length) {
       const seq = [times[i]!];
+      // Per-column offsets accumulated over the run, keyed by column.
+      // The original scanned the whole time map per candidate pair (O(n²) on
+      // dense maps — 82% of grid time on vibro maps); windows only slide
+      // forward, so monotonic pointers visit each between-note once (O(n)).
       const offsetPatterns = new Map<number, number[]>();
+      const offSums = new Map<number, number>(); // running sum per column
+      const ptr: number[] = [0, 0, 0, 0]; // first not-yet-examined index per column
       let j = i + 1;
       while (j < times.length) {
         const gap = times[j]! - seq[seq.length - 1]!;
         if (gap > maxGap) break;
-        const betweenNotes: { col: number; offset: number }[] = [];
-        for (const [ot, cols] of timeToCols) {
-          if (ot <= seq[seq.length - 1]! || ot >= times[j]!) continue;
-          for (const oc of cols) if (oc !== c) betweenNotes.push({ col: oc, offset: ot - seq[seq.length - 1]! });
-        }
+        const prevT = seq[seq.length - 1]!;
+        const currT = times[j]!;
         let isTrill = true;
-        for (const bn of betweenNotes) {
-          if (!offsetPatterns.has(bn.col)) offsetPatterns.set(bn.col, []);
-          offsetPatterns.get(bn.col)!.push(bn.offset);
-          const offsets = offsetPatterns.get(bn.col)!;
-          if (offsets.length >= 2) {
-            const avgPrev = offsets.slice(0, -1).reduce((a, b) => a + b, 0) / (offsets.length - 1);
-            if (Math.abs(bn.offset - avgPrev) > 5) isTrill = false;
+        let anyBetween = false;
+        for (let oc = 0; oc < 4; oc++) {
+          if (oc === c) continue;
+          const otimes = colNotes[oc]!;
+          // Advance past times <= prevT (exclusive window start).
+          let k = Math.max(ptr[oc]!, upperBound(otimes, prevT));
+          ptr[oc] = k;
+          for (; k < otimes.length && otimes[k]! < currT; k++) {
+            anyBetween = true;
+            const off = otimes[k]! - prevT;
+            let offsets = offsetPatterns.get(oc);
+            if (!offsets) { offsets = []; offsetPatterns.set(oc, offsets); }
+            offsets.push(off);
+            const sum = offSums.get(oc) ?? 0;
+            if (offsets.length >= 2) {
+              // avg of all previous offsets (running sum == slice(0,-1) reduce)
+              const avgPrev = (sum) / (offsets.length - 1);
+              if (Math.abs(off - avgPrev) > 5) isTrill = false;
+            }
+            offSums.set(oc, sum + off);
           }
+          ptr[oc] = k;
         }
-        if (betweenNotes.length > 0 && !isTrill) break;
+        if (anyBetween && !isTrill) break;
         seq.push(times[j]!);
         j++;
       }

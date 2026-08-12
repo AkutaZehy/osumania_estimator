@@ -11,6 +11,7 @@ import { createChart } from "../parser/chartBuilder.js";
 import { calculatePrimitives } from "../patterns/primitives.js";
 import type { PrimitiveRow } from "../types/primitives.js";
 import { Direction } from "../types/primitives.js";
+import { windowCounts, p90WindowCount } from "./windowIndex.js";
 
 // ---------------------------------------------------------------------------
 // Burst KPS helpers (unchanged)
@@ -65,16 +66,11 @@ function bothHandsInterval(beatmap: ParsedBeatmap): number {
 function p90KPS(times: number[], windowMs: number): number {
   if (times.length < 2) return 0;
   const sorted = [...times].sort((a, b) => a - b);
-  const counts: number[] = [];
-  for (let i = 0; i < sorted.length; i++) {
-    const end = sorted[i]! + windowMs;
-    let cnt = 0;
-    for (let j = i; j < sorted.length && sorted[j]! < end; j++) cnt++;
-    counts.push(cnt);
-  }
-  counts.sort((a, b) => a - b);
-  const p90idx = Math.min(counts.length - 1, Math.ceil(counts.length * 0.9) - 1);
-  return Math.round(((counts[p90idx]! / windowMs) * 1000) * 100) / 100;
+  // Shared two-pointer window index — O(n) instead of the previous O(n×k)
+  // per-note scan (called 7× per map for single finger/one hand/both hands).
+  const counts = windowCounts(sorted, windowMs);
+  const p90 = p90WindowCount(counts);
+  return Math.round(((p90 / windowMs) * 1000) * 100) / 100;
 }
 
 export function singleFingerKPS(beatmap: ParsedBeatmap): number {
@@ -242,11 +238,8 @@ function divisionLabel(row: PrimitiveRow): string {
  *   Total count grouped by note division.
  */
 function computeRollTrillStats(
-  _beatmap: ParsedBeatmap,
+  primitives: PrimitiveRow[],
   _patterns: PatternSummary): RollTrillStats {
-  const chart = createChart(_beatmap);
-  const primitives = calculatePrimitives(chart);
-
   if (primitives.length < 2) return { rolls: "", trills: '' };
 
   // ---- Roll detection ----
@@ -401,6 +394,7 @@ export function computeTechMetrics(
   patterns: PatternSummary,
   speedRate = 1,
   grid?: GridAnalysisResult,
+  sharedPrimitives?: PrimitiveRow[],
 ) {
   if (beatmap.noteStarts.length === 0) {
     return {
@@ -417,14 +411,19 @@ singleFingerInterval: 0,
     };
   }
 
-  const chart = createChart(beatmap);
-  const primitives = calculatePrimitives(chart, speedRate);
+  // Shared primitives (from computeCustomMetrics) avoid re-building the chart
+  // per sub-module; falls back to a local build for standalone callers.
+  const primitives = sharedPrimitives ?? calculatePrimitives(createChart(beatmap), speedRate);
 
 const sfInt = singleFingerInterval(beatmap);
 const ohInt = oneHandInterval(beatmap);
 const bhInt = bothHandsInterval(beatmap);
   const graceCount = detectGraces(primitives, grid);
-  const rollTrill = computeRollTrillStats(beatmap, patterns);
+  // Roll/trill stats historically ran on unscaled primitives (speedRate=1);
+  // keep that behavior when the shared set was scaled by a mod speed.
+  const rollTrill = speedRate === 1
+    ? computeRollTrillStats(primitives, patterns)
+    : computeRollTrillStats(calculatePrimitives(createChart(beatmap)), patterns);
 
   return {
     graceCount,

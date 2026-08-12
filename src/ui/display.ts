@@ -83,25 +83,36 @@ function aggregateGridGrade(ga: GridAnalysisResult | null, category: "jack" | "s
   if (relevant.length === 0) return null;
 
   // Collect weighted values for distribution
-  const values: number[] = [];
   let totalWeight = 0;
   let weightedSum = 0;
   for (const seg of relevant) {
     const weight = seg.cells.length;
     const val = seg.gridTotalNotes;
-    for (let i = 0; i < weight; i++) values.push(val);
     weightedSum += val * weight;
     totalWeight += weight;
   }
   if (totalWeight === 0) return null;
 
-  // Jack: use P90 for grade, show P90/P50 in parens
+  // Jack: use P90 for grade, show P90/P50 in parens.
+  // Weighted percentile over (value, weight) pairs — avoids materializing a
+  // per-cell array + sort for long maps.
   if (category === "jack") {
-    values.sort((a, b) => a - b);
-    const p90Idx = Math.max(0, Math.floor(values.length * 0.9));
-    const p90Val = Math.round(values[p90Idx]!);
-    const p50Idx = Math.floor(values.length * 0.5);
-    const p50Val = values.length > 0 ? Math.round(values[p50Idx]!) : 0;
+    const pairs = relevant
+      .map((seg) => ({ v: seg.gridTotalNotes, w: seg.cells.length }))
+      .sort((a, b) => a.v - b.v);
+    const totalW = pairs.reduce((s, p) => s + p.w, 0);
+    if (totalW === 0) return null;
+    const wp = (p: number): number => {
+      const target = p * totalW;
+      let acc = 0;
+      for (const { v, w } of pairs) {
+        acc += w;
+        if (acc >= target) return v;
+      }
+      return pairs[pairs.length - 1]!.v;
+    };
+    const p90Val = Math.round(wp(0.9));
+    const p50Val = Math.round(wp(0.5));
 
     let name: string;
     if (p90Val <= 4) name = "Mini";
@@ -486,6 +497,16 @@ export function updateGameState(stateName: string): void {
   }
 }
 
+// Cached playhead geometry: getComputedStyle/getBoundingClientRect force a
+// reflow, and tosu pushes ~60Hz state messages — recomputing per message
+// turns every WS tick into a layout pass (and the backlog after a blocking
+// analysis into a reflow storm). Cache the (invariant) paddings and the bar
+// width, invalidating only on window resize.
+let playheadGeom: { pl: number; pr: number; width: number } | null = null;
+if (typeof window !== "undefined") {
+  window.addEventListener("resize", () => { playheadGeom = null; });
+}
+
 /** Update in-game bar with current playback position (0-1 progress) */
 export function updateInGameBar(progress: number): void {
   // ---- Playhead cursor on section bar ----
@@ -497,10 +518,15 @@ export function updateInGameBar(progress: number): void {
     // Compensate so the playhead tracks the content area exactly.
     const bar = playhead.parentElement;
     if (bar) {
-      const s = getComputedStyle(bar);
-      const pl = parseFloat(s.paddingLeft);
-      const pr = parseFloat(s.paddingRight);
-      const bw = bar.getBoundingClientRect().width;
+      if (!playheadGeom) {
+        const s = getComputedStyle(bar);
+        playheadGeom = {
+          pl: parseFloat(s.paddingLeft),
+          pr: parseFloat(s.paddingRight),
+          width: bar.getBoundingClientRect().width,
+        };
+      }
+      const { pl, pr, width: bw } = playheadGeom;
       const cw = bw - pl - pr;
       playhead.style.left = `${((pl + progress * cw) / bw) * 100}%`;
     } else {

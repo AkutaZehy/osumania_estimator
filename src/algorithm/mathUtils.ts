@@ -104,12 +104,37 @@ export function smoothOnCorners(
   const F = cumulativeSum(x, f);
   const g = new Float64Array(f.length);
 
+  // Monotonic pointers for the [a, b] window edges: s is ascending so both
+  // a and b are non-decreasing — replaces the per-point bisectRight pair in
+  // queryCumsum (O(n log n) → O(n), same segment lookup, bit-identical).
+  let ia = 0; // first index with x[ia] > a
+  let ib = 0; // first index with x[ib] > b
+  const x0 = x[0]!;
+  const xLast = x[x.length - 1]!;
+  const FLast = F[F.length - 1]!;
+
   for (let i = 0; i < x.length; i++) {
     const s = x[i]!;
-    const a = Math.max(s - window, x[0]!);
-    const b = Math.min(s + window, x[x.length - 1]!);
-    const val = queryCumsum(b, x, F, f) - queryCumsum(a, x, F, f);
+    const a = Math.max(s - window, x0);
+    const b = Math.min(s + window, xLast);
 
+    let va: number;
+    if (a <= x0) va = 0;
+    else if (a >= xLast) va = FLast;
+    else {
+      while (ia < x.length && x[ia]! <= a) ia++;
+      va = F[ia - 1]! + f[ia - 1]! * (a - x[ia - 1]!);
+    }
+
+    let vb: number;
+    if (b <= x0) vb = 0;
+    else if (b >= xLast) vb = FLast;
+    else {
+      while (ib < x.length && x[ib]! <= b) ib++;
+      vb = F[ib - 1]! + f[ib - 1]! * (b - x[ib - 1]!);
+    }
+
+    const val = vb - va;
     if (mode === "avg") {
       g[i] = b - a > 0 ? val / (b - a) : 0;
     } else {
@@ -129,9 +154,31 @@ export function interpValues(
   queryXs: Float64Array,
 ): Float64Array {
   const result = new Float64Array(queryXs.length);
+  // Monotonic pointer replaces per-query bisectLeft: all real call sites pass
+  // ascending queryXs (corners / uniform times), making this O(n) instead of
+  // O(n log n) with bit-identical output. Non-ascending input falls back to
+  // the original binary-search loop to preserve exact behavior.
+  let ascending = true;
+  for (let i = 1; i < queryXs.length; i++) {
+    if (queryXs[i]! < queryXs[i - 1]!) { ascending = false; break; }
+  }
+  if (!ascending) {
+    for (let i = 0; i < queryXs.length; i++) {
+      const x = queryXs[i]!;
+      const idx = bisectLeft(knownXs, x);
+      if (idx === 0) result[i] = knownYs[0]!;
+      else if (idx >= knownXs.length) result[i] = knownYs[knownYs.length - 1]!;
+      else {
+        const x0 = knownXs[idx - 1]!, x1 = knownXs[idx]!, y0 = knownYs[idx - 1]!, y1 = knownYs[idx]!;
+        result[i] = y0 + ((x - x0) / (x1 - x0)) * (y1 - y0);
+      }
+    }
+    return result;
+  }
+  let idx = 0;
   for (let i = 0; i < queryXs.length; i++) {
     const x = queryXs[i]!;
-    const idx = bisectLeft(knownXs, x);
+    while (idx < knownXs.length && knownXs[idx]! < x) idx++;
 
     if (idx === 0) {
       result[i] = knownYs[0]!;
@@ -158,10 +205,24 @@ export function stepInterp(
   queryXs: Float64Array,
 ): Float64Array {
   const result = new Float64Array(queryXs.length);
+  // Monotonic pointer as in interpValues; falls back to bisectRight when the
+  // query stream is not ascending.
+  let ascending = true;
+  for (let i = 1; i < queryXs.length; i++) {
+    if (queryXs[i]! < queryXs[i - 1]!) { ascending = false; break; }
+  }
+  if (!ascending) {
+    for (let i = 0; i < queryXs.length; i++) {
+      const idx = bisectRight(knownXs, queryXs[i]!) - 1;
+      result[i] = idx >= 0 ? knownYs[idx]! : knownYs[0]!;
+    }
+    return result;
+  }
+  let idx = 0;
   for (let i = 0; i < queryXs.length; i++) {
     const x = queryXs[i]!;
-    const idx = bisectRight(knownXs, x) - 1;
-    result[i] = idx >= 0 ? knownYs[idx]! : knownYs[0]!;
+    while (idx < knownXs.length && knownXs[idx]! <= x) idx++;
+    result[i] = idx - 1 >= 0 ? knownYs[idx - 1]! : knownYs[0]!;
   }
   return result;
 }

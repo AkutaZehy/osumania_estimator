@@ -8,6 +8,9 @@ import type { ParsedBeatmap } from "../types/beatmap.js";
 import type { SunnyResult } from "../types/algorithm.js";
 import type { PatternSummary } from "../types/patterns.js";
 import type { GridAnalysisResult } from "./gridAnalysis.js";
+import type { PrimitiveRow } from "../types/primitives.js";
+import { createChart } from "../parser/chartBuilder.js";
+import { calculatePrimitives } from "../patterns/primitives.js";
 import { computeDensityMetrics } from "./density.js";
 import { computeEquivalentBPM } from "./equivalentBpm.js";
 import { computeJackMetrics } from "./jackAnalysis.js";
@@ -41,24 +44,31 @@ export function computeCustomMetrics(
   patterns: PatternSummary,
   speedRate: number = 1,
   gridAnalysis?: GridAnalysisResult | null,
+  sharedPrimitives?: PrimitiveRow[],
 ): CustomMetrics {
   // Density metrics (used by multiple sub-modules).
   const density = computeDensityMetrics(parsed, 1000, speedRate);
+
+  // Chart + primitives: jack/stream/tech/stamina each built their own copy
+  // (and tech built a second one inside its roll/trill stats) — 5 duplicate
+  // passes over every note per map. Build once here and share. When the
+  // analyzer already built them (whole-pipeline sharing) they are passed in.
+  const primitives = sharedPrimitives ?? calculatePrimitives(createChart(parsed), speedRate);
 
   // Equivalent BPM based on pattern type and note division.
   const equivalentBPM = computeEquivalentBPM(parsed, patterns, speedRate);
 
   // Jack-specific analysis.
-  const jack = computeJackMetrics(parsed, density, speedRate);
+  const jack = computeJackMetrics(parsed, density, speedRate, primitives);
 
   // Stream-specific analysis.
-  const stream = computeStreamMetrics(parsed, density, speedRate);
+  const stream = computeStreamMetrics(parsed, density, speedRate, primitives);
 
   // Tech-specific analysis (bursts, graces, rolls/trills).
-  const tech = computeTechMetrics(parsed, patterns, speedRate, gridAnalysis ?? undefined);
+  const tech = computeTechMetrics(parsed, patterns, speedRate, gridAnalysis ?? undefined, primitives);
 
   // Stamina analysis (stretches above median density).
-  const stamina = computeStaminaMetrics(parsed, density, speedRate);
+  const stamina = computeStaminaMetrics(parsed, density, speedRate, primitives);
 
   // LN-specific analysis (ratio, release, patterns).
   const ln = computeLNMetrics(parsed, sunny, patterns, speedRate);

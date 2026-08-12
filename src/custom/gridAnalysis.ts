@@ -352,12 +352,16 @@ function detectCrossCellJacks(
     const endIdx = Math.min(i + 3, cells.length);
     if (endIdx - i < 2) continue;
 
-    // Concatenate pre-cached notes from the window cells (avoids getNotesInRange calls)
-    let allNotes: NoteInfo[] = [];
+    // Flatten pre-cached notes from the window cells in one pass, keeping
+    // only rice (avoids getNotesInRange calls and repeated concat copies).
+    const rice: NoteInfo[] = [];
     for (let w = i; w < endIdx; w++) {
-      allNotes = allNotes.concat(cells[w]!._notes);
+      const src = cells[w]!._notes;
+      for (let m = 0; m < src.length; m++) {
+        const n = src[m]!;
+        if (!n.isLN) rice.push(n);
+      }
     }
-    const rice = allNotes.filter((n) => !n.isLN);
     if (rice.length < 2) continue;
 
     // Total adjacent pairs
@@ -1088,9 +1092,16 @@ function createSegment(
   let lnSubtypes: Array<{ key: string; name: string; value: string }> = [];
   if (category === "ln") {
     const beatLength = 60000 / effectiveBPM;
-    // Aggregate LN metrics across all cells in segment (concat pre-cached notes)
-    let allNotes: NoteInfo[] = [];
-    for (const cell of cells) allNotes = allNotes.concat(cell._notes);
+    // Aggregate LN metrics across all cells in segment — single allocation
+    // instead of growing the array with repeated concat.
+    let totalNotes = 0;
+    for (const cell of cells) totalNotes += cell._notes.length;
+    const allNotes = new Array<NoteInfo>(totalNotes);
+    let k = 0;
+    for (const cell of cells) {
+      const src = cell._notes;
+      for (let m = 0; m < src.length; m++) allNotes[k++] = src[m]!;
+    }
     const metrics = analyzeLNCell(allNotes, beatLength);
     const lnResult = classifyLNCell(metrics);
     lnSubtype = lnResult.lnSubtype;
@@ -1433,7 +1444,8 @@ export function analyzeGrid(
 
     const notes = getNotesInRange(beatmap, cellStart, cellEnd);
     const noteCount = notes.length;
-    const lnNotes = notes.filter((n) => n.isLN).length;
+    let lnNotes = 0;
+    for (const n of notes) if (n.isLN) lnNotes++;
     const lnRatio = noteCount > 0 ? lnNotes / noteCount : 0;
 
     // Pre-group notes by quarter-beat row for zero-cost access by later phases

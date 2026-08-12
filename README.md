@@ -359,6 +359,10 @@ Analysis pipeline optimized for sub-second execution on most maps:
 - End-time grouping O(k) A/R detection
 - `lowerBound` binary search for boundary lookups
 - Heavy map guard at 30000 notes; heavy LN guard at 15000 LNs
+- LRU result cache (50 entries, keyed by `md5|modSignature`): revisiting a
+  previously-seen (map, mod) pair skips the HTTP fetch and the full pipeline;
+  map switches and mod toggles still re-analyze live (gate unchanged), hits
+  just resolve instantly. Memory-only, cleared on overlay reload.
 
 ### Build & Test
 

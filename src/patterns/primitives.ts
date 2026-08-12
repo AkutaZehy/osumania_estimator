@@ -24,21 +24,6 @@ function keysOnLeftHand(keymode: number): number {
 }
 
 /**
- * Effective beat length (ms per beat) at a given time.
- * Scans BPM timeline and returns the active beat length.
- */
-function beatLengthAt(chart: Chart, time: number): number {
-  if (!chart.bpm.length) return 500;
-  const first = chart.bpm[0]!;
-  let current = first.beatLength;
-  for (const item of chart.bpm) {
-    if (item.time > time) break;
-    current = item.beatLength;
-  }
-  return current;
-}
-
-/**
  * Detect column movement direction between two consecutive rows.
  *
  * Direction logic:
@@ -75,6 +60,14 @@ export function detectDirection(
 }
 
 /**
+ * Shared immutable empty column list. Primitive rows with no LN heads/bodies/
+ * tails or no normal notes reuse this instead of allocating an empty array
+ * per row (~40k small arrays on dense maps — the main GC churn of the chart
+ * stage). All consumers only read these arrays (length/iteration/index).
+ */
+const EMPTY_COLS: number[] = Object.freeze([]) as unknown as number[];
+
+/**
  * Extract row-level primitives from a Chart.
  * Each returned PrimitiveRow corresponds to one TimeItem.
  */
@@ -97,6 +90,12 @@ export function calculatePrimitives(chart: Chart, speedRate: number = 1): Primit
   let index = 0;
   const leftHandKeys = keysOnLeftHand(chart.keys);
   const out: PrimitiveRow[] = [];
+
+  // Monotonic pointer over the BPM timeline: resolveBPM emits one entry per
+  // note, so scanning from 0 for every row is O(n²) on dense maps (this was
+  // the dominant cost of the chart stage in-game, ~10x amplified).
+  const bpm = chart.bpm;
+  let bpmIdx = 0;
 
   for (const item of chart.notes.slice(1)) {
     const t = item.time;
@@ -140,22 +139,24 @@ export function calculatePrimitives(chart: Chart, speedRate: number = 1): Primit
       jacks = currentRow.filter((x) => prevSet.has(x)).length;
     }
 
+    while (bpmIdx + 1 < bpm.length && bpm[bpmIdx + 1]!.time <= t) bpmIdx++;
+
     out.push({
       index,
       time: t - firstNote,
       msPerBeat: ((t - previousTime) * 4.0) / speedRate,
-      beatLength: beatLengthAt(chart, t) / speedRate,
+      beatLength: (bpm[bpmIdx]?.beatLength ?? 500) / speedRate,
       notes: currentRow.length,
       jacks,
       direction,
       roll: isRoll,
       keys: chart.keys,
       leftHandKeys,
-      lnHeads,
-      lnBodies,
-      lnTails,
-      normalNotes,
-      rawNotes: currentRow,
+      lnHeads: lnHeads.length ? lnHeads : EMPTY_COLS,
+      lnBodies: lnBodies.length ? lnBodies : EMPTY_COLS,
+      lnTails: lnTails.length ? lnTails : EMPTY_COLS,
+      normalNotes: normalNotes.length ? normalNotes : EMPTY_COLS,
+      rawNotes: currentRow.length ? currentRow : EMPTY_COLS,
     });
 
     if (currentRow.length) previousRow = currentRow;

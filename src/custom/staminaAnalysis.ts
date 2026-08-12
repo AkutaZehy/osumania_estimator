@@ -29,15 +29,13 @@ function buildDensityTimeSeries(
   const endTime = primitives[primitives.length - 1]!.time;
   const series: Array<[number, number]> = [];
 
+  // primitives are time-ordered; since sample times only move forward,
+  // keep a monotonic pointer instead of rescanning from 0 each sample
+  // (previously O(samples × n), now O(samples + n)).
+  let idx = 0;
   for (let t = startTime; t <= endTime; t += stepMs) {
     // Find the first primitive row at-or-after time t.
-    let idx = 0;
-    for (let i = 0; i < primitives.length; i++) {
-      if (primitives[i]!.time >= t) {
-        idx = i;
-        break;
-      }
-    }
+    while (idx < primitives.length && primitives[idx]!.time < t) idx++;
 
     // 4-row density starting at idx.
     let density = 0;
@@ -148,7 +146,7 @@ function analyzeDensitySeries(
  * @returns StaminaMetrics with maxDensity, maxDuration, medDensity,
  *          medDuration, medTotalTime.
  */
-export function computeStaminaMetrics(beatmap: ParsedBeatmap, _density: unknown, speedRate = 1) {
+export function computeStaminaMetrics(beatmap: ParsedBeatmap, _density: unknown, speedRate = 1, sharedPrimitives?: PrimitiveRow[]) {
   if (beatmap.noteStarts.length === 0) {
     return {
       maxDensity: 0,
@@ -159,8 +157,9 @@ export function computeStaminaMetrics(beatmap: ParsedBeatmap, _density: unknown,
     };
   }
 
-  const chart = createChart(beatmap);
-  const primitives = calculatePrimitives(chart, speedRate);
+  // Shared primitives (from computeCustomMetrics) avoid re-building the chart
+  // per sub-module; falls back to a local build for standalone callers.
+  const primitives = sharedPrimitives ?? calculatePrimitives(createChart(beatmap), speedRate);
 
   if (primitives.length === 0) {
     return {
