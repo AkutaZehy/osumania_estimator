@@ -8,6 +8,7 @@ import type { DensityMetrics, AnchorTier, LNMetrics } from "../types/custom.js";
 import type { PatternCluster } from "../types/patterns.js";
 import type { SectionAnalysis, SegmentCategory } from "../custom/sectionAnalysis.js";
 import type { GridAnalysisResult, CellResult } from "../custom/gridAnalysis.js";
+import { jackBothHandsRatio } from "../custom/gridAnalysis.js";
 
 const DEBUG = true;
 function debugLog(...args: unknown[]): void {
@@ -158,6 +159,25 @@ function aggregateJackPurity(ga: GridAnalysisResult | null): string | null {
   }
   if (totalCells === 0) return null;
   return `${(validCells / totalCells * 100).toFixed(0)}%`;
+}
+
+/**
+ * Both-hands jack classification (0-4 scale from jackBothHandsRatio):
+ * > 2 → "Chordjack" (both hands hold keys simultaneously most rows),
+ * otherwise → "Minijack". Appended to the purity percentage.
+ */
+/**
+ * Both-hands jack classification on the 0-4 scale (jackBothHandsRatio),
+ * strictly: <2 → "Speed" (single-hand/minijack dominant), 2-2.8 → "Stream"
+ * (mixed), >2.8 → "Chord" (both-hand chordjack). Appended to the purity
+ * percentage as `Type(value)` with the 2-decimal value, e.g. "95% Chord(2.80)".
+ */
+function jackHandsLabel(ga: GridAnalysisResult | null): string {
+  if (!ga) return "";
+  if (!ga.segments.some((s) => s.category === "jack")) return "";
+  const v = jackBothHandsRatio(ga);
+  const type = v < 2 ? "Speed" : v <= 2.8 ? "Stream" : "Chord";
+  return `${type}(${v.toFixed(2)})`;
 }
 function mrow(label: string, value: string): string {
   return `<div class="mrow"><span>${label}</span><span>${value}</span></div>`;
@@ -360,9 +380,11 @@ export function showResult(result: DifficultyResult): void {
   r.push(`<div class="grid-row">`);
   const jackDir = j.handBias ? ` ${j.handBias}` : "";
   const jackImbal = j.isBias ? `bias${jackDir}` : `${j.imbalance4r.toFixed(2)}/${j.imbalance16r.toFixed(2)}${jackDir}`;
+  const jackPurityStr = aggregateJackPurity(ga) ?? "—";
+  const jackHandsStr = jackHandsLabel(ga);
   const jackItems = [
     mrow("Grade", aggregateGridGrade(ga, "jack") ?? j.densityGrade ?? "None"),
-    mrow("Purity", aggregateJackPurity(ga) ?? "—"),
+    mrow("Purity", jackHandsStr ? `${jackPurityStr} ${jackHandsStr}` : jackPurityStr),
     mrow("Anchor", anchorCellStr(custom.anchor.sf)),
     mrow("Finger", j.singleFingerPressure.toFixed(2)),
     mrow("Hand", j.singleHandPressure.toFixed(2)),

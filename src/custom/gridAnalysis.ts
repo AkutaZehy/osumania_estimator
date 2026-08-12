@@ -434,6 +434,85 @@ function computeBeatStructure(
 // ---------------------------------------------------------------------------
 
 /**
+ * Jack both-hands occupancy: within the map's main jack passages, for each
+ * note-step (quarter-beat at effective BPM — same granularity as jack grade)
+ * check whether both hands hold keys at once (cols 0/1 ∧ cols 2/3).
+ *
+ * "Main jack passages" = jack cells at the dominant effective-BPM group,
+ * selected the same way as mainKeyType (highest effBPM first, must pass the
+ * cell-count threshold, else most-cells group). This excludes slower
+ * jumpjack/双押 cells (e.g. subdiv-2 at low effBPM) whose both-hand chords
+ * would otherwise inflate the value beyond the real chordjack passages.
+ *
+ * Per segment: both-hand step ratio × 4 (0-4). Aggregation: cell-weighted
+ * P90 over segment ratios. >2 ⇒ chordjack-dominant, ≤2 ⇒ minijack-dominant.
+ */
+export function jackBothHandsRatio(ga: GridAnalysisResult): number {
+  const segs = ga.segments.filter((s) => s.category === "jack");
+  if (segs.length === 0) return 0;
+
+  // ---- Select the dominant effective-BPM group (mirror of mainKeyType) ----
+  const byEff = new Map<number, number>();
+  for (const seg of segs) {
+    for (const cell of seg.cells) {
+      byEff.set(cell.effectiveBPM, (byEff.get(cell.effectiveBPM) ?? 0) + 1);
+    }
+  }
+  const groups = [...byEff.entries()].sort((a, b) => b[0] - a[0]);
+  const threshold = (eff: number): number => (eff < 150 ? 30 : 50);
+  let mainEff = groups.find(([eff, n]) => n >= threshold(eff))?.[0];
+  if (mainEff === undefined) {
+    mainEff = groups.reduce((best, g) => (g[1] > best[1] ? g : best), groups[0]!)[0];
+  }
+
+  // ---- Both-hands ratio over the main group's cells only ----
+  const pairs: Array<{ v: number; w: number }> = [];
+  for (const seg of segs) {
+    const cells = seg.cells.filter((c) => c.effectiveBPM === mainEff);
+    if (cells.length === 0) continue;
+
+    const jackInterval = 60000 / (mainEff || 120) / 4;
+    const allNotes: Array<{ time: number; col: number }> = [];
+    for (const cell of cells) {
+      for (const n of cell._notes) allNotes.push({ time: n.start, col: n.col });
+    }
+    if (allNotes.length < 2) continue;
+
+    const anchor = allNotes[0]!.time;
+    const stepHands = new Map<number, { l: boolean; r: boolean }>();
+    for (const n of allNotes) {
+      const slot = Math.round((n.time - anchor) / jackInterval);
+      let h = stepHands.get(slot);
+      if (!h) {
+        h = { l: false, r: false };
+        stepHands.set(slot, h);
+      }
+      if (n.col < 2) h.l = true;
+      else h.r = true;
+    }
+
+    let bothSteps = 0;
+    for (const h of stepHands.values()) {
+      if (h.l && h.r) bothSteps++;
+    }
+    if (stepHands.size === 0) continue;
+    pairs.push({ v: (bothSteps / stepHands.size) * 4, w: cells.length });
+  }
+  if (pairs.length === 0) return 0;
+
+  // Cell-weighted P90 over segment ratios (same math as jack grade aggregation)
+  pairs.sort((a, b) => a.v - b.v);
+  const totalW = pairs.reduce((s, p) => s + p.w, 0);
+  const target = 0.9 * totalW;
+  let acc = 0;
+  for (const p of pairs) {
+    acc += p.w;
+    if (acc >= target) return Math.round(p.v * 1000) / 1000;
+  }
+  return Math.round(pairs[pairs.length - 1]!.v * 1000) / 1000;
+}
+
+/**
  * Jack density grade: based on total notes in 4-row window.
  */
 export function gradeJack(maxWindowNotes: number, medWindowNotes: number): string {
