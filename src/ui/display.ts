@@ -162,11 +162,6 @@ function aggregateJackPurity(ga: GridAnalysisResult | null): string | null {
 }
 
 /**
- * Both-hands jack classification (0-4 scale from jackBothHandsRatio):
- * > 2 → "Chordjack" (both hands hold keys simultaneously most rows),
- * otherwise → "Minijack". Appended to the purity percentage.
- */
-/**
  * Both-hands jack classification on the 0-4 scale (jackBothHandsRatio),
  * strictly: <2 → "Speed" (single-hand/minijack dominant), 2-2.8 → "Stream"
  * (mixed), >2.8 → "Chord" (both-hand chordjack). Appended to the purity

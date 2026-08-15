@@ -133,7 +133,8 @@ Shown when LN ratio > 1% or patterns detected.
 
 | Field   | Meaning                                                                         |
 | ------- | ------------------------------------------------------------------------------- |
-| Grade   | A4 tiers: Mini (≤5) / Low CJ (6-7) / Mid CJ (8-10) / High CJ (≥11). Values: P90/P50 |
+| Grade   | A4 tiers: Mini (≤5) / Low CJ (6-7) / Mid CJ (8-10) / High CJ (≥11). Values: cell-weighted P90/P50 |
+| Purity  | Valid jack-cell ratio + both-hands type. Display: `95% Chord(2.80)` — `Type(value)` with <2 Speed (minijack/single-hand dominant), 2–2.8 Stream (mixed), >2.8 Chord (both-hand chordjack) |
 | Anchor  | SF (Single Finger) stamina — `P100 / P90=v×n / P50=v×n` in measures            |
 | Finger  | Max per-column density / max both-hands (1.0 balanced, >1.5 biased)            |
 | Hand    | Max(left,right) peak density / max both-hands (1.0 balanced, >1.5 biased)      |
@@ -145,7 +146,7 @@ Shown when LN ratio > 1% or patterns detected.
 | Field   | Meaning                                                                 |
 | ------- | ----------------------------------------------------------------------- |
 | Type    | Stream / JumpStream / HandStream / mixed                                |
-| Grade   | Single(≤4) / Light(5) / Mid(6) / Dense(8) / Heavy(9+). P90/P50         |
+| Grade   | Single(≤4) / Light(5) / Mid(6) / Dense(8) / Heavy(9+). Cell-weighted P90/P50 |
 | Imbal   | 16-row / 64-row / overall hand imbalance. Direction label: L/R/S        |
 | Brk2r   | Broken stream: max/median notes in any 2-row window                     |
 | Sta L/R | SH (Single Hand) stamina — `P100 / P90=v×n / P50=v×n`                   |
@@ -344,7 +345,7 @@ Jack imbalance uses 16r/64r windows; stream imbalance excludes jack rows.
 
 Mod changes trigger a live re-analysis (no manual refresh needed):
 
-- **Speed mods**: DT/NC (1.5x), HT (0.75x), lazer custom rates (e.g. DC via `speed_change`), and the tosu `rate` field take priority. BPM and other time-based metrics scale by `speedRate`; pattern/key-type classification stays speed-invariant (structure is analyzed at nominal speed, only the resulting numbers scale).
+- **Speed mods**: DT/NC (1.5x), HT (0.75x), lazer custom rates (e.g. DC via `speed_change`), and the tosu `rate` field take priority. BPM and other time-based metrics scale by `speedRate`. The pattern/key-type stage runs on the speed-scaled beat length, so pattern-card and segment-table BPM are effective BPM (`rawBPM * speedRate`, same convention as the BPM/DENSITY panel); beat-relative detection windows scale with tempo.
 - **Conversion mods**: IN (tap→hold) and HO (hold→tap) re-run the parser with the converted chart so all downstream analysis (patterns, grid, sections, custom) sees the modded notes.
 - **OD mods**: HR/EZ are detected (`odFlag`) for difficulty weighting.
 
@@ -370,11 +371,12 @@ Analysis pipeline optimized for sub-second execution on most maps:
 npm install && npm run build     # esbuild → dist/index.js
 npm run typecheck                # TypeScript type checking
 npm test                         # Vitest suite
+npm run bench                    # perf benchmark (npm run bench:stages for per-stage breakdown)
 ```
 
 Output: `deploy/osumania-estimator by Akuta Zehy/`
 
-Test maps are in `maps/` (dan packs + SV test maps). Test suites in `test/` (vitest suites live under `test/*.test.ts`; the rest are one-off diagnostic scripts).
+Test maps are in `maps/` (dan packs + SV test maps). Test suites in `test/` (vitest suites live under `test/*.test.ts`; the rest are one-off diagnostic scripts). Perf/verification one-offs live in `scripts/` (`bench.ts`, `verify*.ts`).
 
 ### Acknowledgments
 

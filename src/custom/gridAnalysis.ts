@@ -445,7 +445,9 @@ function computeBeatStructure(
  * would otherwise inflate the value beyond the real chordjack passages.
  *
  * Per segment: both-hand step ratio × 4 (0-4). Aggregation: cell-weighted
- * P90 over segment ratios. >2 ⇒ chordjack-dominant, ≤2 ⇒ minijack-dominant.
+ * P90 over segment ratios. P90 >2.8 ⇒ both-hand chordjack dominant;
+ * 2–2.8 ⇒ mixed; <2 ⇒ minijack/single-hand dominant (same bands as the
+ * Speed/Stream/Chord display labels in the JACK panel).
  */
 export function jackBothHandsRatio(ga: GridAnalysisResult): number {
   const segs = ga.segments.filter((s) => s.category === "jack");
