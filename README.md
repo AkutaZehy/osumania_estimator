@@ -1,4 +1,4 @@
-# osumania-estimator v4.1.0
+# osumania-estimator v4.2.0
 
 A tosu overlay plugin for osu!mania 4K key pattern analysis and difficulty estimation.
 
@@ -177,7 +177,7 @@ The switch metric is computed over uneven rows clustered from actual note timest
 
 ## Technical Notes
 
-### Architecture (v4.1.0)
+### Architecture (v4.2.0)
 
 The analysis pipeline is decomposed into focused modules:
 
