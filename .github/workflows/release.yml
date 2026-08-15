@@ -1,0 +1,86 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  packages: read
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build project
+        run: npm run build
+
+      - name: Get version from package.json
+        id: get_version
+        run: echo "version=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
+
+      - name: Create release package
+        run: |
+          DISPLAY_NAME="osumania-estimator by Akuta Zehy"
+          mkdir -p /tmp/release-package
+          # Build the release zip from the deploy folder (folder nested at root,
+          # matching the local packaging: osumania-estimator by Akuta Zehy/dist/...)
+          cd deploy
+          zip -r "/tmp/release-package/${DISPLAY_NAME}.zip" "${DISPLAY_NAME}"
+          cd -
+          ls -la /tmp/release-package/
+
+      - name: Upload zip artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: osumania-estimator-by-Akuta-Zehy
+          path: /tmp/release-package/osumania-estimator by Akuta Zehy.zip
+          retention-days: 1
+
+      - name: Generate release notes
+        id: release_notes
+        run: |
+          VERSION="${{ steps.get_version.outputs.version }}"
+          REF_NAME="${GITHUB_REF#refs/tags/}"
+
+          PREV_TAG=$(git describe --tags --abbrev=0 --exclude="v${VERSION}" 2>/dev/null || echo "")
+          if [ -n "$PREV_TAG" ]; then
+            COMMITS=$(git log ${PREV_TAG}..${REF_NAME} --pretty=format:"- %s" | head -50)
+          else
+            COMMITS=$(git log --pretty=format:"- %s" -20)
+          fi
+
+          if [ -z "$COMMITS" ]; then
+            COMMITS="* No release notes available"
+          fi
+
+          {
+            echo "notes<<EOF"
+            echo "$COMMITS"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.get_version.outputs.version }}
+          name: v${{ steps.get_version.outputs.version }}
+          body: ${{ steps.release_notes.outputs.notes }}
+          draft: false
+          prerelease: false
+          files: /tmp/release-package/*.zip
