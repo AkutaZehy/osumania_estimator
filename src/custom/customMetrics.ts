@@ -19,6 +19,7 @@ import { computeTechMetrics } from "./techAnalysis.js";
 import { computeStaminaMetrics } from "./staminaAnalysis.js";
 import { computeLNMetrics } from "./lnAnalysis.js";
 import { computeAnchorMetrics } from "./anchorAnalysis.js";
+import { computeJackClass } from "./jackClass.js";
 
 /**
  * Compute the full custom metrics pipeline for a 4K beatmap.
@@ -89,6 +90,9 @@ export function computeCustomMetrics(
     };
   }
 
+  // Jack class (type label) + burst/sum stamina.
+  const jackClass = computeJackClass(parsed, speedRate);
+
   return {
     density,
     equivalentBPM,
@@ -98,5 +102,6 @@ export function computeCustomMetrics(
     stamina,
     ln,
     anchor,
+    jackClass,
   };
 }

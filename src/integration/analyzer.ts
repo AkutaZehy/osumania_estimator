@@ -164,6 +164,16 @@ function defaultCustomMetrics(
       sfBPM: 0,
       shBPM: 0,
     },
+    jackClass: {
+      className: "Actually Not Jack",
+      eff: 0,
+      isJack: false,
+      burstSec: 0,
+      burstNotes: 0,
+      burstBroken: false,
+      sumSec: 0,
+      sumNotes: 0,
+    },
   };
 }
 
