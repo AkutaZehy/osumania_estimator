@@ -362,7 +362,7 @@ export function showResult(result: DifficultyResult): void {
   r.push(col("JACK", ...jackItems));
   const streamDir = s.handBias ? ` ${s.handBias}` : "";
   const streamImbal = `${s.imbalance4r.toFixed(2)}/${s.imbalance16r.toFixed(2)}${streamDir}`;
-  const sc = custom.switchClass;
+  const sc = custom.streamClass;
   // Row order aligned with the JACK panel: Grade, Class, Stamina, Imbal —
   // stream-only rows (Brk2r, Sta L/R, Sta Alt) move to the back.
   const streamItems = [

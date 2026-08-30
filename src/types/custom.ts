@@ -71,8 +71,8 @@ export interface JackClassInfo {
   sumNotes: number;
 }
 
-/** Stream Stamina peaks + 切 class label (switchClass.ts) */
-export interface SwitchClassInfo {
+/** Stream Stamina peaks + 切 class label (streamClass.ts) */
+export interface StreamClassInfo {
   /** e.g. "175 Mid JS, Technical"; "—" when no data */
   className: string;
   /** Dominant row cadence effective BPM */
@@ -212,5 +212,5 @@ export interface CustomMetrics {
   /** Jack type class + burst/sum stamina */
   jackClass: JackClassInfo;
   /** 切 class label + stream stamina peaks */
-  switchClass: SwitchClassInfo;
+  streamClass: StreamClassInfo;
 }

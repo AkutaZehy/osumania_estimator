@@ -174,7 +174,7 @@ function defaultCustomMetrics(
       sumSec: 0,
       sumNotes: 0,
     },
-    switchClass: {
+    streamClass: {
       className: "—",
       eff: 0,
       w10: 0,

@@ -58,20 +58,39 @@ jobs:
           VERSION="${{ steps.get_version.outputs.version }}"
           REF_NAME="${GITHUB_REF#refs/tags/}"
 
-          PREV_TAG=$(git describe --tags --abbrev=0 --exclude="v${VERSION}" 2>/dev/null || echo "")
-          if [ -n "$PREV_TAG" ]; then
-            COMMITS=$(git log ${PREV_TAG}..${REF_NAME} --pretty=format:"- %s" | head -50)
-          else
-            COMMITS=$(git log --pretty=format:"- %s" -20)
+          # Prefer the CHANGELOG.md section for this version (up to the next
+          # "## " heading); fall back to commit subjects between tags.
+          NOTES=$(awk -v ver="$VERSION" '
+            !found && /^## / {
+              h = substr($0, 4)
+              if (h == ver || index(h, ver " ") == 1) found = 1
+              next
+            }
+            found && /^## / { exit }
+            found { lines[++n] = $0 }
+            END {
+              s = 1; while (s <= n && lines[s] == "") s++
+              e = n; while (e >= s && lines[e] == "") e--
+              for (i = s; i <= e; i++) print lines[i]
+            }
+          ' CHANGELOG.md 2>/dev/null)
+
+          if [ -z "$NOTES" ]; then
+            PREV_TAG=$(git describe --tags --abbrev=0 --exclude="v${VERSION}" 2>/dev/null || echo "")
+            if [ -n "$PREV_TAG" ]; then
+              NOTES=$(git log ${PREV_TAG}..${REF_NAME} --pretty=format:"- %s" | head -50)
+            else
+              NOTES=$(git log --pretty=format:"- %s" -20)
+            fi
           fi
 
-          if [ -z "$COMMITS" ]; then
-            COMMITS="* No release notes available"
+          if [ -z "$NOTES" ]; then
+            NOTES="* No release notes available"
           fi
 
           {
             echo "notes<<EOF"
-            echo "$COMMITS"
+            echo "$NOTES"
             echo "EOF"
           } >> "$GITHUB_OUTPUT"
 

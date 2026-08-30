@@ -1,5 +1,5 @@
 // ============================================================
-// Switch (切) Class & Stream Stamina — run/interval extraction on
+// Stream (切) Class & Stream Stamina — run/interval extraction on
 // the dominant row cadence, per the 切 STA design sessions.
 //
 // Class  = "[eff] [Full|Dense|Broken|Mid] (JS|HS|SS)[, Jacky][, Technical]"
@@ -19,7 +19,7 @@
 // ============================================================
 
 import type { ParsedBeatmap } from "../types/beatmap.js";
-import type { SwitchClassInfo } from "../types/custom.js";
+import type { StreamClassInfo } from "../types/custom.js";
 
 interface Row { t: number; cols: number[]; }
 interface Cluster { center: number; count: number; eff: number; }
@@ -76,8 +76,8 @@ function rowCadenceClusters(rows: Row[]): Cluster[] {
  * Compute the 切 Class label and 10s/30s stream stamina peaks.
  * speedRate scales note times into played time (DT=1.5 → faster).
  */
-export function computeSwitchClass(parsed: ParsedBeatmap, speedRate = 1): SwitchClassInfo {
-  const empty: SwitchClassInfo = { className: "—", eff: 0, w10: 0, w30: 0 };
+export function computeStreamClass(parsed: ParsedBeatmap, speedRate = 1): StreamClassInfo {
+  const empty: StreamClassInfo = { className: "—", eff: 0, w10: 0, w30: 0 };
   if (parsed.noteStarts.length < 20) return empty;
 
   const rows = buildRows(parsed, speedRate);
