@@ -348,39 +348,27 @@ export function showResult(result: DifficultyResult): void {
   const jackImbal = j.isBias ? `bias${jackDir}` : `${j.imbalance4r.toFixed(2)}/${j.imbalance16r.toFixed(2)}${jackDir}`;
   const jc = custom.jackClass;
   const staminaStr = jc.isJack
-    ? `${jc.burstSec.toFixed(1)}s（${jc.burstNotes}${jc.burstBroken ? "，Broken" : ""}） / ${jc.sumSec.toFixed(1)}s（${jc.sumNotes}）`
+    ? `${jc.burstSec.toFixed(1)}s (${jc.burstNotes}${jc.burstBroken ? "，Broken" : ""}) / ${jc.sumSec.toFixed(1)}s (${jc.sumNotes})`
     : "—";
   const jackItems = [
     mrow("Grade", aggregateGridGrade(ga, "jack") ?? j.densityGrade ?? "None"),
     mrow("Class", jc.className),
     mrow("Stamina", staminaStr),
+    mrow("Imbal 4c/16c", jackImbal),
     mrow("Finger", j.singleFingerPressure.toFixed(2)),
     mrow("Hand", j.singleHandPressure.toFixed(2)),
-    mrow("Imbal 4c/16c", jackImbal),
     mrow("Vibro", ga?.vibroLabel ?? "No Vibro"),
   ];
   r.push(col("JACK", ...jackItems));
   const streamDir = s.handBias ? ` ${s.handBias}` : "";
   const streamImbal = `${s.imbalance4r.toFixed(2)}/${s.imbalance16r.toFixed(2)}${streamDir}`;
-  // Determine stream type from grid analysis segments (stream run analysis)
-  let streamDisplay = "Stream";
-  if (ga) {
-    let hasSS = false, hasJS = false, hasHS = false;
-    for (const seg of ga.segments) {
-      if (seg.category !== "stream") continue;
-      const kt = seg.keyType;
-      if (kt.includes("Handstream") || kt === "Full Handstream" || kt === "High Handstream" || kt === "Mid Handstream" || kt === "Low Handstream") hasHS = true;
-      if (kt.includes("Jumpstream") || kt === "Full Jumpstream" || kt === "High Jumpstream" || kt === "Mid Jumpstream" || kt === "Low Jumpstream") hasJS = true;
-      if (kt === "Single Stream" || kt === "High Stream") hasSS = true;
-    }
-    if (hasJS && hasHS) streamDisplay = "JumpStream / HandStream";
-    else if (hasHS) streamDisplay = "HandStream";
-    else if (hasJS) streamDisplay = "JumpStream";
-    else if (hasSS) streamDisplay = "Stream";
-  }
+  const sc = custom.switchClass;
+  // Row order aligned with the JACK panel: Grade, Class, Stamina, Imbal —
+  // stream-only rows (Brk2r, Sta L/R, Sta Alt) move to the back.
   const streamItems = [
-    mrow("Type", streamDisplay),
     mrow("Grade", aggregateGridGrade(ga, "stream") ?? s.densityGrade ?? "Unknown"),
+    mrow("Class", sc.className),
+    mrow("Stamina", `${sc.w10} (10s) / ${sc.w30} (30s)`),
     mrow("Imbal 4c/16c", streamImbal),
     mrow("Brk2r", `${s.brokenMax.toFixed(1)}/${s.brokenMed.toFixed(1)}`),
     mrow("Sta L/R", anchorCellStr(custom.anchor.sh)),

@@ -20,6 +20,7 @@ import { computeStaminaMetrics } from "./staminaAnalysis.js";
 import { computeLNMetrics } from "./lnAnalysis.js";
 import { computeAnchorMetrics } from "./anchorAnalysis.js";
 import { computeJackClass } from "./jackClass.js";
+import { computeSwitchClass } from "./switchClass.js";
 
 /**
  * Compute the full custom metrics pipeline for a 4K beatmap.
@@ -93,6 +94,9 @@ export function computeCustomMetrics(
   // Jack class (type label) + burst/sum stamina.
   const jackClass = computeJackClass(parsed, speedRate);
 
+  // 切 class label + stream stamina peaks.
+  const switchClass = computeSwitchClass(parsed, speedRate);
+
   return {
     density,
     equivalentBPM,
@@ -103,5 +107,6 @@ export function computeCustomMetrics(
     ln,
     anchor,
     jackClass,
+    switchClass,
   };
 }
