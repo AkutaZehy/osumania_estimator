@@ -3,7 +3,6 @@
 // multi-scale hand imbalance, and broken stream detection.
 // ============================================================
 
-import type { StreamMetrics } from "../types/custom.js";
 import type { ParsedBeatmap } from "../types/beatmap.js";
 import { createChart } from "../parser/chartBuilder.js";
 import { calculatePrimitives } from "../patterns/primitives.js";
@@ -274,9 +273,10 @@ function brokenStream(primitives: PrimitiveRow[]): {
  * @returns StreamMetrics with classification, density grade,
  *          multi-scale imbalance, and broken stream density.
  */
-export function computeStreamMetrics(beatmap: ParsedBeatmap, _density: unknown, speedRate = 1) {
-  const chart = createChart(beatmap);
-  const primitives = calculatePrimitives(chart, speedRate);
+export function computeStreamMetrics(beatmap: ParsedBeatmap, _density: unknown, speedRate = 1, sharedPrimitives?: PrimitiveRow[]) {
+  // Shared primitives (from computeCustomMetrics) avoid re-building the chart
+  // per sub-module; falls back to a local build for standalone callers.
+  const primitives = sharedPrimitives ?? calculatePrimitives(createChart(beatmap), speedRate);
 
   if (!primitives.length || beatmap.noteStarts.length === 0) {
     return {

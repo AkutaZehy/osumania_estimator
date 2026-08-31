@@ -4,7 +4,6 @@
 // instead of re-analyzing primitive-level note intervals.
 // ============================================================
 
-import type { EquivalentBPM } from "../types/custom.js";
 import type { ParsedBeatmap } from "../types/beatmap.js";
 import type { PatternSummary, PatternCluster } from "../types/patterns.js";
 import { CorePattern } from "../types/patterns.js";

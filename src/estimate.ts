@@ -27,7 +27,7 @@
 // ============================================================
 
 import type { DifficultyResult } from "./types/result.js";
-import type { CellResult } from "./custom/gridAnalysis.js";
+import type { CellResult, SegmentResult } from "./custom/gridAnalysis.js";
 
 export interface EstimateResult {
   /** "rc" | "ln" | "vibro" */
@@ -211,7 +211,7 @@ function rcHigh(f: Features): number {
     + RCH.techTrills24 * f.techTrills24;
 }
 
-function isSpeedDominant(segs: CellResult[]): boolean {
+function isSpeedDominant(segs: SegmentResult[]): boolean {
   // Single-stream-heavy: rolls/minitrills/single-stream account for >70% of
   // stream cells, total stream cells > 100. Speed maps are BPM-bound;
   // grade reflects cleanliness not difficulty — skip rcKey's streamMedW term.
@@ -228,7 +228,7 @@ function isSpeedDominant(segs: CellResult[]): boolean {
 
 function rcEstimate(
   f: Features,
-  { segments, jackK }: { segments?: CellResult[]; jackK?: number } = {},
+  { segments, jackK }: { segments?: SegmentResult[]; jackK?: number } = {},
 ): number {
   const effectiveJackK = jackK ?? RCL.jackK;
   // very-low band: key-type model (no sunny term), capped by the user
@@ -386,49 +386,52 @@ export function extractFeaturesG(osuText: string): GFeatures | null {
     if (!inHitObjects || !line.trim()) continue;
     const parts = line.split(",");
     if (parts.length < 3) continue;
-    const time = parseInt(parts[2]);
-    const type = parseInt(parts[3]) || 0;
+    const time = parseInt(parts[2]!);
+    const type = parseInt(parts[3] ?? "") || 0;
     if ((type & 128) !== 0) continue;
-    const col = parseInt(parts[0]);
+    const col = parseInt(parts[0]!);
     if (col < 64 || col > 448) continue;
     notes.push({ time, col });
   }
   notes.sort((a, b) => a.time - b.time);
   if (notes.length < 10) return null;
 
-  const totalTime = (notes[notes.length - 1].time - notes[0].time) / 1000;
+  const firstNote = notes[0]!;
+  const lastNote = notes[notes.length - 1]!;
+  const totalTime = (lastNote.time - firstNote.time) / 1000;
 
   const offset = 20, tauMs = 500, decay = Math.exp(-1 / tauMs);
-  let smoothed = 0, prevTime = notes[0].time;
+  let smoothed = 0, prevTime = firstNote.time;
   const sv: number[] = [];
   for (let i = 1; i < notes.length; i++) {
-    const dt = notes[i].time - notes[i - 1].time;
+    const cur = notes[i]!;
+    const dt = cur.time - notes[i - 1]!.time;
     const pressure = 1 / (dt + offset);
-    const elapsed = notes[i].time - prevTime;
+    const elapsed = cur.time - prevTime;
     smoothed = smoothed * Math.pow(decay, elapsed) + pressure;
     sv.push(smoothed);
-    prevTime = notes[i].time;
+    prevTime = cur.time;
   }
   const sorted = [...sv].sort((a, b) => a - b);
   const n = sorted.length;
-  const handMed = sorted[Math.floor(n * 0.5)];
+  const handMed = sorted[Math.floor(n * 0.5)]!;
 
   let jackPairs = 0;
-  for (let i = 1; i < notes.length; i++) { if (notes[i].col === notes[i - 1].col) jackPairs++; }
+  for (let i = 1; i < notes.length; i++) { if (notes[i]!.col === notes[i - 1]!.col) jackPairs++; }
   const jackRatio = jackPairs / (notes.length - 1);
-  const handP95 = sorted[Math.floor(n * 0.95)];
+  const handP95 = sorted[Math.floor(n * 0.95)]!;
   const burstiness = handP95 / Math.max(handMed, 0.001);
   const nps = notes.length / totalTime;
 
   const fp: number[] = [];
-  for (let i = 1; i < notes.length; i++) { fp.push(1 / (notes[i].time - notes[i - 1].time + offset)); }
+  for (let i = 1; i < notes.length; i++) { fp.push(1 / (notes[i]!.time - notes[i - 1]!.time + offset)); }
   fp.sort((a, b) => a - b);
-  const fingerMed = fp[Math.floor(fp.length * 0.5)];
+  const fingerMed = fp[Math.floor(fp.length * 0.5)]!;
 
   const dtimes: number[] = [];
-  for (let i = 1; i < notes.length; i++) dtimes.push(notes[i].time - notes[i - 1].time);
+  for (let i = 1; i < notes.length; i++) dtimes.push(notes[i]!.time - notes[i - 1]!.time);
   dtimes.sort((a, b) => a - b);
-  const MedTime = dtimes[Math.floor(dtimes.length * 0.5)];
+  const MedTime = dtimes[Math.floor(dtimes.length * 0.5)]!;
 
   return { handMed, nps, jackRatio, burstiness, fingerMed, MedTime, totalTime };
 }
@@ -483,8 +486,8 @@ export function scoreTypeG(f: GFeatures): [string, number][] {
 }
 
 export function classifyTypeG(scores: [string, number][]): string {
-  const [p1, c1] = scores[0];
-  const [p2, c2] = scores[1];
+  const [p1, c1] = scores[0]!;
+  const [p2, c2] = scores[1]!;
   const diff = c1 - c2;
 
   if (diff < 0.1) return `${p1}·${p2}`;
@@ -515,13 +518,12 @@ export function estimateDanG(rc: number, style: string, f: GFeatures): number {
   return Math.max(1, Math.min(20, dan));
 }
 
-export function formatGEstimate(dan: number, type: string): string {
+export function formatGEstimate(dan: number, _type: string): string {
   const base = Math.round(dan);
   const frac = dan - base;
   const tier = frac <= -0.125 ? "low" : frac <= 0.125 ? "mid" : "high";
   const name = base >= 11 ? (GREEK_BASE[base] ?? String(base)) : String(base);
   const prefix = base <= 17 ? "Reform" : "";
-  const typeLabel = type.replace("·", "\u00b7");
   return `${prefix ? prefix + " " : ""}${name} ${tier} (${dan.toFixed(2)})`;
 }
 

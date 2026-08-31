@@ -5,11 +5,16 @@
 
 import type { DensityMetrics } from "../types/custom.js";
 import type { ParsedBeatmap } from "../types/beatmap.js";
+import { windowCounts } from "./windowIndex.js";
 
 /**
  * Compute max and median density for a set of note start times
  * by sliding a window of `windowMs` across the timeline,
  * sampling at every note start time.
+ *
+ * startTimes MUST be sorted ascending (callers sort or rely on file order).
+ * Uses the shared two-pointer window index — O(n) total instead of the
+ * previous O(n²) per-note full scan (density runs 7× per map).
  */
 function computeDensityForTimes(
   startTimes: number[],
@@ -19,18 +24,14 @@ function computeDensityForTimes(
     return { maxDensity: 0, medianDensity: 0, meanDensity: 0 };
   }
 
-  const densities: number[] = [];
+  const densities = windowCounts(startTimes, windowMs);
 
-  for (const t of startTimes) {
-    const windowEnd = t + windowMs;
-    let count = 0;
-    for (const st of startTimes) {
-      if (st >= t && st < windowEnd) count++;
-    }
-    densities.push(count);
+  let maxDensity = 0;
+  let sum = 0;
+  for (const d of densities) {
+    if (d > maxDensity) maxDensity = d;
+    sum += d;
   }
-
-  const maxDensity = Math.max(...densities);
 
   const sorted = [...densities].sort((a, b) => a - b);
   const mid = Math.floor(sorted.length / 2);
@@ -39,7 +40,7 @@ function computeDensityForTimes(
       ? (sorted[mid - 1]! + sorted[mid]!) / 2
       : sorted[mid]!;
 
-  const meanDensity = densities.reduce((a, b) => a + b, 0) / densities.length;
+  const meanDensity = sum / densities.length;
 
   return { maxDensity, medianDensity, meanDensity };
 }
@@ -70,6 +71,8 @@ export function computeDensityMetrics(
       columnTimes[col]!.push(noteStarts[i]!);
     }
   }
+  // computeDensityForTimes requires sorted input (two-pointer window)
+  for (const arr of columnTimes) arr.sort((a, b) => a - b);
 
   // Per-column density.
   const perColumn: DensityMetrics["perColumn"] = [];

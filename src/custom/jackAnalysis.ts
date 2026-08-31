@@ -324,9 +324,10 @@ function isBias(primitives: PrimitiveRow[]): boolean {
  * @returns JackMetrics with density grade, anchor count, pressure scores,
  *          multi-scale imbalance, bias flag, and vibro flag.
  */
-export function computeJackMetrics(beatmap: ParsedBeatmap, density: DensityMetrics, speedRate = 1): JackMetrics {
-  const chart = createChart(beatmap);
-  const primitives = calculatePrimitives(chart, speedRate);
+export function computeJackMetrics(beatmap: ParsedBeatmap, density: DensityMetrics, speedRate = 1, sharedPrimitives?: PrimitiveRow[]): JackMetrics {
+  // Shared primitives (from computeCustomMetrics) avoid re-building the chart
+  // per sub-module; falls back to a local build for standalone callers.
+  const primitives = sharedPrimitives ?? calculatePrimitives(createChart(beatmap), speedRate);
 
   if (!primitives.length || beatmap.noteStarts.length === 0) {
     return {

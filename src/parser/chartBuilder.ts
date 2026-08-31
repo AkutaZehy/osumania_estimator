@@ -6,6 +6,7 @@
 import type { ParsedBeatmap } from "../types/beatmap.js";
 import type { Chart, TimeItem, BPMEntry } from "../types/chart.js";
 import { NoteType } from "../types/chart.js";
+import { upperBound } from "../utils/beatmapUtils.js";
 
 /**
  * Build a Chart intermediate representation from parsed beatmap data.
@@ -17,6 +18,9 @@ export function createChart(beatmap: ParsedBeatmap): Chart {
 
   // Group notes by unique time points
   const timeMap = new Map<number, NoteType[]>();
+  // LN ranges collected during the first pass so the body-marker loop below
+  // doesn't have to re-scan every note array.
+  const lns: { start: number; end: number; col: number }[] = [];
 
   for (let i = 0; i < noteCount; i++) {
     const startTime = beatmap.noteStarts[i]!;
@@ -35,6 +39,7 @@ export function createChart(beatmap: ParsedBeatmap): Chart {
 
     // Handle LN tails
     if (isLN && endTime > startTime) {
+      lns.push({ start: startTime, end: endTime, col });
       if (!timeMap.has(endTime)) {
         timeMap.set(endTime, new Array<NoteType>(keys).fill(NoteType.NOTHING));
       }
@@ -46,25 +51,19 @@ export function createChart(beatmap: ParsedBeatmap): Chart {
   }
 
   // Insert LN body markers: for each LN, mark HOLDBODY at all intermediate time points
-  for (let i = 0; i < noteCount; i++) {
-    const startTime = beatmap.noteStarts[i]!;
-    const endTime = beatmap.noteEnds[i]!;
-    const type = beatmap.noteTypes[i]!;
-    const col = beatmap.columns[i]!;
-    if ((type & 128) !== 0 && endTime > startTime) {
-      for (const t of timeMap.keys()) {
-        if (t > startTime && t < endTime) {
-          const bodyRow = timeMap.get(t)!;
-          if (bodyRow[col] === NoteType.NOTHING) {
-            bodyRow[col] = NoteType.HOLDBODY;
-          }
-        }
+  // (binary-search the time window per LN instead of scanning every unique time)
+  const sortedTimes = [...timeMap.keys()].sort((a, b) => a - b);
+  for (const ln of lns) {
+    let k = upperBound(sortedTimes, ln.start);
+    for (; k < sortedTimes.length && sortedTimes[k]! < ln.end; k++) {
+      const bodyRow = timeMap.get(sortedTimes[k]!)!;
+      if (bodyRow[ln.col] === NoteType.NOTHING) {
+        bodyRow[ln.col] = NoteType.HOLDBODY;
       }
     }
   }
 
   // Build sorted TimeItem array
-  const sortedTimes = [...timeMap.keys()].sort((a, b) => a - b);
   const notes: TimeItem[] = sortedTimes.map((time) => ({
     time,
     data: timeMap.get(time)!,
@@ -90,6 +89,9 @@ export function createChart(beatmap: ParsedBeatmap): Chart {
 
 /**
  * Resolve effective BPM at each note time from timing points.
+ * Only emits an entry when the beat length changes — the old version pushed
+ * one entry per note (~10k objects on dense maps, the main GC churn of the
+ * chart stage; beatLengthAt consumers only need change points).
  */
 function resolveBPM(
   beatmap: ParsedBeatmap,
@@ -97,11 +99,7 @@ function resolveBPM(
 ): BPMEntry[] {
   const tps = beatmap.timingPoints;
   if (tps.length === 0) {
-    return notes.map((n) => ({
-      time: n.time,
-      bpm: 120,
-      beatLength: 500,
-    }));
+    return [{ time: notes[0]?.time ?? 0, bpm: 120, beatLength: 500 }];
   }
 
   // Sort timing points by time
@@ -109,6 +107,7 @@ function resolveBPM(
 
   const result: BPMEntry[] = [];
   let tpIdx = 0;
+  let lastBeatLength = -1;
 
   for (const note of notes) {
     // Advance to the latest timing point before this note
@@ -117,11 +116,14 @@ function resolveBPM(
     }
     const tp = sorted[tpIdx]!;
     const beatLength = tp.beatLength > 0 ? tp.beatLength : 500;
-    result.push({
-      time: note.time,
-      bpm: 60000 / beatLength,
-      beatLength,
-    });
+    if (beatLength !== lastBeatLength) {
+      result.push({
+        time: note.time,
+        bpm: 60000 / beatLength,
+        beatLength,
+      });
+      lastBeatLength = beatLength;
+    }
   }
 
   return result;

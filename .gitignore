@@ -1,10 +1,24 @@
+# General NodeJS ignores
 node_modules/
 dist/
-References/
+
+# TypeScript tmpfile ignores
 *.tsbuildinfo
 *.log
 .DS_Store
 Thumbs.db
-.omo/*
+
+# Agents ignores
+.omo/
 .opencode
 AGENTS.md
+ref-output/
+
+# Project ignores
+test/tmp/
+References/
+
+# Project ignores on main
+calib/
+maps/LN/
+maps/RFT/

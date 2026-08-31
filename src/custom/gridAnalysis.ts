@@ -352,12 +352,16 @@ function detectCrossCellJacks(
     const endIdx = Math.min(i + 3, cells.length);
     if (endIdx - i < 2) continue;
 
-    // Concatenate pre-cached notes from the window cells (avoids getNotesInRange calls)
-    let allNotes: NoteInfo[] = [];
+    // Flatten pre-cached notes from the window cells in one pass, keeping
+    // only rice (avoids getNotesInRange calls and repeated concat copies).
+    const rice: NoteInfo[] = [];
     for (let w = i; w < endIdx; w++) {
-      allNotes = allNotes.concat(cells[w]!._notes);
+      const src = cells[w]!._notes;
+      for (let m = 0; m < src.length; m++) {
+        const n = src[m]!;
+        if (!n.isLN) rice.push(n);
+      }
     }
-    const rice = allNotes.filter((n) => !n.isLN);
     if (rice.length < 2) continue;
 
     // Total adjacent pairs
@@ -419,7 +423,7 @@ function computeBeatStructure(
   for (const n of notes) {
     const relTime = n.start - cellStart;
     const idx = Math.min(3, Math.max(0, Math.floor(relTime / subBeat + 0.001)));
-    structure[idx]++;
+    structure[idx]!++;
   }
   const maxBeat = Math.max(...structure);
   return { structure, maxBeat };
@@ -428,6 +432,87 @@ function computeBeatStructure(
 // ---------------------------------------------------------------------------
 // Density Grading (from existing jackAnalysis.ts / streamAnalysis.ts)
 // ---------------------------------------------------------------------------
+
+/**
+ * Jack both-hands occupancy: within the map's main jack passages, for each
+ * note-step (quarter-beat at effective BPM — same granularity as jack grade)
+ * check whether both hands hold keys at once (cols 0/1 ∧ cols 2/3).
+ *
+ * "Main jack passages" = jack cells at the dominant effective-BPM group,
+ * selected the same way as mainKeyType (highest effBPM first, must pass the
+ * cell-count threshold, else most-cells group). This excludes slower
+ * jumpjack/双押 cells (e.g. subdiv-2 at low effBPM) whose both-hand chords
+ * would otherwise inflate the value beyond the real chordjack passages.
+ *
+ * Per segment: both-hand step ratio × 4 (0-4). Aggregation: cell-weighted
+ * P90 over segment ratios. P90 >2.8 ⇒ both-hand chordjack dominant;
+ * 2–2.8 ⇒ mixed; <2 ⇒ minijack/single-hand dominant (same bands as the
+ * Speed/Stream/Chord display labels in the JACK panel).
+ */
+export function jackBothHandsRatio(ga: GridAnalysisResult): number {
+  const segs = ga.segments.filter((s) => s.category === "jack");
+  if (segs.length === 0) return 0;
+
+  // ---- Select the dominant effective-BPM group (mirror of mainKeyType) ----
+  const byEff = new Map<number, number>();
+  for (const seg of segs) {
+    for (const cell of seg.cells) {
+      byEff.set(cell.effectiveBPM, (byEff.get(cell.effectiveBPM) ?? 0) + 1);
+    }
+  }
+  const groups = [...byEff.entries()].sort((a, b) => b[0] - a[0]);
+  const threshold = (eff: number): number => (eff < 150 ? 30 : 50);
+  let mainEff = groups.find(([eff, n]) => n >= threshold(eff))?.[0];
+  if (mainEff === undefined) {
+    mainEff = groups.reduce((best, g) => (g[1] > best[1] ? g : best), groups[0]!)[0];
+  }
+
+  // ---- Both-hands ratio over the main group's cells only ----
+  const pairs: Array<{ v: number; w: number }> = [];
+  for (const seg of segs) {
+    const cells = seg.cells.filter((c) => c.effectiveBPM === mainEff);
+    if (cells.length === 0) continue;
+
+    const jackInterval = 60000 / (mainEff || 120) / 4;
+    const allNotes: Array<{ time: number; col: number }> = [];
+    for (const cell of cells) {
+      for (const n of cell._notes) allNotes.push({ time: n.start, col: n.col });
+    }
+    if (allNotes.length < 2) continue;
+
+    const anchor = allNotes[0]!.time;
+    const stepHands = new Map<number, { l: boolean; r: boolean }>();
+    for (const n of allNotes) {
+      const slot = Math.round((n.time - anchor) / jackInterval);
+      let h = stepHands.get(slot);
+      if (!h) {
+        h = { l: false, r: false };
+        stepHands.set(slot, h);
+      }
+      if (n.col < 2) h.l = true;
+      else h.r = true;
+    }
+
+    let bothSteps = 0;
+    for (const h of stepHands.values()) {
+      if (h.l && h.r) bothSteps++;
+    }
+    if (stepHands.size === 0) continue;
+    pairs.push({ v: (bothSteps / stepHands.size) * 4, w: cells.length });
+  }
+  if (pairs.length === 0) return 0;
+
+  // Cell-weighted P90 over segment ratios (same math as jack grade aggregation)
+  pairs.sort((a, b) => a.v - b.v);
+  const totalW = pairs.reduce((s, p) => s + p.w, 0);
+  const target = 0.9 * totalW;
+  let acc = 0;
+  for (const p of pairs) {
+    acc += p.w;
+    if (acc >= target) return Math.round(p.v * 1000) / 1000;
+  }
+  return Math.round(pairs[pairs.length - 1]!.v * 1000) / 1000;
+}
 
 /**
  * Jack density grade: based on total notes in 4-row window.
@@ -937,7 +1022,7 @@ function fallbackGrid(
       if (n.start >= rowEnd) break; // past the 4-row window
       const relTime = n.start - cell.startTime;
       const r = Math.min(3, Math.max(0, Math.floor(relTime / rowDuration)));
-      rowNotes[r]++;
+      rowNotes[r]!++;
     }
     const total = rowNotes.reduce((a, b) => a + b, 0);
     if (total > bestTotal) { bestTotal = total; bestRowNotes = rowNotes; bestMaxBeat = Math.max(...rowNotes, 1); }
@@ -1079,9 +1164,16 @@ function createSegment(
   let lnSubtypes: Array<{ key: string; name: string; value: string }> = [];
   if (category === "ln") {
     const beatLength = 60000 / effectiveBPM;
-    // Aggregate LN metrics across all cells in segment (concat pre-cached notes)
-    let allNotes: NoteInfo[] = [];
-    for (const cell of cells) allNotes = allNotes.concat(cell._notes);
+    // Aggregate LN metrics across all cells in segment — single allocation
+    // instead of growing the array with repeated concat.
+    let totalNotes = 0;
+    for (const cell of cells) totalNotes += cell._notes.length;
+    const allNotes = new Array<NoteInfo>(totalNotes);
+    let k = 0;
+    for (const cell of cells) {
+      const src = cell._notes;
+      for (let m = 0; m < src.length; m++) allNotes[k++] = src[m]!;
+    }
     const metrics = analyzeLNCell(allNotes, beatLength);
     const lnResult = classifyLNCell(metrics);
     lnSubtype = lnResult.lnSubtype;
@@ -1210,7 +1302,7 @@ function analyzeStreamRuns(
         if (n.start >= rowEnd) break; // past the 4-row window (notes are sorted)
         const relTime = n.start - cell.startTime;
         const r = Math.min(3, Math.max(0, Math.floor(relTime / rd)));
-        rn[r]++;
+        rn[r]!++;
       }
       return { notes: rn.reduce((a, b) => a + b, 0), maxBeat: Math.max(...rn, 1) };
     };
@@ -1424,7 +1516,8 @@ export function analyzeGrid(
 
     const notes = getNotesInRange(beatmap, cellStart, cellEnd);
     const noteCount = notes.length;
-    const lnNotes = notes.filter((n) => n.isLN).length;
+    let lnNotes = 0;
+    for (const n of notes) if (n.isLN) lnNotes++;
     const lnRatio = noteCount > 0 ? lnNotes / noteCount : 0;
 
     // Pre-group notes by quarter-beat row for zero-cost access by later phases

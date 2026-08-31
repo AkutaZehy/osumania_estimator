@@ -5,6 +5,7 @@
 import type { ParsedBeatmap } from "../types/beatmap.js";
 import type { SunnyResult } from "../types/algorithm.js";
 import type { PatternSummary } from "../types/patterns.js";
+import { lowerBound, upperBound } from "../utils/beatmapUtils.js";
 
 interface LN { col: number; start: number; end: number }
 
@@ -78,22 +79,31 @@ export function computeLNMetrics(p: ParsedBeatmap, s: SunnyResult, pt: PatternSu
   const overlaysCount = overlays(lns);
 
   // Anti-shield: LN tail → normal on same column within 0.25 beats
+  // Per-column sorted note starts turn the O(lns × n) full scans (anti-shield
+  // and column lock below) into O(lns × log n) binary lookups — the previous
+  // loops were quadratic and dominated LN metrics on large maps.
   let antiShields = 0;
   let beatLength = 500;
   for (const tp of p.timingPoints) { if (tp.uninherited) { beatLength = tp.beatLength; break; } }
   const limit = beatLength * 0.25;
+  const colAllStarts: number[][] = [[], [], [], []];
+  const colNormalStarts: number[][] = [[], [], [], []];
+  for (let i = 0; i < p.columns.length; i++) {
+    const col = p.columns[i]!;
+    const t = p.noteStarts[i]!;
+    colAllStarts[col]!.push(t);
+    if ((p.noteTypes[i]! & 128) === 0) colNormalStarts[col]!.push(t);
+  }
+  for (const arr of colAllStarts) arr.sort((a, b) => a - b);
+  for (const arr of colNormalStarts) arr.sort((a, b) => a - b);
   for (let i = 0; i < p.columns.length; i++) {
     if ((p.noteTypes[i]! & 128) === 0) continue;
     const endTime = p.noteEnds[i]!;
-    const col = p.columns[i]!;
-    for (let j = 0; j < p.columns.length; j++) {
-      if (i === j) continue;
-      if ((p.noteTypes[j]! & 128) !== 0) continue;
-      if (p.columns[j]! === col && p.noteStarts[j]! > endTime && p.noteStarts[j]! - endTime <= limit) {
-        antiShields++;
-        break;
-      }
-    }
+    const normals = colNormalStarts[p.columns[i]!];
+    if (!normals) continue;
+    // First normal note strictly after the tail
+    const k = upperBound(normals, endTime);
+    if (k < normals.length && normals[k]! - endTime <= limit) antiShields++;
   }
 
   // Strict LN ratio: exclude tap LNs
@@ -112,10 +122,10 @@ export function computeLNMetrics(p: ParsedBeatmap, s: SunnyResult, pt: PatternSu
     const hand = HANDS.find(h => h[0] === ln.col || h[1] === ln.col);
     if (!hand) continue;
     const adjCol = hand[0] === ln.col ? hand[1] : hand[0];
-    let hits = 0;
-    for (let i = 0; i < p.noteStarts.length; i++) {
-      if (p.columns[i]! === adjCol && p.noteStarts[i]! >= ln.start && p.noteStarts[i]! <= ln.end) hits++;
-    }
+    const starts = colAllStarts[adjCol];
+    if (!starts) continue;
+    // Inclusive [start, end] range count via binary search
+    const hits = upperBound(starts, ln.end) - lowerBound(starts, ln.start);
     if (hits >= 2) perLNclCount++;
   }
   const c_pct = perLNclCount / sn * 100;

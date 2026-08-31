@@ -1,6 +1,6 @@
 {
   "name": "osumania-estimator",
-  "version": "4.1.0",
+  "version": "4.3.0",
   "description": "osu!mania 4K key analysis and difficulty estimation plugin for tosu",
   "private": true,
   "type": "module",
@@ -8,6 +8,8 @@
     "build": "node esbuild.config.mjs",
     "dev": "node esbuild.config.mjs --watch",
     "typecheck": "tsc --noEmit",
+    "bench": "esbuild scripts/bench.ts --bundle --platform=node --format=esm --outfile=dist/bench.mjs && node dist/bench.mjs",
+    "bench:stages": "npm run bench -- --stages",
     "test": "vitest run --passWithNoTests",
     "test:watch": "vitest",
     "calib:export": "esbuild calib/scripts/exportDataset.ts --bundle --platform=node --format=esm --outfile=calib/.tmp/export.mjs && node calib/.tmp/export.mjs",

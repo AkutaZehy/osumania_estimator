@@ -53,6 +53,36 @@ export interface JackMetrics {
   isVibro: boolean;
 }
 
+/** Jack class + stamina, run-extraction based (jackClass.ts) */
+export interface JackClassInfo {
+  /** Full class label, e.g. "90 Low Chordjack" or "Actually Not Jack" */
+  className: string;
+  /** Jack cadence effective BPM (dominant qualifying cluster, mod-scaled) */
+  eff: number;
+  /** False when almost no compliant jack sections exist */
+  isJack: boolean;
+  /** Burst: longest single streak — seconds + notes inside it */
+  burstSec: number;
+  burstNotes: number;
+  /** True when burst <10s was merged from ≤1-measure-gap streaks past 10s */
+  burstBroken: boolean;
+  /** Sum over all streaks (unique rows) — seconds + total notes */
+  sumSec: number;
+  sumNotes: number;
+}
+
+/** Stream Stamina peaks + 切 class label (streamClass.ts) */
+export interface StreamClassInfo {
+  /** e.g. "175 Mid JS, Technical"; "—" when no data */
+  className: string;
+  /** Dominant row cadence effective BPM */
+  eff: number;
+  /** Max notes in any 10s sliding window */
+  w10: number;
+  /** Max notes in any 30s sliding window */
+  w30: number;
+}
+
 /** Stream-specific analysis */
 export interface StreamMetrics {
   /** Classification: "JS" | "HS" | "Stream" | null */
@@ -179,4 +209,8 @@ export interface CustomMetrics {
   stamina: StaminaMetrics;
   ln: LNMetrics;
   anchor: AnchorMetrics;
+  /** Jack type class + burst/sum stamina */
+  jackClass: JackClassInfo;
+  /** 切 class label + stream stamina peaks */
+  streamClass: StreamClassInfo;
 }

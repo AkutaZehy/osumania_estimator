@@ -5,6 +5,7 @@
 import type { ParsedBeatmap } from "../types/beatmap.js";
 import type { Chart } from "../types/chart.js";
 import type { PatternSummary } from "../types/patterns.js";
+import type { PrimitiveRow } from "../types/primitives.js";
 import { createChart } from "../parser/chartBuilder.js";
 import { calculatePrimitives } from "./primitives.js";
 import { find } from "./findPatterns.js";
@@ -13,11 +14,19 @@ import { calculateClusteredPatterns } from "./clustering.js";
 /**
  * Run full pattern analysis on a parsed beatmap.
  * Pipeline: parse → primitives → detect → cluster → categorize
+ *
+ * @param sharedPrimitives - Pre-computed primitive rows. The analyzer builds
+ *   chart+primitives once for the whole pipeline; passing them here skips the
+ *   local createChart+calculatePrimitives pass (~55% of this stage's cost on
+ *   dense maps). Must be built with the same speedRate.
  */
-export function analyzePatterns(beatmap: ParsedBeatmap, speedRate: number = 1): PatternSummary {
-  const chart: Chart = createChart(beatmap);
-  const primitives = calculatePrimitives(chart, speedRate);
-  const duration = chart.duration;
+export function analyzePatterns(beatmap: ParsedBeatmap, speedRate: number = 1, sharedPrimitives?: PrimitiveRow[]): PatternSummary {
+  let chart: Chart | null = null;
+  const primitives = sharedPrimitives ?? (chart = createChart(beatmap), calculatePrimitives(chart, speedRate));
+  // chart.duration = last row time - first row time; primitives use the same
+  // relative time base (trailing empty rows are dropped, but duration has no
+  // downstream consumers).
+  const duration = chart ? chart.duration : (primitives.length > 0 ? primitives[primitives.length - 1]!.time : 0);
 
   // Detect patterns via sliding window
   const foundPatterns = find(primitives);
