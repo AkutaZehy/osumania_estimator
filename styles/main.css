@@ -694,6 +694,8 @@ body.playing #section-bar {
   display: grid;
   gap: 6px;
   padding: 4px 2px 2px 0;
+  /* the card is a centered flex column — stretch the bar block explicitly */
+  width: 88%;
 }
 
 .akuta-skill {
@@ -729,4 +731,26 @@ body.playing #section-bar {
   border-radius: 0 999px 999px 0;
   background: var(--akuta-color, #52caff);
   transition: width 0.25s ease;
+}
+
+/* tier 1 (0-20): plain white */
+.akuta-skill-fill.tier1 {
+  background: #f2f6ff;
+  box-shadow: 0 0 6px rgba(240, 246, 255, 0.55);
+}
+
+/* tier 2 (20-50): fast rainbow cycle, club-DJ feel */
+.akuta-skill-fill.tier2 {
+  background: linear-gradient(
+    90deg,
+    #ff4d4d, #ff9a3d, #ffe14d, #6bff6b,
+    #4de1ff, #6b8bff, #c86bff, #ff4d9e, #ff4d4d
+  );
+  background-size: 800% 100%;
+  animation: akuta-rainbow 1.6s linear infinite;
+}
+
+@keyframes akuta-rainbow {
+  0% { background-position: 0% 0; }
+  100% { background-position: 800% 0; }
 }

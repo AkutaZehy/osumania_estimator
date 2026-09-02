@@ -49,7 +49,9 @@ export const AKUTA_BASE_SCALER: Record<number, number> = {
   // 31.9/32.2, CG904B 31.7/35.2, [42] 33.1/30.3, meanAbsErr 2.60
   [AkutaSkillset.JackChord]: 0.70,
   [AkutaSkillset.JackTech]: 1.0,
-  [AkutaSkillset.LNCoordination]: 1.0,
+  // 0.48: dan-anchor calibration over the 4K LN Dan Courses v2 packs —
+  // 1st..10th mean 5.9..25.4 (10th target 24-27), kana tiers land 27-36
+  [AkutaSkillset.LNCoordination]: 0.48,
 };
 
 /** LN spans in rate-scaled seconds, attributed to the holding hand */
@@ -242,15 +244,16 @@ export function solveAkuta(
 import { OsuFileParser } from "../parser/osuFileParser.js";
 import { buildNoteInfo } from "./rows.js";
 
-/** Parse + solve in one call (mirrors MinaSDCalc's role for the Akuta score). */
-export function solveAkutaFromOsuText(
-  osuText: string,
+/**
+ * Solve from an already-parsed (and mod-transformed) beatmap — the analyzer
+ * applies IN/HO on its parser before calling this, so Hold Off / Invert affect
+ * the score the same way they affect every other metric.
+ */
+export function solveAkutaFromParsed(
+  parsed: ParsedBeatmap,
   rate = 1.0,
   goal = 0.93,
 ): AkutaResult {
-  const parser = new OsuFileParser(osuText);
-  parser.process();
-  const parsed = parser.getParsedData();
   if (parsed.columnCount !== 4) {
     throw new Error(`unsupported keycount ${parsed.columnCount}`);
   }
@@ -258,4 +261,15 @@ export function solveAkutaFromOsuText(
   const calc = new Calc();
   const spans = collectLNSpans(parsed, rate);
   return solveAkuta(ni, rate, goal, calc, spans);
+}
+
+/** Parse + solve in one call (no IN/HO mods — tests and standalone use). */
+export function solveAkutaFromOsuText(
+  osuText: string,
+  rate = 1.0,
+  goal = 0.93,
+): AkutaResult {
+  const parser = new OsuFileParser(osuText);
+  parser.process();
+  return solveAkutaFromParsed(parser.getParsedData(), rate, goal);
 }
