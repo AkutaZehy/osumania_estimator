@@ -189,7 +189,8 @@ export function solveAkuta(
   spans: LNSpan[],
   jackClass?: JackClassInfo,
 ): AkutaResult {
-  const msdValues = CalcMain(ni, rate, goal, calc);
+  // capSSR=false: the rewrite may exceed MSD's 40-point SSR cap
+  const msdValues = CalcMain(ni, rate, goal, calc, { capSSR: false });
 
   const values = new Array<number>(NUM_SKILLSET + 3).fill(min_rating);
   for (let i = 0; i < NUM_SKILLSET; ++i) values[i] = msdValues[i]!;

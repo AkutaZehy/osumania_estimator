@@ -928,12 +928,17 @@ function InitializeHands(ni: readonly NoteInfo[], music_rate: number, offset: nu
   return false;
 }
 
-/** MinaCalc.cpp CalcMain — returns the 8 skillset values. */
+/**
+ * MinaCalc.cpp CalcMain — returns the 8 skillset values.
+ * `capSSR` keeps MSD's 40-point SSR cap (default, wasm-parity semantics);
+ * the Akuta pass passes false so rewritten values can exceed 40.
+ */
 export function CalcMain(
   ni: readonly NoteInfo[],
   music_rate: number,
   score_goal: number,
   calc: Calc,
+  { capSSR = true }: { capSSR?: boolean } = {},
 ): number[] {
   // for multi offset passes
   const num_offset_passes = 1;
@@ -998,7 +1003,9 @@ export function CalcMain(
       for (let i = 0; i < iteration_skillet_values.length; i++) {
         // so 50%s on 60s don't give 35s
         let r = downscale_low_accuracy_scores(iteration_skillet_values[i]!, score_goal);
-        r = Math.min(r, ssrcap);
+        if (capSSR) {
+          r = Math.min(r, ssrcap);
+        }
 
         if (highest_stam_adjusted_skillset === Skillset.JackSpeed) {
           r = downscale_low_accuracy_scores(r, score_goal);
