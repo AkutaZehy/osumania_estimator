@@ -46,8 +46,8 @@ function notesToDiff(notes: number): number {
  * JackChord is calibrated against MSD's Chordjack on chordjack-dominant
  * charts (Break/CG904B should land at their MSD CJ values, not the 40 cap). */
 export const AKUTA_BASE_SCALER: Record<number, number> = {
-  // 0.70: sweep vs wasm Chordjack on chordjack-dominant fixtures — Break
-  // 31.9/32.2, CG904B 31.7/35.2, [42] 33.1/30.3, meanAbsErr 2.60
+  // 0.70: sweep vs wasm Chordjack on chordjack-dominant fixtures, C-J
+  // singles included — Break 32.0/32.2, [42] 33.1/30.3, meanAbsErr 2.16
   [AkutaSkillset.JackChord]: 0.70,
   [AkutaSkillset.JackTech]: 1.0,
   // 0.48: dan-anchor calibration over the 4K LN Dan Courses v2 packs —
@@ -122,14 +122,22 @@ function computeExtensionBases(calc: Calc, spans: LNSpan[]): { bases: number[][]
         taps[hand]![itv]! += ri.hand_counts[hand]!;
       }
 
-      // JackChord: full-row chords row-adjacent to another full-row chord
-      // that shares at least one column (ceejay's chord notion + the shared
-      // column is what makes it a chordjack rather than plain jumpstream)
-      if (ri.row_count >= 2 && prevRowChordNotes > 0 && (ri.row_notes & prevRowChordNotes) !== 0) {
-        bases[0]![0]![itv]! += ri.hand_counts[0]!;
-        bases[0]![1]![itv]! += ri.hand_counts[1]!;
+      // JackChord: chordjack texture — full-row chords row-adjacent to
+      // another full-row chord sharing a column (ceejay's chord notion; the
+      // shared column is what separates chordjack from plain jumpstream),
+      // plus single notes adjacent to such a chord sharing its column
+      // (the J in C-J-C-J, which is chordjack cadence too)
+      const isChordRow = ri.row_count >= 2;
+      if (prevRowChordNotes > 0 && (ri.row_notes & prevRowChordNotes) !== 0) {
+        if (isChordRow) {
+          bases[0]![0]![itv]! += ri.hand_counts[0]!;
+          bases[0]![1]![itv]! += ri.hand_counts[1]!;
+        } else if (ri.row_count === 1) {
+          const col = ri.row_notes === 1 ? 0 : ri.row_notes === 2 ? 1 : ri.row_notes === 4 ? 2 : 3;
+          bases[0]![colHand(col)]![itv]! += 1;
+        }
       }
-      prevRowChordNotes = ri.row_count >= 2 ? ri.row_notes : 0;
+      prevRowChordNotes = isChordRow ? ri.row_notes : 0;
 
       // JackTech: same-column run continuation (row adjacency)
       for (let col = 0; col < 4; col++) {
@@ -196,7 +204,8 @@ export function solveAkuta(
   if (jackClass && jackClass.isJack && jackClass.eff > 0) {
     const jackShare = jackClass.sumNotes / Math.max(1, calc.MaxPoints / 2);
     const cred = clamp(jackShare / 0.45, 0.25, 1);
-    values[Skillset.JackSpeed] = Math.max(0, 0.21 * jackClass.eff - 9.925) * cred;
+    values[Skillset.JackSpeed] =
+      Math.max(0, 0.21 * jackClass.eff - 9.925) * cred * 1.1;
   }
 
   if (ni.length > 1 && msdValues[Skillset.Stream]! > 0) {
