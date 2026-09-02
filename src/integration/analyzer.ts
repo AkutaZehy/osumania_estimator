@@ -456,7 +456,7 @@ export function analyzeBeatmap(
     result.akuta = timed(
       "akuta",
       // beatmap already carries the IN/HO transforms — raw osuText would not
-      () => solveAkutaFromParsed(beatmap, opts.speedRate, 0.93),
+      () => solveAkutaFromParsed(beatmap, opts.speedRate, 0.93, custom.jackClass),
     );
   } catch (err) {
     console.debug("[analyzer] akuta solve failed", err);

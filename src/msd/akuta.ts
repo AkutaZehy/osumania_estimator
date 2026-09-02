@@ -26,10 +26,11 @@ import {
   type NoteInfo,
 } from "./enums.js";
 import { finalscaler, min_rating } from "./enums.js";
-import { aggregate_skill, downscale_low_accuracy_scores } from "./num.js";
+import { aggregate_skill, clamp, downscale_low_accuracy_scores } from "./num.js";
 import { Calc } from "./calc.js";
 import { CalcMain, Chisel } from "./mina.js";
 import type { ParsedBeatmap } from "../types/beatmap.js";
+import type { JackClassInfo } from "../types/custom.js";
 
 /** column → hand (4k: cols 0-1 left / 2-3 right, matching hand_col_ids) */
 function colHand(col: number): number {
@@ -178,11 +179,25 @@ export function solveAkuta(
   goal: number,
   calc: Calc,
   spans: LNSpan[],
+  jackClass?: JackClassInfo,
 ): AkutaResult {
   const msdValues = CalcMain(ni, rate, goal, calc);
 
   const values = new Array<number>(NUM_SKILLSET + 3).fill(min_rating);
   for (let i = 0; i < NUM_SKILLSET; ++i) values[i] = msdValues[i]!;
+
+  // Akuta JackSpeed: MSD's JS is a "7%-of-point-mass speed threshold" —
+  // brief fast sections fall inside the loss budget and fast charts
+  // undershoot. Reshape onto the jackClass dominant-cluster cadence
+  // (15000/dt, the same eff the panel shows), gated by total jack share:
+  //   f(eff) = 0.21*eff - 9.925  → eff 142.5 → 20 (stage5-7 @135-150 anchor),
+  //   eff 110 → 13.2, 124 → 16.1, 162 → 24.1
+  // cred damps charts whose jacks are a small fraction of the content.
+  if (jackClass && jackClass.isJack && jackClass.eff > 0) {
+    const jackShare = jackClass.sumNotes / Math.max(1, calc.MaxPoints / 2);
+    const cred = clamp(jackShare / 0.45, 0.25, 1);
+    values[Skillset.JackSpeed] = Math.max(0, 0.21 * jackClass.eff - 9.925) * cred;
+  }
 
   if (ni.length > 1 && msdValues[Skillset.Stream]! > 0) {
     const { bases } = computeExtensionBases(calc, spans);
@@ -253,6 +268,7 @@ export function solveAkutaFromParsed(
   parsed: ParsedBeatmap,
   rate = 1.0,
   goal = 0.93,
+  jackClass?: JackClassInfo,
 ): AkutaResult {
   if (parsed.columnCount !== 4) {
     throw new Error(`unsupported keycount ${parsed.columnCount}`);
@@ -260,7 +276,7 @@ export function solveAkutaFromParsed(
   const ni = buildNoteInfo(parsed, rate);
   const calc = new Calc();
   const spans = collectLNSpans(parsed, rate);
-  return solveAkuta(ni, rate, goal, calc, spans);
+  return solveAkuta(ni, rate, goal, calc, spans, jackClass);
 }
 
 /** Parse + solve in one call (no IN/HO mods — tests and standalone use). */
