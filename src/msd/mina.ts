@@ -9,6 +9,7 @@
 import {
   NUM_SKILLSET,
   Skillset,
+  AkutaSkillset,
   CalcPatternMod,
   both_hands,
   col_type,
@@ -251,6 +252,10 @@ export function Chisel(
       case Skillset.Jumpstream:
       case Skillset.Handstream:
       case Skillset.Chordjack:
+      // Akuta extension skillsets use the neutral point buffer
+      case AkutaSkillset.JackChord:
+      case AkutaSkillset.JackTech:
+      case AkutaSkillset.LNCoordination:
         gotpoints = calc.MaxPoints * bad_newbie_skillsets_pbm;
         break;
       default:

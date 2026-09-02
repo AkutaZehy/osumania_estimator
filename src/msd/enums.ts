@@ -19,6 +19,23 @@ export const Skillset = {
 export type Skillset = (typeof Skillset)[keyof typeof Skillset];
 export const NUM_SKILLSET = 8;
 
+/**
+ * Akuta extension skillsets (do not reorder the core 8 — the parity harness
+ * and CalcMain's skillset loop depend on the C++ layout). These live in slots
+ * 8-10 of the ss-dimensioned Calc arrays; the MSD 8 keep their exact
+ * semantics, and the Akuta pass writes/chisels only the extension slots.
+ */
+export const AkutaSkillset = {
+  /** chord-jack density: notes in chord→chord adjacent rows, per hand */
+  JackChord: 8,
+  /** jack 卡手度: notes in 3+ same-column jack runs, per hand */
+  JackTech: 9,
+  /** LN coordination: taps weighted by simultaneously-held LN columns + releases, per hand */
+  LNCoordination: 10,
+} as const;
+export type AkutaSkillset = (typeof AkutaSkillset)[keyof typeof AkutaSkillset];
+export const NUM_SKILLSET_AKUTA = 11;
+
 /** Exact numeric layout of C++ `enum CalcPatternMod` (0.72.3). */
 export const CalcPatternMod = {
   Stream: 0,

@@ -9,7 +9,7 @@ import {
   CalcPatternMod,
   NUM_CALC_DIFF_VALUE,
   NUM_CALC_PATTERN_MOD,
-  NUM_SKILLSET,
+  NUM_SKILLSET_AKUTA,
   RowInfo,
   Skillset,
   both_hands,
@@ -75,11 +75,13 @@ export class Calc {
     this.init_base_diff_vals = Array.from({ length: num_hands }, () =>
       Array.from({ length: NUM_CALC_DIFF_VALUE }, () => new Array(amt).fill(0.0)),
     );
+    // ss-dimensioned arrays carry the 3 Akuta extension slots (8-10) alongside
+    // the core 8; the MSD pass never touches the extension slots
     this.base_adj_diff = Array.from({ length: num_hands }, () =>
-      Array.from({ length: NUM_SKILLSET }, () => new Array(amt).fill(0.0)),
+      Array.from({ length: NUM_SKILLSET_AKUTA }, () => new Array(amt).fill(0.0)),
     );
     this.base_diff_for_stam_mod = Array.from({ length: num_hands }, () =>
-      Array.from({ length: NUM_SKILLSET }, () => new Array(amt).fill(0.0)),
+      Array.from({ length: NUM_SKILLSET_AKUTA }, () => new Array(amt).fill(0.0)),
     );
     this.stam_adj_diff = new Array(amt).fill(0.0);
   }
