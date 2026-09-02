@@ -38,6 +38,8 @@ export interface DifficultyResult {
   };
   /** Raw osu text for G estimate features (optional, set by analyzeBeatmap) */
   osuText?: string;
+  /** Akuta score: 11 values (0 Overall, 1-7 MSD skillsets, 8-10 extensions) */
+  akuta?: { values: number[]; overall: number };
 }
 
 /** Options for the analysis pipeline */

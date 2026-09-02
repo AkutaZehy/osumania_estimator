@@ -295,6 +295,9 @@ export function showResult(result: DifficultyResult): void {
     setText("akuta-value", formatAkuta(akuta));
   }
 
+  // Scores mode: Akuta skillset bars + headline Akuta overall
+  renderAkutaBars(result.akuta?.values, result.akuta?.overall);
+
   // Status/title
   const titleText = `${meta.artist} \u2014 ${meta.title} [${meta.version}]`;
   setText("status", titleText);
@@ -467,6 +470,7 @@ const CATEGORY_NAMES: Record<string, string> = {
 };
 let showPatterns = true;
 let showCustomMetrics = true;
+let panelMode = "Analysis";
 
 /** Handle settings update from tosu dashboard (object format: { uniqueID: value }) */
 export function onSettingsUpdate(settings: Record<string, unknown>): void {
@@ -479,21 +483,90 @@ export function onSettingsUpdate(settings: Record<string, unknown>): void {
     showCustomMetrics = settings.showCustomMetrics;
     debugLog("showCustomMetrics →", showCustomMetrics);
   }
+  if (typeof settings.panelMode === "string" && settings.panelMode) {
+    panelMode = settings.panelMode;
+    debugLog("panelMode →", panelMode);
+  }
   applySectionVisibility();
   resizeCard();
 }
 
-function applySectionVisibility(): void {
-  debugLog("applySectionVisibility: patterns=%s customMetrics=%s", showPatterns, showCustomMetrics);
-  if (showPatterns) {
-    show("patterns");
-  } else {
-    hide("patterns");
+/** Akuta skillset bars (Scores mode) — mirrors the reference analyser's bar+value style */
+const AKUTA_BAR_SKILLS: Array<{ ss: number; label: string; color: string }> = [
+  { ss: 1, label: "Stream", color: "#52caff" },
+  { ss: 2, label: "Jumpstream", color: "#5ef0df" },
+  { ss: 3, label: "Handstream", color: "#66ff99" },
+  { ss: 4, label: "Stamina", color: "#f6ef6b" },
+  { ss: 5, label: "Jack Speed", color: "#ffb347" },
+  { ss: 8, label: "Jack Chord", color: "#ff8c69" },
+  { ss: 9, label: "Jack Tech", color: "#ff6b9d" },
+  { ss: 6, label: "Chordjack", color: "#d98cff" },
+  { ss: 7, label: "Technical", color: "#ff5e5e" },
+  { ss: 10, label: "LN Coordination", color: "#9db8ff" },
+];
+
+const AKUTA_BAR_MAX = 40.0;
+
+function renderAkutaBars(values: number[] | undefined, overall: number | undefined): void {
+  const host = el("akuta-bars");
+  if (!host) return;
+  if (!values || !overall) {
+    host.innerHTML = `<div class="akuta-empty">Akuta score unavailable</div>`;
+    return;
   }
-  if (showCustomMetrics) {
-    show("custom-metrics");
-  } else {
+  let topSs = 1;
+  for (const { ss } of AKUTA_BAR_SKILLS) {
+    if ((values[ss] ?? 0) > (values[topSs] ?? 0)) topSs = ss;
+  }
+  const topLabel = AKUTA_BAR_SKILLS.find((x) => x.ss === topSs)?.label ?? "";
+  const rows = AKUTA_BAR_SKILLS.map(({ ss, label, color }) => {
+    const v = Math.max(0, values[ss] ?? 0);
+    const pct = Math.min(100, (v / AKUTA_BAR_MAX) * 100);
+    return (
+      `<div class="akuta-skill">` +
+      `<div class="akuta-skill-label"><span>${label}</span>` +
+      `<span class="akuta-skill-value">${v.toFixed(2)}</span></div>` +
+      `<div class="akuta-skill-track"><div class="akuta-skill-fill" ` +
+      `style="width:${pct.toFixed(1)}%;--akuta-color:${color}"></div></div>` +
+      `</div>`
+    );
+  });
+  host.innerHTML = rows.join("");
+
+  // headline value line doubles as the Akuta overall readout in Scores mode
+  const mode = panelMode === "Scores" ? `scores` : `analysis`;
+  void mode;
+  if (panelMode === "Scores") {
+    setText("akuta-value", `Akuta ${overall.toFixed(2)} · Top ${topLabel} ${(values[topSs] ?? 0).toFixed(2)}`);
+  }
+}
+
+function applySectionVisibility(): void {
+  const scoresMode = panelMode === "Scores";
+  debugLog(
+    "applySectionVisibility: mode=%s patterns=%s customMetrics=%s",
+    panelMode,
+    showPatterns,
+    showCustomMetrics,
+  );
+  // Scores mode: headline modules + Akuta skillset bars + section preview;
+  // the pattern/custom-metric breakdowns are analysis-mode content.
+  if (scoresMode) {
+    hide("patterns");
     hide("custom-metrics");
+    show("akuta-bars");
+  } else {
+    hide("akuta-bars");
+    if (showPatterns) {
+      show("patterns");
+    } else {
+      hide("patterns");
+    }
+    if (showCustomMetrics) {
+      show("custom-metrics");
+    } else {
+      hide("custom-metrics");
+    }
   }
 }
 

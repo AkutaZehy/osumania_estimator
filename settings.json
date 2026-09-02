@@ -12,5 +12,16 @@
     "title": "Show Custom Metrics",
     "value": true,
     "description": "Display density, jack, stream, tech, stamina panels."
+  },
+  {
+    "uniqueID": "panelMode",
+    "type": "options",
+    "title": "Panel Mode",
+    "description": "Analysis keeps the full breakdown. Scores shows the headline modules, Akuta skillset bars and the section preview.",
+    "options": [
+      "Analysis",
+      "Scores"
+    ],
+    "value": "Analysis"
   }
 ]

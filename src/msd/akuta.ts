@@ -41,9 +41,13 @@ function notesToDiff(notes: number): number {
   return notes * finalscaler * 1.6;
 }
 
-/** v1 base scalers for the extension skillsets (calibration knobs) */
-const AKUTA_BASE_SCALER: Record<number, number> = {
-  [AkutaSkillset.JackChord]: 1.0,
+/** v1 base scalers for the extension skillsets (calibration knobs).
+ * JackChord is calibrated against MSD's Chordjack on chordjack-dominant
+ * charts (Break/CG904B should land at their MSD CJ values, not the 40 cap). */
+export const AKUTA_BASE_SCALER: Record<number, number> = {
+  // 0.70: sweep vs wasm Chordjack on chordjack-dominant fixtures — Break
+  // 31.9/32.2, CG904B 31.7/35.2, [42] 33.1/30.3, meanAbsErr 2.60
+  [AkutaSkillset.JackChord]: 0.70,
   [AkutaSkillset.JackTech]: 1.0,
   [AkutaSkillset.LNCoordination]: 1.0,
 };

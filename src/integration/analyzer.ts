@@ -13,6 +13,7 @@ import type { ParsedBeatmap } from "../types/beatmap.js";
 
 import { OsuFileParser } from "../parser/osuFileParser.js";
 import { countHitObjects } from "../utils/countNotes.js";
+import { solveAkutaFromOsuText } from "../msd/akuta.js";
 import { timed } from "../utils/timing.js";
 import { calculateSunny } from "../algorithm/sunnyRework.js";
 import { createChart } from "../parser/chartBuilder.js";
@@ -448,6 +449,17 @@ export function analyzeBeatmap(
     },
     osuText,
   };
+
+  // ---- Step 9: Akuta score (MSD engine + extension skillsets) ----
+  signal?.throwIfAborted();
+  try {
+    result.akuta = timed(
+      "akuta",
+      () => solveAkutaFromOsuText(osuText, opts.speedRate, 0.93),
+    );
+  } catch (err) {
+    console.debug("[analyzer] akuta solve failed", err);
+  }
 
   return result;
 }
