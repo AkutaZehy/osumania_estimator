@@ -505,16 +505,18 @@ const AKUTA_BAR_SKILLS: Array<{ ss: number; label: string; color: string }> = [
   { ss: 10, label: "LN Coordination", color: "#9db8ff" },
 ];
 
-// Two-tier bar: tier 1 (white) fills the track at 20, tier 2 (rainbow
-// cycle) starts at 20 and fills at 50; beyond 50 the bar stays full and the
-// number keeps tracking the raw value.
+// Two-tier bar: tier 1 (white) fills the track at 20; tier 2 (rainbow
+// cycle) reads 10% at exactly 20 and fills at 40; beyond 40 the bar stays
+// full while the number keeps tracking the raw (uncapped) value. Values
+// below 1 display as 0.
 const AKUTA_BAR_TIER1 = 20.0;
-const AKUTA_BAR_FULL = 50.0;
+const AKUTA_BAR_FULL = 40.0;
 
 function akutaBarWidth(v: number): number {
+  if (v < 1) return 0;
   if (v <= AKUTA_BAR_TIER1) return (v / AKUTA_BAR_TIER1) * 100;
   if (v <= AKUTA_BAR_FULL) {
-    return ((v - AKUTA_BAR_TIER1) / (AKUTA_BAR_FULL - AKUTA_BAR_TIER1)) * 100;
+    return 10 + ((v - AKUTA_BAR_TIER1) / (AKUTA_BAR_FULL - AKUTA_BAR_TIER1)) * 90;
   }
   return 100;
 }
@@ -533,11 +535,12 @@ function renderAkutaBars(values: number[] | undefined, overall: number | undefin
   const topLabel = AKUTA_BAR_SKILLS.find((x) => x.ss === topSs)?.label ?? "";
   const rows = AKUTA_BAR_SKILLS.map(({ ss, label, color }) => {
     const v = Math.max(0, values[ss] ?? 0);
+    const shown = v < 1 ? 0 : v;
     const tier = v >= AKUTA_BAR_TIER1 ? "tier2" : "tier1";
     return (
       `<div class="akuta-skill">` +
       `<div class="akuta-skill-label"><span>${label}</span>` +
-      `<span class="akuta-skill-value">${v.toFixed(2)}</span></div>` +
+      `<span class="akuta-skill-value">${shown.toFixed(2)}</span></div>` +
       `<div class="akuta-skill-track"><div class="akuta-skill-fill ${tier}" ` +
       `style="width:${akutaBarWidth(v).toFixed(1)}%;--akuta-color:${color}"></div></div>` +
       `</div>`

@@ -216,9 +216,9 @@ export function solveAkuta(
       if (v > extBase * 0.9) {
         v = Chisel(calc, v * 0.9, 0.32, goal, ss, true);
       }
-      // ssr treatment, mirroring CalcMain
+      // ssr treatment, mirroring CalcMain — but no 40 cap: extension values
+      // may exceed it (the bar fills at 40, the number keeps tracking)
       v = downscale_low_accuracy_scores(v, Math.min(goal, 0.965));
-      v = Math.min(v, 40.0);
       v *= calc.grindscaler;
       values[ss] = v;
     }
