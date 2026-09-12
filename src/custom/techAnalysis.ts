@@ -14,46 +14,28 @@ import { Direction } from "../types/primitives.js";
 import { windowCounts, p90WindowCount } from "./windowIndex.js";
 
 // ---------------------------------------------------------------------------
-// Rolling column entropy
+// Row-spacing irregularity
 // ---------------------------------------------------------------------------
 
 /**
- * Rolling Shannon entropy of active-column masks within a 750 ms window,
- * averaged across all rows (bits; uniform column use on 4K approaches
- * log2(15) ≈ 3.91, jacks sit near 0). Incremental sliding counts,
- * O(rows × states). Rows without notes contribute 0.
+ * Coefficient of variation of row spacing within active sections
+ * (intervals <= 1s count; longer gaps are breaks, not rhythm — without
+ * that cut, rest sections dominate the variance). 0.2-0.4 = steady
+ * spacing (streams, chordjack), 0.6+ = bursty/irregular tech timing.
+ * Pairs with stamina switchFrequency: switch locates the mixed sections,
+ * dtCV grades how irregular the spacing inside them is.
  */
-function columnEntropy(primitives: PrimitiveRow[], windowMs = 750): number {
-  if (primitives.length === 0) return 0;
-  const counts = new Map<number, number>();
-  const maskOf = (r: PrimitiveRow): number => {
-    let m = 0;
-    for (const c of r.rawNotes) m |= 1 << c;
-    return m;
-  };
-  let left = 0;
-  let total = 0;
-  let sum = 0;
-  for (let right = 0; right < primitives.length; right++) {
-    const inRow = primitives[right]!;
-    const mIn = maskOf(inRow);
-    if (mIn !== 0) { counts.set(mIn, (counts.get(mIn) ?? 0) + 1); total++; }
-    while (inRow.time - primitives[left]!.time > windowMs) {
-      const mOut = maskOf(primitives[left]!);
-      if (mOut !== 0) {
-        const c = counts.get(mOut)! - 1;
-        total--;
-        if (c === 0) counts.delete(mOut); else counts.set(mOut, c);
-      }
-      left++;
-    }
-    if (total > 1) {
-      let h = 0;
-      for (const c of counts.values()) { const p = c / total; h -= p * Math.log2(p); }
-      sum += h;
-    }
+function rowSpacingCV(primitives: PrimitiveRow[]): number {
+  const dts: number[] = [];
+  for (let i = 1; i < primitives.length; i++) {
+    const dt = primitives[i]!.time - primitives[i - 1]!.time;
+    if (dt > 0 && dt <= 1000) dts.push(dt);
   }
-  return sum / primitives.length;
+  if (dts.length < 2) return 0;
+  const mean = dts.reduce((a, b) => a + b, 0) / dts.length;
+  if (mean === 0) return 0;
+  const sd = Math.sqrt(dts.reduce((a, b) => a + (b - mean) ** 2, 0) / dts.length);
+  return sd / mean;
 }
 
 // ---------------------------------------------------------------------------
@@ -443,7 +425,7 @@ export function computeTechMetrics(
     return {
       graceCount: 0,
       rollTrill: { rolls: "", trills: "" },
-      colEntropy: 0,
+      dtCV: 0,
       burst: {
 singleFingerInterval: 0,
   oneHandInterval: 0,
@@ -472,7 +454,7 @@ const bhInt = bothHandsInterval(beatmap);
   return {
     graceCount,
     rollTrill,
-    colEntropy: columnEntropy(primitives),
+    dtCV: rowSpacingCV(primitives),
     burst: {
 singleFingerInterval: sfInt,
   oneHandInterval: ohInt,

@@ -112,9 +112,9 @@ export interface RollTrillStats {
 export interface TechMetrics {
   graceCount: number;
   rollTrill: RollTrillStats;
-  /** Rolling Shannon entropy of active-column masks, 750 ms window, mean
-   *  across rows (bits; 0 = pure jack, ~3.9 = uniform column use on 4K) */
-  colEntropy: number;
+  /** Row-spacing CV within active sections (intervals <= 1s).
+   *  0.2-0.4 = steady spacing (streams, chordjack), 0.6+ = bursty tech */
+  dtCV: number;
   burst: {
 singleFingerInterval: number;
   oneHandInterval: number;
