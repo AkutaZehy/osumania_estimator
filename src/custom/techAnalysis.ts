@@ -14,6 +14,49 @@ import { Direction } from "../types/primitives.js";
 import { windowCounts, p90WindowCount } from "./windowIndex.js";
 
 // ---------------------------------------------------------------------------
+// Rolling column entropy
+// ---------------------------------------------------------------------------
+
+/**
+ * Rolling Shannon entropy of active-column masks within a 750 ms window,
+ * averaged across all rows (bits; uniform column use on 4K approaches
+ * log2(15) ≈ 3.91, jacks sit near 0). Incremental sliding counts,
+ * O(rows × states). Rows without notes contribute 0.
+ */
+function columnEntropy(primitives: PrimitiveRow[], windowMs = 750): number {
+  if (primitives.length === 0) return 0;
+  const counts = new Map<number, number>();
+  const maskOf = (r: PrimitiveRow): number => {
+    let m = 0;
+    for (const c of r.rawNotes) m |= 1 << c;
+    return m;
+  };
+  let left = 0;
+  let total = 0;
+  let sum = 0;
+  for (let right = 0; right < primitives.length; right++) {
+    const inRow = primitives[right]!;
+    const mIn = maskOf(inRow);
+    if (mIn !== 0) { counts.set(mIn, (counts.get(mIn) ?? 0) + 1); total++; }
+    while (inRow.time - primitives[left]!.time > windowMs) {
+      const mOut = maskOf(primitives[left]!);
+      if (mOut !== 0) {
+        const c = counts.get(mOut)! - 1;
+        total--;
+        if (c === 0) counts.delete(mOut); else counts.set(mOut, c);
+      }
+      left++;
+    }
+    if (total > 1) {
+      let h = 0;
+      for (const c of counts.values()) { const p = c / total; h -= p * Math.log2(p); }
+      sum += h;
+    }
+  }
+  return sum / primitives.length;
+}
+
+// ---------------------------------------------------------------------------
 // Burst KPS helpers (unchanged)
 // ---------------------------------------------------------------------------
 
@@ -400,6 +443,7 @@ export function computeTechMetrics(
     return {
       graceCount: 0,
       rollTrill: { rolls: "", trills: "" },
+      colEntropy: 0,
       burst: {
 singleFingerInterval: 0,
   oneHandInterval: 0,
@@ -428,6 +472,7 @@ const bhInt = bothHandsInterval(beatmap);
   return {
     graceCount,
     rollTrill,
+    colEntropy: columnEntropy(primitives),
     burst: {
 singleFingerInterval: sfInt,
   oneHandInterval: ohInt,

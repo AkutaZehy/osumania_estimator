@@ -113,6 +113,7 @@ function defaultCustomMetrics(
     tech: {
       graceCount: 0,
       rollTrill: { rolls: "", trills: "" },
+      colEntropy: 0,
       burst: {
         singleFingerInterval: 0,
         oneHandInterval: 0,
