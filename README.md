@@ -334,14 +334,21 @@ Grace/flam detection now uses per-cell subdivision context. For cells with known
 
 ### LN Pool Scores
 
-LN metrics include four pool scores derived from Sunny Rework components:
+LN metrics include four pool scores. Every component is a per-LN percentage
+(share of the chart's LNs exhibiting the pattern), and each pool is normalized
+by its weight sum, so all four scores are confidence-like proportions in
+0-100 and comparable at the argmax that picks the displayed type.
 
-| Pool | Component | Description |
-| ---- | --------- | ----------- |
-| CO   | Coordination | AJ1/AJ2-based LN coordination difficulty |
-| DE   | Density      | DJ/RJ-based LN density/overlay difficulty |
-| WC   | Wildcard     | Speed/jack-based hybrid LN difficulty |
-| TE   | Technical    | Shield/release-based LN technical difficulty |
+| Pool | Formula | Description |
+| ---- | ------- | ----------- |
+| CO   | `0.7·overlay + 0.3·inverse` | LN overlap/coordination texture |
+| DE   | `(0.6·inverse + 1.0·LN-chord + 0.5·tapLN) / 2.1` | Inverse/chord/tap-LN density texture |
+| WC   | `(0.5·shield + 0.5·column-lock + 1.0·wc-jack + 1.0·wc-speed) / 2.5` | Jack/speed textures between LN heads (cadence-gated: jack ≤1 beat, speed ≤1/2 beat head intervals) |
+| TE   | `(0.3·overlay + 0.5·shield + 0.5·column-lock + 0.5·tapLN) / 1.8` | Shield/column-lock technique texture |
+
+Component sources: overlay/tapLN and LN-chord/wc-jack/wc-speed are computed
+from parsed LN data in `lnAnalysis.ts`; shield/column-lock/inverse come from
+the pattern stage (`summary.ts._lnCounts`).
 
 ### Hand Bias
 
