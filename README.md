@@ -334,21 +334,25 @@ Grace/flam detection now uses per-cell subdivision context. For cells with known
 
 ### LN Pool Scores
 
-LN metrics include four pool scores. Every component is a per-LN percentage
-(share of the chart's LNs exhibiting the pattern), and each pool is normalized
-by its weight sum, so all four scores are confidence-like proportions in
-0-100 and comparable at the argmax that picks the displayed type.
+LN metrics include four pool scores. Every component is a per-LN participation
+rate (share of the chart's LNs exhibiting the pattern), and each pool is a
+weighted average of its components (weights sum to 1), so all four scores are
+confidence-like proportions in 0-100 on one scale and comparable at the argmax
+that picks the displayed type. Common-mode textures on modern chord-LN charts
+(LN-chord heads, raw overlay) are deliberately down-weighted — they carry no
+discriminative signal.
 
 | Pool | Formula | Description |
 | ---- | ------- | ----------- |
-| CO   | `0.7·overlay + 0.3·inverse` | LN overlap/coordination texture |
-| DE   | `(0.6·inverse + 1.0·LN-chord + 0.5·tapLN) / 2.1` | Inverse/chord/tap-LN density texture |
-| WC   | `(0.5·shield + 0.5·column-lock + 1.0·wc-jack + 1.0·wc-speed) / 2.5` | Jack/speed textures between LN heads (cadence-gated: jack ≤1 beat, speed ≤1/2 beat head intervals) |
-| TE   | `(0.3·overlay + 0.5·shield + 0.5·column-lock + 0.5·tapLN) / 1.8` | Shield/column-lock technique texture |
+| CO   | `0.7·overlay + 0.2·inverse + 0.1·column-lock` | LN overlap/coordination texture |
+| DE   | `0.5·inverse + 0.3·LN-chord + 0.2·tapLN` | Inverse/chord/tap-LN density texture |
+| WC   | `0.45·wc-jack + 0.45·wc-speed + 0.1·shield` | Jack/speed textures between LN heads (cadence-gated: jack ≤1 beat, speed ≤1/2 beat head intervals) |
+| TE   | `0.5·release + 0.2·stagger + 0.15·shield + 0.15·column-lock` | Release/technique texture: release = LN whose end group holds ≥2 LNs with different starts (staggered tails); stagger = same-start/different-end pair rate |
 
-Component sources: overlay/tapLN and LN-chord/wc-jack/wc-speed are computed
-from parsed LN data in `lnAnalysis.ts`; shield/column-lock/inverse come from
-the pattern stage (`summary.ts._lnCounts`).
+Component sources: overlay/tapLN, LN-chord/wc-jack/wc-speed, and the release
+participation count are computed from parsed LN data in `lnAnalysis.ts`;
+shield/column-lock/inverse come from the pattern stage
+(`summary.ts._lnCounts`).
 
 ### Hand Bias
 

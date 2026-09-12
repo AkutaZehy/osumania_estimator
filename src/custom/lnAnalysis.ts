@@ -186,6 +186,24 @@ export function computeLNMetrics(p: ParsedBeatmap, s: SunnyResult, pt: PatternSu
   const ws_pct = head.wcSpeeds / lnDen * 100;
   const tp_pct = tapCount / Math.max(1, lns.length) * 100;
   const ov_norm = overlaysCount / Math.max(1, lns.length) * 100;
+  // Release axis, per-LN participation (same construction as lnChords):
+  // an LN participates in a release event when its end-time group holds ≥2
+  // LNs with different starts — staggered tails, the S2 "Release" texture.
+  // Pairwise rates (a/lnN) live on a different scale than participation
+  // rates and can't compete at the argmax; participation keeps all four
+  // pools on one scale.
+  let relLNs = 0;
+  {
+    const endMap = new Map<number, LN[]>();
+    for (const l of lns) { const g = endMap.get(l.end) ?? []; g.push(l); endMap.set(l.end, g); }
+    for (const g of endMap.values()) {
+      if (g.length < 2) continue;
+      const starts = new Set(g.map(l => l.start));
+      if (starts.size >= 2) relLNs += g.length;
+    }
+  }
+  const rel_pct = relLNs / lnDen * 100;
+  const r_pct = r / lnDen * 100;
 
   return {
     ratio: p.lnRatio,
@@ -207,9 +225,9 @@ export function computeLNMetrics(p: ParsedBeatmap, s: SunnyResult, pt: PatternSu
     lnChordCount: head.chordLNs,
     wcJackCount: head.wcJacks,
     wcSpeedCount: head.wcSpeeds,
-    coordinationPoolScore: ov_norm * 0.7 + i_pct * 0.3,
-    densityPoolScore: (i_pct * 0.6 + ch_pct * 1.0 + tp_pct * 0.5) / 2.1,
-    wildcardPoolScore: (s_pct * 0.5 + c_pct * 0.5 + wj_pct * 1.0 + ws_pct * 1.0) / 2.5,
-    technicalPoolScore: (ov_norm * 0.3 + s_pct * 0.5 + c_pct * 0.5 + tp_pct * 0.5) / 1.8,
+    coordinationPoolScore: ov_norm * 0.5 + i_pct * 0.2 + c_pct * 0.3,
+    densityPoolScore: i_pct * 0.65 + ch_pct * 0.2 + tp_pct * 0.15,
+    wildcardPoolScore: wj_pct * 0.45 + ws_pct * 0.45 + s_pct * 0.1,
+    technicalPoolScore: rel_pct * 0.5 + r_pct * 0.2 + s_pct * 0.15 + c_pct * 0.15,
   };
 }
