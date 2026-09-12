@@ -73,6 +73,51 @@ function overlays(lns: LN[]): number {
   return cnt;
 }
 
+/**
+ * LN-head row texture (whole-chart counterpart of the section-level LN
+ * subtypes): rows group simultaneous LN heads within 5 ms (same convention
+ * as sectionAnalysis), then classify consecutive head-row transitions.
+ *
+ * Restores the ln-rework 3.0.0 producers that the perf commit (ebc8061)
+ * dropped from summary.ts._lnCounts:
+ *  - lnChords: LN heads forming 2+ note chords (LN_Chord)
+ *  - wcJacks:  consecutive head rows ≤1 beat apart sharing a column (WC_Jack)
+ *  - wcSpeeds: consecutive head rows ≤1/2 beat apart, fully disjoint and
+ *              directional (WC_Speed)
+ *
+ * The cadence gates matter: LN heads are sparse, so raw column-sharing
+ * between consecutive heads carries a ~50-95% base rate and no signal.
+ * A shared column only reads as a jack when the heads succeed quickly.
+ */
+function lnHeadTexture(lns: LN[], beatLength: number): { chordLNs: number; wcJacks: number; wcSpeeds: number } {
+  if (lns.length === 0) return { chordLNs: 0, wcJacks: 0, wcSpeeds: 0 };
+  const sorted = [...lns].sort((a, b) => a.start - b.start);
+  const rows: number[][] = [];
+  const rowTimes: number[] = [];
+  for (const l of sorted) {
+    const i = rows.length - 1;
+    if (i >= 0 && l.start - rowTimes[i]! <= 5) rows[i]!.push(l.col);
+    else { rows.push([l.col]); rowTimes.push(l.start); }
+  }
+
+  let chordLNs = 0;
+  for (const r of rows) if (r.length >= 2) chordLNs += r.length;
+
+  let wcJacks = 0, wcSpeeds = 0;
+  for (let i = 1; i < rows.length; i++) {
+    const dt = rowTimes[i]! - rowTimes[i - 1]!;
+    const prev = rows[i - 1]!, curr = rows[i]!;
+    if (dt <= beatLength && curr.some(c => prev.includes(c))) wcJacks++;
+    else if (dt <= beatLength / 2) {
+      const pMin = Math.min(...prev), pMax = Math.max(...prev);
+      const cMin = Math.min(...curr), cMax = Math.max(...curr);
+      if (cMax < pMin || cMin > pMax) wcSpeeds++;
+    }
+  }
+
+  return { chordLNs, wcJacks, wcSpeeds };
+}
+
 export function computeLNMetrics(p: ParsedBeatmap, s: SunnyResult, pt: PatternSummary, _sr = 1) {
   const lns = getLNs(p);
   const { a, r } = releaseTypes(lns);
@@ -112,9 +157,15 @@ export function computeLNMetrics(p: ParsedBeatmap, s: SunnyResult, pt: PatternSu
   const strictLN = totalLN - tapCount;
   const totalNotes = p.noteStarts.length;
 
-  // Pool score computation (normalized by totalNotes)
-  const sn = Math.max(1, totalNotes);
-  const s_pct = (pt._lnCounts?.shields ?? 0) / sn * 100;
+  // Pool score computation — every component is a per-LN percentage so the
+  // four pool scores are confidence-like proportions on a shared denominator
+  // (comparable at the argmax in display.dominantLNPool). Historically
+  // ov/tp divided by LN count while i/s/c divided by total notes, which made
+  // the pools incomparable on LN-dominant charts. Each pool is normalized by
+  // its weight sum so scores stay within 0-100.
+  const lnDen = Math.max(1, totalLN);
+  const head = lnHeadTexture(lns, beatLength);
+  const s_pct = (pt._lnCounts?.shields ?? 0) / lnDen * 100;
   // Per-LN column lock: count LNs with ≥2 neighbor hits during body period
   const HANDS: [number, number][] = [[0, 1], [2, 3]];
   let perLNclCount = 0;
@@ -128,11 +179,11 @@ export function computeLNMetrics(p: ParsedBeatmap, s: SunnyResult, pt: PatternSu
     const hits = upperBound(starts, ln.end) - lowerBound(starts, ln.start);
     if (hits >= 2) perLNclCount++;
   }
-  const c_pct = perLNclCount / sn * 100;
-  const i_pct = (pt._lnCounts?.inverses ?? 0) / sn * 100;
-  const ch_pct = (pt._lnCounts?.lnChords ?? 0) / sn * 100;
-  const wj_pct = (pt._lnCounts?.wcJacks ?? 0) / sn * 100;
-  const ws_pct = (pt._lnCounts?.wcSpeeds ?? 0) / sn * 100;
+  const c_pct = perLNclCount / lnDen * 100;
+  const i_pct = (pt._lnCounts?.inverses ?? 0) / lnDen * 100;
+  const ch_pct = head.chordLNs / lnDen * 100;
+  const wj_pct = head.wcJacks / lnDen * 100;
+  const ws_pct = head.wcSpeeds / lnDen * 100;
   const tp_pct = tapCount / Math.max(1, lns.length) * 100;
   const ov_norm = overlaysCount / Math.max(1, lns.length) * 100;
 
@@ -153,12 +204,12 @@ export function computeLNMetrics(p: ParsedBeatmap, s: SunnyResult, pt: PatternSu
     overlapCount: overlaysCount,
     totalLN: lns.length,
     lnStreamCount: pt._lnCounts?.lnStreams ?? 0,
-    lnChordCount: pt._lnCounts?.lnChords ?? 0,
-    wcJackCount: pt._lnCounts?.wcJacks ?? 0,
-    wcSpeedCount: pt._lnCounts?.wcSpeeds ?? 0,
+    lnChordCount: head.chordLNs,
+    wcJackCount: head.wcJacks,
+    wcSpeedCount: head.wcSpeeds,
     coordinationPoolScore: ov_norm * 0.7 + i_pct * 0.3,
-    densityPoolScore: i_pct * 0.6 + ch_pct * 1.0 + tp_pct * 0.5,
-    wildcardPoolScore: s_pct * 0.5 + c_pct * 0.5 + wj_pct * 1.0 + ws_pct * 1.0,
-    technicalPoolScore: ov_norm * 0.3 + s_pct * 0.5 + c_pct * 0.5 + tp_pct * 0.5,
+    densityPoolScore: (i_pct * 0.6 + ch_pct * 1.0 + tp_pct * 0.5) / 2.1,
+    wildcardPoolScore: (s_pct * 0.5 + c_pct * 0.5 + wj_pct * 1.0 + ws_pct * 1.0) / 2.5,
+    technicalPoolScore: (ov_norm * 0.3 + s_pct * 0.5 + c_pct * 0.5 + tp_pct * 0.5) / 1.8,
   };
 }
