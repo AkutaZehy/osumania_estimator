@@ -63,6 +63,12 @@ function abbrevKeyType(kt: string): string {
     .replace(/Handstream/g, "HS");
 }
 
+/** Low-confidence floor for the LN pool label: pool components intentionally
+ *  overlap (chart patterns spread across pools), so a close runner-up is
+ *  normal and only an absolutely weak texture (<15/100) goes unlabeled —
+ *  the row falls back to the key type instead. */
+const LN_POOL_MIN_SCORE = 15;
+
 /** Determine dominant LN pool (CO/DE/WC/TE) from pool scores, returns full name or null */
 function dominantLNPool(ln: LNMetrics): string | null {
   const FULL_NAMES: Record<string, string> = { CO: "Coordination", DE: "Density", WC: "Wildcard", TE: "Technical" };
@@ -73,8 +79,9 @@ function dominantLNPool(ln: LNMetrics): string | null {
     ["TE", ln.technicalPoolScore],
   ];
   if (pools.every(([, s]) => s <= 0)) return null;
-  const maxPool = pools.reduce((a, b) => a[1] > b[1] ? a : b);
-  return maxPool[1] > 0 ? FULL_NAMES[maxPool[0]!] ?? maxPool[0]! : null;
+  const ranked = [...pools].sort((a, b) => b[1] - a[1]);
+  if (ranked[0]![1]! < LN_POOL_MIN_SCORE) return null;
+  return FULL_NAMES[ranked[0]![0]!] ?? ranked[0]![0]!;
 }
 
 /** Aggregate grid analysis segment grades into a single grade string */
