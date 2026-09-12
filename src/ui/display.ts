@@ -435,6 +435,9 @@ export function showResult(result: DifficultyResult): void {
   const intv = t.burst.singleFingerInterval;
   const kps = t.burst.bothHandsKPS;
   const techItems: string[] = [];
+  // Row-spacing irregularity in active sections — first-class tech signal:
+  // 0.2-0.4 steady (streams/chordjack), 0.6+ bursty tech timing
+  if (t.dtCV > 0) techItems.push(mrow("dtCV", t.dtCV.toFixed(2)));
   if (intv > 0) techItems.push(mrow("Interval", `${intv}ms`));
   if (kps > 0) techItems.push(mrow("KPS (P90)", `${Math.round(kps)}`));
   if (t.graceCount > 0) techItems.push(mrow("Graces", `${t.graceCount}`));
