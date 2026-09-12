@@ -74,6 +74,18 @@ html, body {
   transition: color 0.3s ease;
 }
 
+#akuta-value {
+  font-size: 13px;
+  color: #e0a3ff;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  margin-top: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: color 0.3s ease;
+}
+
 /* Star color by difficulty tier */
 .star-easy    { color: #66bb6a; }  /* 0.00 - 2.49 */
 .star-normal  { color: #42a5f5; }  /* 2.50 - 3.99 */
@@ -674,3 +686,71 @@ body.playing #section-bar {
 }
 
 
+
+/* ============================================================
+   Akuta scores mode — skillset bars
+   ============================================================ */
+#akuta-bars {
+  display: grid;
+  gap: 6px;
+  padding: 4px 2px 2px 0;
+  /* the card is a centered flex column — stretch the bar block explicitly */
+  width: 88%;
+}
+
+.akuta-skill {
+  display: grid;
+  gap: 3px;
+}
+
+.akuta-skill-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: #e9efff;
+  display: flex;
+  justify-content: space-between;
+}
+
+.akuta-skill-value {
+  font-variant-numeric: tabular-nums;
+  color: #cfd8ea;
+}
+
+.akuta-skill-track {
+  position: relative;
+  width: 100%;
+  height: 11px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+}
+
+.akuta-skill-fill {
+  height: 100%;
+  border-radius: 0 999px 999px 0;
+  background: var(--akuta-color, #52caff);
+  transition: width 0.25s ease;
+}
+
+/* tier 1 (0-20): plain white */
+.akuta-skill-fill.tier1 {
+  background: #f2f6ff;
+  box-shadow: 0 0 6px rgba(240, 246, 255, 0.55);
+}
+
+/* tier 2 (20-50): fast rainbow cycle, club-DJ feel */
+.akuta-skill-fill.tier2 {
+  background: linear-gradient(
+    90deg,
+    #ff4d4d, #ff9a3d, #ffe14d, #6bff6b,
+    #4de1ff, #6b8bff, #c86bff, #ff4d9e, #ff4d4d
+  );
+  background-size: 800% 100%;
+  animation: akuta-rainbow 1.6s linear infinite;
+}
+
+@keyframes akuta-rainbow {
+  0% { background-position: 0% 0; }
+  100% { background-position: 800% 0; }
+}
