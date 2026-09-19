@@ -19,53 +19,11 @@ Configured via tosu settings panel. `settings.json` provides two toggles:
 | Show Pattern Breakdown | Toggle the key-type/pattern bars row              |
 | Show Custom Metrics    | Toggle density, jack, stream, tech, stamina, LN panels  |
 
-### In-Game Bar (gameplay overlay)
-
-```
-+-------------------------------------------------------------+
-| [=======-----------------] Mid Jumpstream   160             |
-|                               Mid Jumpstream                |
-| M12/48 | 01:23.4 | 7.2 n/s                                  |
-+-------------------------------------------------------------+
-```
-
-Shown during active gameplay. Progress track with the current section's pattern label, subtype, measure count (`M12/48`), time, and real-time density (`n/s`).
-
-### Section Bar (timeline)
-
-```
-< 4s    8s    12s   16s   20s   24s   28s   32s   36s   40s   >
-| js--- | hs-- | tech | js--- | jk-- | -----break----- | js--- |
-                                                           ^
-                                                    playhead
-```
-
-Color-coded measure-by-measure timeline showing pattern type per measure. Playhead tracks current position during gameplay.
-
 ### Detailed View (card — lobby/result screen)
 
-```
-+----------------------------------------------------------+
-| Artist - Title [Difficulty]                               |
-+----------------------------------------------------------+
-|               160 Mid Jumpstream                          |
-|            Sunny: 4.51                                    |
-+----------------------------------------------------------+
-|        270 BPM          LN 5%                            |
-+----------------------------------------------------------+
-+----------------------------------------------------------+
-|  Mid CJ  [=======]              160  (23%)               |
-|  JS      [===]                  180  (15%)               |
-|  HS      [=]                    180  (8%)                |
-+----------------------------------------------------------+
-| ▸ Metrics Panels                                           |
-| +----------------------+--------------------------------+ |
-| | BPM / DENSITY       | LONG NOTE                      | |
-| | JACK                | STREAM                         | |
-| | TECH                | STAMINA                        | |
-| +----------------------+--------------------------------+ |
-+----------------------------------------------------------+
-```
+Rendered with the actual beatmap `Camellia - Fastest Crash (inteliser) [cracked]`:
+
+![Detailed view card — headline 210 Minijack, Sunny 5.33, pattern bars and metric panels](docs/screenshot-card.png)
 
 ### Element Descriptions
 
