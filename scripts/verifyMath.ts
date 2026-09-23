@@ -91,3 +91,7 @@ for (let trial = 0; trial < 50; trial++) {
   }
 }
 console.log(`${checks} comparisons, ${bad} mismatches`);
+if (bad > 0) {
+  console.error(`FAIL: ${bad} mismatching comparisons`);
+  process.exitCode = 1;
+}
