@@ -165,9 +165,10 @@ export function fast_walk_and_check_for_skip(
   calc: Calc,
   offset = 0.0,
 ): boolean {
+  if (ni.length === 0) return true;
   if (!Number.isFinite(ni[ni.length - 1]!.rowTime)) return true;
 
-  calc.numitv = time_to_itv_idx(ni[ni.length - 1]!.rowTime / rate) + 1;
+  calc.numitv = time_to_itv_idx((ni[ni.length - 1]!.rowTime + offset) / rate) + 1;
   if (calc.numitv >= calc.itv_size.length) {
     if (calc.numitv >= max_intervals) return true;
     calc.resize_interval_dependent_vectors(calc.numitv + 2);
