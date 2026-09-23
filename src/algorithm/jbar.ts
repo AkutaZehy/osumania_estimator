@@ -46,7 +46,7 @@ export function computeJbar(
   }
 
   // Compute raw jack values per adjacent pair in same column
-  const xPow = x ** 0.25;
+  const xPow = Math.max(x, 0) ** 0.25;
   for (let k = 0; k < K; k++) {
     const notes = noteSeqByColumn[k];
     if (!notes) continue;
@@ -60,6 +60,8 @@ export function computeJbar(
       if (leftIdx >= rightIdx) continue;
 
       const delta = 0.001 * (end - start);
+      // coincident/duplicate rows in one column would poison Jks with Infinity
+      if (!(delta > 0)) continue;
       const val = delta ** -1 * (delta + 0.11 * xPow) ** -1;
       const jVal = val * jackNerfer(delta);
 

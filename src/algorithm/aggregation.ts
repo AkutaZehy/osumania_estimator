@@ -143,9 +143,9 @@ function smoothDForGraph(
     .sort((a, b) => a - b);
 
   const uniformD = interpValues(
-    new Float64Array(uniformTimes),
     allCorners,
     DAll,
+    new Float64Array(uniformTimes),
   );
 
   // Zero out regions far from notes
@@ -188,7 +188,7 @@ function smoothDForGraph(
   }
 
   return Array.from(
-    interpValues(allCorners, new Float64Array(uniformTimes), new Float64Array(smoothed)),
+    interpValues(new Float64Array(uniformTimes), new Float64Array(smoothed), allCorners),
   );
 }
 
