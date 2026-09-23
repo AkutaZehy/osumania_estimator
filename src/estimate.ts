@@ -117,7 +117,8 @@ function parseTrills24(s: string): number {
   let total = 0;
   for (const part of s.split(/\s+/)) {
     const m = part.match(/^(\d+)×(\d+)$/);
-    if (m && Number(m[1]) === 24) total += Number(m[2]);
+    // techAnalysis packs `${cnt}×${div}`: group 1 = count, group 2 = division
+    if (m && Number(m[2]) === 24) total += Number(m[1]);
   }
   return total;
 }
