@@ -33,8 +33,8 @@ const LN_SUBTYPE_BASE: Record<string, number> = {
   "LCS Density": 1.0,
   "DCS Density": 1.0,
   Inverse: 1.5,
-  "JackyWC": 0.55,
-  "SpeedyWC": 0.8,
+  "Jacky WC": 0.55,
+  "Speedy WC": 0.8,
 };
 
 export const PATTERNS_CONFIG = {
@@ -63,8 +63,8 @@ export const PATTERNS_CONFIG = {
       "LCS Density": 0.9,
       "DCS Density": 0.9,
       Inverse: 1.5,
-      "JackyWC": 0.55,
-      "SpeedyWC": 0.8,
+      "Jacky WC": 0.55,
+      "Speedy WC": 0.8,
     },
     HB: {
       ...RC_SUBTYPE_BASE,
@@ -77,8 +77,8 @@ export const PATTERNS_CONFIG = {
       "LCS Density": 0.9,
       "DCS Density": 0.9,
       Inverse: 0.0,
-      "JackyWC": 0.65,
-      "SpeedyWC": 0.45,
+      "Jacky WC": 0.65,
+      "Speedy WC": 0.45,
     },
     Mix: {
       ...RC_SUBTYPE_BASE,
@@ -91,8 +91,8 @@ export const PATTERNS_CONFIG = {
       "LCS Density": 0.9,
       "DCS Density": 0.9,
       Inverse: 0.0,
-      "JackyWC": 0.45,
-      "SpeedyWC": 0.45,
+      "Jacky WC": 0.45,
+      "Speedy WC": 0.45,
     },
   } as Record<string, Record<string, number>>,
 
@@ -117,7 +117,7 @@ export const PATTERNS_CONFIG = {
   ENABLE_MULTI_LABEL_SAME_WINDOW: true,
   COORDINATION_SPECIFIC_ORDER: ["ColumnLock", "Shield", "Release"],
   DENSITY_SPECIFIC_ORDER: ["Inverse", "JS Density", "HS Density", "DS Density", "DCS Density", "LCS Density"],
-  WILDCARD_SPECIFIC_ORDER: ["SpeedyWC", "JackyWC"],
+  WILDCARD_SPECIFIC_ORDER: ["Speedy WC", "Jacky WC"],
   JACKY_MIN_BPM: 90.0,
   SHIELD_MAX_BEAT_RATIO: 0.25,
   INVERSE_GAP_TOLERANCE_MS: 5.0,

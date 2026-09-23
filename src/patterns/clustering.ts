@@ -29,7 +29,7 @@ function patternAmount(sortedStartsEnds: Array<[number, number]>): number {
   let [currentStart, currentEnd] = sortedStartsEnds[0]!;
 
   for (const [start, end] of sortedStartsEnds) {
-    if (currentEnd < end) {
+    if (start > currentEnd) {
       totalTime += currentEnd - currentStart;
       currentStart = start;
       currentEnd = end;
@@ -264,8 +264,10 @@ function buildClusterOutput(
     ? group.items.reduce((s, m) => s + m.avgBeatLength, 0) / group.items.length
     : beatLength;
   const rawBPM = 60000 / avgBL;
-  const bpm = Math.round(rawBPM * division / 4 / 5) * 5; // round to nearest 5
-  const timingMs = Math.round(avgBL / division);
+  // LN clusters carry division 0 (no beat-grid division); keep bpm/timing
+  // sentinels finite instead of 0/Infinity products
+  const bpm = division > 0 ? Math.round(rawBPM * division / 4 / 5) * 5 : 0; // round to nearest 5
+  const timingMs = division > 0 ? Math.round(avgBL / division) : 0;
 
   return {
     pattern: group.pattern,
@@ -277,7 +279,7 @@ function buildClusterOutput(
     mixed: group.mixed,
     amount,
     get importance(): number {
-      return this.amount * this.ratingMultiplier * this.division;
+      return this.amount * this.ratingMultiplier * (this.division > 0 ? this.division : 1);
     },
   };
 }
@@ -294,6 +296,8 @@ function findDominantDivision(groups: Map<string, ClusterGroup>): number {
   const amountByDivision = new Map<number, number>();
 
   for (const group of groups.values()) {
+    // LN clusters (division 0) stay out of speed clustering
+    if (group.division <= 0) continue;
     const startsEnds = group.items
       .map((m) => [m.start, m.end] as [number, number])
       .sort((a, b) => a[0] - b[0]);
