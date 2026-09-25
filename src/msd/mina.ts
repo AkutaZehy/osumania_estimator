@@ -14,15 +14,12 @@ import {
   both_hands,
   col_type,
   hands,
-  max_intervals,
   max_rating,
-  max_rows_for_single_interval,
   min_rating,
   ms_init,
   ssr_goal_cap,
   s_init,
   hand_col_ids,
-  low_acc_cutoff,
   type NoteInfo,
 } from "./enums.js";
 import {
@@ -75,8 +72,6 @@ import { WideRangeRollMod } from "./dependent/WideRangeRollMod.js";
 import { WideRangeJumptrillMod } from "./dependent/WideRangeJumptrillMod.js";
 import { WideRangeJJMod } from "./dependent/WideRangeJJMod.js";
 import { WideRangeAnchorMod } from "./dependent/WideRangeAnchorMod.js";
-
-/** UlbuAcolytes.h: `{ 0.F, 0.91F, 0.75F, 0.77F, 0.93F, 1.01F, 1.02F, 1.06F }` */
 
 /* The stamina model works by asserting a minimum difficulty relative to the
  * supplied player skill level for which the player's stamina begins to wane.
@@ -1070,7 +1065,3 @@ export function MinaSDCalc(
 
   return CalcMain(ni, musicrate, Math.min(goal, ssr_goal_cap), calc);
 }
-
-void low_acc_cutoff;
-void max_intervals;
-void max_rows_for_single_interval;

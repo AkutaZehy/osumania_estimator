@@ -33,7 +33,7 @@ export class CalcMovingWindow<T extends number> {
     return this._itv_vals[max_moving_window_size - 1]!;
   }
 
-  /** Oldest value inside the 6-slot window (second to last slot). */
+  /** Previous interval's value (second-newest slot in the 6-slot window). */
   get_last(): T {
     return this._itv_vals[max_moving_window_size - 2]!;
   }

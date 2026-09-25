@@ -36,6 +36,11 @@ export const AkutaSkillset = {
 export type AkutaSkillset = (typeof AkutaSkillset)[keyof typeof AkutaSkillset];
 export const NUM_SKILLSET_AKUTA = 11;
 
+/** nps-unit conversion: interval base difficulty = notes × finalscaler × this.
+ *  Shared by the engine (SequencedBaseDiffCalc npsBase) and the Akuta
+ *  extension skillsets (akuta.ts notesToDiff) — keep them on one constant. */
+export const nps_base_multiplier = 1.6;
+
 /** Exact numeric layout of C++ `enum CalcPatternMod` (0.72.3). */
 export const CalcPatternMod = {
   Stream: 0,

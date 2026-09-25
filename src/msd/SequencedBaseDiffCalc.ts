@@ -9,6 +9,7 @@ import {
   finalscaler,
   hand_col_ids,
   max_rows_for_single_interval,
+  nps_base_multiplier,
   Skillset,
   s_init,
 } from "./enums.js";
@@ -132,7 +133,7 @@ export const nps = {
       }
 
       // nps for this interval
-      const npsBase = notes * finalscaler * 1.6;
+      const npsBase = notes * finalscaler * nps_base_multiplier;
       calc.init_base_diff_vals[hand]![0]![itv] = npsBase; // NPSBase
 
       // ms base for this interval
@@ -528,6 +529,11 @@ export class techyo {
   }
 }
 
+// Signpost: adding a CalcPatternMod touches all of —
+//   enums.ts (mod table + [de]activation values), mina.ts
+//   (advance_sequencing / setup / full_reset / set_agnostic_pmods /
+//   set_dependent_pmods), InitAdjDiff's pmods_used (calc.ts), and a
+//   Mod/Sequencing pair in agnostic/ or dependent/.
 export class diffz {
   _nps = nps;
   _tc = new techyo();

@@ -21,7 +21,9 @@
 
 import {
   AkutaSkillset,
+  interval_span,
   NUM_SKILLSET,
+  nps_base_multiplier,
   Skillset,
   type NoteInfo,
 } from "./enums.js";
@@ -39,7 +41,7 @@ function colHand(col: number): number {
 
 /** engine nps-unit conversion for a per-interval note count */
 function notesToDiff(notes: number): number {
-  return notes * finalscaler * 1.6;
+  return notes * finalscaler * nps_base_multiplier;
 }
 
 /** v1 base scalers for the extension skillsets (calibration knobs).
@@ -98,15 +100,15 @@ function computeExtensionBases(calc: Calc, spans: LNSpan[]): { bases: number[][]
 
   // --- LN span integration (held time + releases) ---
   for (const span of spans) {
-    const firstItv = Math.max(0, Math.floor(span.start / 0.5));
-    const lastItv = Math.min(numitv - 1, Math.floor((span.end - 1e-9) / 0.5));
+    const firstItv = Math.max(0, Math.floor(span.start / interval_span));
+    const lastItv = Math.min(numitv - 1, Math.floor((span.end - 1e-9) / interval_span));
     for (let itv = firstItv; itv <= lastItv; itv++) {
-      const lo = itv * 0.5;
-      const hi = lo + 0.5;
+      const lo = itv * interval_span;
+      const hi = lo + interval_span;
       const overlap = Math.min(span.end, hi) - Math.max(span.start, lo);
       if (overlap > 0) heldTime[span.hand]![itv]! += overlap;
     }
-    const relItv = Math.floor(span.end / 0.5);
+    const relItv = Math.floor(span.end / interval_span);
     if (relItv >= 0 && relItv < numitv) releases[span.hand]![relItv]! += 1;
   }
 
@@ -158,7 +160,7 @@ function computeExtensionBases(calc: Calc, spans: LNSpan[]): { bases: number[][]
     for (const hand of [0, 1] as const) {
       // LN coordination isolates the LN component: taps under simultaneous
       // holds + releases. Charts without LNs stay at the floor.
-      const heldMean = heldTime[hand]![itv]! / 0.5;
+      const heldMean = heldTime[hand]![itv]! / interval_span;
       bases[2]![hand]![itv] =
         (taps[hand]![itv]! * heldMean + releases[hand]![itv]!) * finalscaler * 1.6;
       bases[0]![hand]![itv] = notesToDiff(bases[0]![hand]![itv]!);
@@ -211,6 +213,16 @@ export function solveAkuta(
 
   if (ni.length > 1 && msdValues[Skillset.Stream]! > 0) {
     const { bases } = computeExtensionBases(calc, spans);
+
+    // Layout contract: the extension slots exist because InitAdjDiff sizes
+    // the ss-dimensioned arrays with NUM_SKILLSET_AKUTA (calc.ts). If that
+    // sizing ever changes, the writes below would alias a core skillset
+    // slot silently — fail loudly at the seam instead.
+    if (calc.base_adj_diff[0]!.length < AkutaSkillset.LNCoordination + 1) {
+      throw new Error(
+        `akuta: extension slots missing — base_adj_diff sized ${calc.base_adj_diff[0]!.length}, need ${AkutaSkillset.LNCoordination + 1}`,
+      );
+    }
 
     // write extension bases into the engine slots (stam base = same vector)
     for (let e = 0; e < 3; e++) {

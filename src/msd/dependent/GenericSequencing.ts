@@ -379,13 +379,6 @@ export class AnchorSequencer {
     }
   }
 
-  get_lowest_anchor_ms(): number {
-    return Math.min(
-      this.anch[col_type.col_left]!.get_ms(),
-      this.anch[col_type.col_right]!.get_ms(),
-    );
-  }
-
   get_lowest_jack_ms(): number {
     return Math.min(
       this.jack[col_type.col_left]!.get_ms(),
@@ -524,13 +517,6 @@ export class SequencerGeneral {
 
     // simple
     return this._mw_sc_ms[ct]!.get_now();
-  }
-
-  get_mw_sc_ms(ct: col_type): CalcMovingWindow<number> {
-    if (ct === col_type.col_left || ct === col_type.col_ohjump) {
-      return this._mw_sc_ms[col_type.col_left]!;
-    }
-    return this._mw_sc_ms[col_type.col_right]!;
   }
 
   get_any_ms_now(): number {

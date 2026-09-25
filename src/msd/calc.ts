@@ -5,13 +5,11 @@
 // ============================================================
 
 import {
-  CalcDiffValue,
   CalcPatternMod,
   NUM_CALC_DIFF_VALUE,
   NUM_CALC_PATTERN_MOD,
   NUM_SKILLSET_AKUTA,
   RowInfo,
-  Skillset,
   both_hands,
   default_interval_count,
   hands,
@@ -24,7 +22,7 @@ import {
   neutral,
   type NoteInfo,
 } from "./enums.js";
-import { column_count, mean } from "./num.js";
+import { column_count } from "./num.js";
 
 export class Calc {
   /** Rows per interval (MinaCalc.h adj_ni). */
@@ -225,11 +223,3 @@ export function fast_walk_and_check_for_skip(
   calc.numitv = itv + 1;
   return false;
 }
-
-/** Mean over a sparse list (PatternModHelpers.h mean, for arrays without holes). */
-export function vec_mean(v: readonly number[]): number {
-  return mean(v);
-}
-
-/** Unused enums re-exported so consumers can keep parity naming. */
-export { CalcDiffValue, CalcPatternMod, Skillset };
