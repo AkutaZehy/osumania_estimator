@@ -1,7 +1,7 @@
 // ============================================================
 // Section Analysis — Test with synthetic beatmap data
 // ============================================================
-// Run: npx tsx test/sectionAnalysis.test.ts
+// Run: npx tsx test/sectionAnalysis.diag.ts
 // ============================================================
 
 import { analyzeSections } from "../src/custom/sectionAnalysis.js";

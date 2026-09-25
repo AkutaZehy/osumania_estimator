@@ -1,7 +1,7 @@
 // ============================================================
 // Section Analysis — Test with REAL .osu maps
 // ============================================================
-// Run: npx tsx test/realMaps.test.ts
+// Run: npx tsx test/realMaps.diag.ts
 // ============================================================
 
 import * as fs from "fs";

@@ -1,7 +1,7 @@
 // ============================================================
 // Anchor Analysis — Detailed segment dump for specific maps
 // ============================================================
-// npx tsx test/anchorDetail.test.ts
+// npx tsx test/anchorDetail.diag.ts
 // ============================================================
 
 import * as fs from "fs";

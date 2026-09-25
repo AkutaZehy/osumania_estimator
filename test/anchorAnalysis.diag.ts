@@ -1,7 +1,7 @@
 // ============================================================
 // Anchor Analysis — Test with ALL .osu maps (v4)
 // ============================================================
-// Run: npx tsx test/anchorAnalysis.test.ts
+// Run: npx tsx test/anchorAnalysis.diag.ts
 // ============================================================
 // LN treated as head + tail (two notes)
 // P100/P90/P50 statistics with fault tolerance for P100
