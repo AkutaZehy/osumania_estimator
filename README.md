@@ -36,7 +36,11 @@ Headline modules, the Akuta skillset bars (Stream, Jumpstream, Handstream, Stami
 
 #### Main Display (top line)
 
-Shows the effective BPM and dominant key type from grid analysis (e.g. `160 Mid Jumpstream`). When the LN ratio is ≥15%, the dominant LN pool type replaces the key type. On vibro maps whose verdict is `vibro`, the key type is replaced by "Vibro" in red. BPM is `rawBPM * division / 4 * speedRate`. For SV maps with multiple BPM zones, per-cell active timing point lookup provides accurate BPM per segment.
+Shows the effective BPM and dominant key type from grid analysis (e.g. `160 Mid Jumpstream`). When the LN ratio is ≥15%, the dominant LN pool type replaces the key type. On vibro maps whose verdict is `vibro`, the key type is replaced by "Vibro" in red. Independently of both, when the G-estimate classifier (density-map based) puts tech as the top type, the title becomes `Burst Tech` (tech·jack) or `Reading Tech` (tech·speed/stamina). BPM is `rawBPM * division / 4 * speedRate`. For SV maps with multiple BPM zones, per-cell active timing point lookup provides accurate BPM per segment.
+
+#### Dan Estimate (bottom line)
+
+`【Type】Reform N dan tier (value)` — the Akuta RC estimate reformatted through the G-estimate type adjuster (jack/speed/stamina/tech nudges ±0.2-0.3 dan). LN-dominant charts (ratio >15%) append the separate LN channel estimate. Vibro maps keep the numeric estimate while the vibro badge sits above.
 
 #### Sunny (second line)
 
@@ -68,11 +72,11 @@ Shown when LN ratio > 1%, or any overlapping LN or Tap LN exists.
 | Tap LN  | Short LNs (<=16th note)                                                        |
 | P-Score | `CO x · DE x · WC x · TE x` — Coordination / Density / Wildcard / Technical pool scores |
 
-Shield, reversed shield, column lock, attack/release, inverse, ouroboros and LN-tree constructions are computed in `lnAnalysis.ts` and feed the pool scores, but are not displayed as separate rows.
+Shield, reversed shield, column lock, attack/release, inverse and LN-tree constructions are computed in `lnAnalysis.ts`. Of these, shield, column-lock, inverse, LN-chord heads, tap LN and the release textures feed the pool scores; ouroboros, LN-tree and anti-shield (reversed-shield) counts are computed for the subtype labels but deliberately excluded from the pool formulas.
 
 #### JACK Panel
 
-Rows in order: Grade, Class, Stamina, Finger, Hand, Imbal, Vibro.
+Rows in order: Grade, Class, Stamina, Imbal 4c/16c, Finger, Hand, Vibro.
 
 | Field   | Meaning                                                                         |
 | ------- | ------------------------------------------------------------------------------- |
@@ -81,31 +85,32 @@ Rows in order: Grade, Class, Stamina, Finger, Hand, Imbal, Vibro.
 | Stamina | `burstSec（notes[, Broken]） / sumSec（notes）` — longest jack streak and total streak coverage with note counts. `Broken` marks a sub-10s peak pushed past 10s by merging streaks separated by ≤½ measure (gap time not counted) |
 | Finger  | Max per-column density / max both-hands (1.0 balanced, >1.5 biased)            |
 | Hand    | Max(left,right) peak density / max both-hands (1.0 balanced, >1.5 biased)      |
-| Imbal   | 16-row / 64-row / overall hand imbalance. Direction label: L/R/S                |
+| Imbal   | 4-row / 16-row window hand imbalance (`4c/16c`). Direction label: L/R/S |
 | Vibro   | Vibro verdict + cvRate + burst/control timing. Display: `Vibro(cvRate%) Bx.xs/Cx.xs` |
 
 #### STREAM Panel
 
-Rows in order: Grade, Class, Stamina, Imbal, Brk2r, Sta L/R, Sta Alt.
+Rows in order: Grade, Class, Stamina, Imbal 4c/16c, Brk2r, Sta L/R, Sta Alt.
 
 | Field   | Meaning                                                                 |
 | ------- | ----------------------------------------------------------------------- |
 | Class   | 切 type at the dominant row cadence: `[eff] [Full\|Dense\|Broken\|Mid] (JS\|HS\|SS)[, Jacky][, Technical]`. Singles tag → `SS`; Full + pure single-note → `Running Man`. See [Stream Class System](#stream-class-system-stream-class-row) |
 | Grade   | Mean notes-per-row tiers over qualifying stream segments (gridTotalNotes ≥4): Single (≤1.125) / Light (≤1.25) / Mid (≤1.5) / Dense (<2.0) / Full (=2.0) / Heavy (>2.0). Display: `Mid (1.38)` |
-| Stamina | `N (10s) / M (30s)` — max notes in any 10s / 30s sliding window          |
-| Imbal   | 16-row / 64-row / overall hand imbalance. Direction label: L/R/S        |
+| Stamina | `N (10s) / M (30s)` — max rows in any 10s / 30s sliding window (chords count once) |
+| Imbal   | 4-row / 16-row window hand imbalance (`4c/16c`). Direction label: L/R/S |
 | Brk2r   | Broken stream: max/median notes in any 2-row window                     |
 | Sta L/R | SH (Single Hand) stamina — `P100 / P90=v×n / P50=v×n`                   |
 | Sta Alt | DH (Dual Hand) stamina — `P100 / P90=v×n / P50=v×n`                     |
 
 #### TECH Panel
 
-Rows appear only when non-zero.
+Rows appear only when non-zero, in this order.
 
 | Field    | Meaning                                                            |
 | -------- | ------------------------------------------------------------------ |
-| Interval | Single-finger spacing of the fastest burst (ms)                    |
-| KPS (P90)| Both-hands P90 keys per second                                     |
+| dtCV     | Row-interval coefficient of variation in active sections — time-axis regularity: 0.2-0.4 steady (streams/chordjack), 0.6+ bursty tech |
+| Interval | Single-finger spacing of the fastest burst (ms, played time)       |
+| KPS (P90)| Both-hands P90 keys per second (played time, scales with speedRate)|
 | Graces   | Grace/flam count (cell-aware, excludes legitimate 48th-note streams) |
 | Rolls    | Max consecutive length per division (e.g. "24x16")                 |
 | Trills   | Total count per division                                           |
@@ -132,10 +137,11 @@ The analysis pipeline is decomposed into focused modules:
                              analyzer.ts (pipeline orchestrator)
                              ┌──────────────────────────────────────┐
                              │ parse → Sunny → patterns → grid →    │
-                             │   custom → aggregate → section       │
+                             │   custom → aggregate → section →     │
+                             │   Akuta score (msd/ + estimate/)     │
                              └──────┬───────────────┬───────────────┘
                                     │               │
-          sectionAnalysis.ts        │    gridAnalysis.ts         vibroAnalysis.ts
+          sectionAnalysis.ts        │    gridAnalysis.ts + grid/   vibroAnalysis.ts
    ┌─────────────────────┐         │   ┌─────────────────────┐   ┌───────────────────┐
    │ Segment slicing     │         │   │ Cell-level subclass │   │ 连4 detection     │
    │ Pattern analysis    │         │   │ Pattern class.      │   │ SHFC classification│
@@ -206,17 +212,17 @@ Descriptor thresholds: **Steady** ≤15, **Mixed** ≤25, **Rhythmic** ≤35, **
 
 Run-extraction jack typing at the map's dominant jack cadence (effective BPM). This is the metric surfaced by the JACK panel's `Class` and `Stamina` rows (introduced v4.3, replacing the Purity/Anchor rows).
 
-1. **Segments**: grid-analysis jack cells; statistics restricted to the dominant effBPM group plus secondaries holding ≥10% of jack cells.
-2. **Link**: two *adjacent* rows (no row in between) sharing a column, spaced ≈ the jack cadence. Adjacency is what distinguishes a jack from a same-column repeat across a 切 (switch) structure.
+1. **Segments**: rows rebuilt from all note starts (LN heads included) — not grid cells. Statistics are restricted to the dominant effBPM group plus secondaries holding ≥10% of jack cells.
+2. **Link**: two *adjacent* rows (no row in between) sharing a column, spaced ≈ the jack cadence (±18%). Adjacency is what distinguishes a jack from a same-column repeat across a 切 (switch) structure.
 3. **Chain**: maximal consecutive links per column form x连 (2连 bullet, 3+, …). Chordjacks with intervening rows are excluded by design (covered by the anchor/both-hands metrics).
-4. **Stats** pooled over qualifying clusters: run-length buckets (2 / 3-4 / 5-7 / 8+), key-weighted average run length `Σx²nₓ/Σxnₓ`, 5+-run key share, longest run.
+4. **Stats** pooled over qualifying clusters: total links, 3+-run and 5+-run key share (`k3`/`k5`), count of 5+ chains (`r5`), key-weighted average run length `Σx²nₓ/Σxnₓ`, and jack run keys per second.
 5. **Class decision**:
    - no compliant sections → `Actually Not Jack`
    - streak coverage ≥25% but intensity (keys/s, 10s peak) below threshold → `Speedjack` (fragmented jack grind)
    - anchor confidence (`k5+ key share × avg run depth × 5-run presence` product) ≥70 → `Anchor / X Chordjack`
    - 3+-run key share <15% → `Bullet / Minijack` (2-run dominant)
    - otherwise `{Low|Mid|High} Chordjack` by jack run keys per second (<8 / <15 / ≥15)
-6. **Stamina row**: burst = longest single streak; when the best streak is <10s, streaks separated by ≤½ measure merge into groups (gap time not counted) and the max is re-taken — if that merge crosses 10s the value is tagged `Broken`. Sum = total streak seconds over unique covered rows plus their note count.
+6. **Stamina row**: burst = longest single streak; streaks separated by ≤½ measure always merge into groups (gap time not counted) and the max is re-taken — when the merge is what pushes a sub-10s peak past 10s the value is tagged `Broken`. Sum = total streak seconds over unique covered rows plus their note count.
 
 Streak tolerance rules: a single non-jack row transition is tolerated (must be resolved by the next jack transition); two consecutive non-jack transitions, an empty cadence slot, or an off-grid (切键) row break the streak. LN heads participate as plain starts.
 
@@ -230,7 +236,7 @@ Interval-distribution typing at the map's dominant row cadence — the 切 (swit
 3. **Tags**: Jacky (间隔0 >1%) · Full (间隔1 ≥50%) · Dense (45–50% 且 间隔1+2 >80%) · Broken (15–30%) · Singles (<15%) · Technical (非整数 ≥15%).
 4. **Type**: on-grid row composition — 3+押 rows ≥5% → `HS`; 2+押 rows ≥10% → `JS`; otherwise pure single-note → `SS`. The Singles tag forces `SS`; `Full` + `SS` → `Running Man`.
 5. **Class string**: `[eff] [Full|Dense|Broken|Mid] (JS|HS|SS)[, Jacky][, Technical]` (e.g. `175 Mid JS, Technical`).
-6. **Stamina row**: maximum note count inside any sliding 10s / 30s window (all note starts, no extra conditions).
+6. **Stamina row**: maximum row count inside any sliding 10s / 30s window (chords count once, no extra conditions).
 
 ### Key Type System (A4 tiers)
 
@@ -309,8 +315,8 @@ discriminative signal.
 
 | Pool | Formula | Description |
 | ---- | ------- | ----------- |
-| CO   | `0.7·overlay + 0.2·inverse + 0.1·column-lock` | LN overlap/coordination texture |
-| DE   | `0.5·inverse + 0.3·LN-chord + 0.2·tapLN` | Inverse/chord/tap-LN density texture |
+| CO   | `0.5·overlay + 0.2·inverse + 0.3·column-lock` | LN overlap/coordination texture |
+| DE   | `0.65·inverse + 0.2·LN-chord + 0.15·tapLN` | Inverse/chord/tap-LN density texture |
 | WC   | `0.45·wc-jack + 0.45·wc-speed + 0.1·shield` | Jack/speed textures between LN heads (cadence-gated: jack ≤1 beat, speed ≤1/2 beat head intervals) |
 | TE   | `0.5·release + 0.2·stagger + 0.15·shield + 0.15·column-lock` | Release/technique texture: release = LN whose end group holds ≥2 LNs with different starts (staggered tails); stagger = same-start/different-end pair rate |
 
@@ -327,7 +333,7 @@ Hand bias metrics use a unified 1.0-balanced scale with directional labels:
 - **Imbalance**: `2 * max/sum` (1.0 balanced, 2.0 = one-sided)
 - **Direction**: L (left-dominant), R (right-dominant), S (switching)
 
-Jack imbalance uses 16r/64r windows; stream imbalance excludes jack rows.
+Jack imbalance uses 4-row/16-row windows; stream imbalance excludes jack rows.
 
 ### Algorithm Layers
 
@@ -341,7 +347,7 @@ Jack imbalance uses 16r/64r windows; stream imbalance excludes jack rows.
 
 Mod changes trigger a live re-analysis (no manual refresh needed):
 
-- **Speed mods**: DT/NC (1.5x), HT (0.75x), lazer custom rates (e.g. DC via `speed_change`), and the tosu `rate` field take priority. BPM and other time-based metrics scale by `speedRate`. The pattern/key-type stage runs on the speed-scaled beat length, so pattern-card and segment-table BPM are effective BPM (`rawBPM * speedRate`, same convention as the BPM/DENSITY panel); beat-relative detection windows scale with tempo.
+- **Speed mods**: DT/NC (1.5x), HT (0.75x), lazer custom rates (e.g. DC via `speed_change`), and the tosu `rate` field take priority. Classification is speed-invariant by design — the pattern stage always runs on the nominal (unscaled) time base, so key types, pattern cards and grades do not drift under mods. Display values that describe played time scale with `speedRate`: BPM fields (grid BPM, panel BPM, equivalentBPM), tech burst KPS/intervals, and vibro burst/control seconds. Anchor stamina buckets raw note times against the nominal BPM.
 - **Conversion mods**: IN (tap→hold) and HO (hold→tap) re-run the parser with the converted chart so all downstream analysis (patterns, grid, sections, custom) sees the modded notes.
 - **OD mods**: HR/EZ are detected (`odFlag`) for difficulty weighting.
 
@@ -352,11 +358,13 @@ The mod signature is `speedRate | odFlag | cvtFlag`, and any signature change re
 Analysis pipeline optimized for sub-second execution on most maps:
 
 - Pre-cached `_notes` / `_rowNotes` in grid cells to eliminate repeated `getNotesInRange` calls
+- Pattern detection scans a bounded 9-row window per position (all detectors read at most 8 rows ahead) and clustering binary-searches each pattern window — O(n) + O(P·log n), no heavy-map degradation stage
 - Sweep-line O(n log n) LN overlap detection (was O(n²))
 - End-time grouping O(k) A/R detection
 - `lowerBound` binary search for boundary lookups
 - Single-pass O(n) run/interval extraction in the jack and switch class scanners (per qualifying cadence)
 - Heavy map guard at 30000 notes
+- Non-4K keymodes are crash-safe: LN/anchor column buckets size by key count (jack/stream class metrics stay 4K-tuned)
 - LRU result cache (50 entries, keyed by `md5|modSignature`): revisiting a
   previously-seen (map, mod) pair skips the HTTP fetch and the full pipeline;
   map switches and mod toggles still re-analyze live (gate unchanged), hits
@@ -373,7 +381,7 @@ npm run bench                    # perf benchmark (npm run bench:stages for per-
 
 Output: `deploy/osumania-estimator by Akuta Zehy/`
 
-Test maps are in `maps/` (dan packs + SV test maps). Test suites in `test/` (vitest suites live under `test/*.test.ts`; the rest are one-off diagnostic scripts). Perf/verification one-offs live in `scripts/` (`bench.ts`, `verify*.ts`).
+Test maps are in `maps/` (dan packs + SV test maps). Vitest suites live at `test/*.test.ts`; one-off diagnostic scripts are `test/*.diag.ts` (run with `npx tsx`) plus scratch probes in `test/tmp/`. Perf/verification one-offs live in `scripts/` (`bench.ts`, `verify*.ts`, probe scripts). Parity-reference WASM builds live in `src/ett/` (only 72.3 is used, by `test/msdVsWasm.test.ts`).
 
 ### Acknowledgments
 
