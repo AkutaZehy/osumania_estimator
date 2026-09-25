@@ -30,7 +30,7 @@ for (const f of maps.slice(0, 40)) {
     const parsed = parser.getParsedData();
     const sunny = calculateSunny(text, 1.5, NO_MODS, { withGraph: true });
     let patterns;
-    try { patterns = analyzePatterns(parsed, 1.5); } catch { patterns = null; }
+    try { patterns = analyzePatterns(parsed); } catch { patterns = null; }
     const pt = patterns ?? { clusters: [], category: "Unknown", lnPercent: 0, modeTag: "Mix", svAmount: 0, duration: parsed.duration, importantClusters: [] };
 
     const shared = computeCustomMetrics(parsed, sunny, pt, 1.5, null);

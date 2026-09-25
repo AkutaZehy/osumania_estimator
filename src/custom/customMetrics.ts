@@ -47,6 +47,7 @@ export function computeCustomMetrics(
   speedRate: number = 1,
   gridAnalysis?: GridAnalysisResult | null,
   sharedPrimitives?: PrimitiveRow[],
+  sharedRawPrimitives?: PrimitiveRow[],
 ): CustomMetrics {
   // Density metrics (used by multiple sub-modules).
   const density = computeDensityMetrics(parsed, 1000, speedRate);
@@ -66,8 +67,9 @@ export function computeCustomMetrics(
   // Stream-specific analysis.
   const stream = computeStreamMetrics(parsed, density, speedRate, primitives);
 
-  // Tech-specific analysis (bursts, graces, rolls/trills).
-  const tech = computeTechMetrics(parsed, patterns, speedRate, gridAnalysis ?? undefined, primitives);
+  // Tech-specific analysis (bursts, graces, rolls/trills). rollTrill wants
+  // the unscaled set; the analyzer passes its rate-1 build straight through.
+  const tech = computeTechMetrics(parsed, patterns, speedRate, gridAnalysis ?? undefined, primitives, sharedRawPrimitives);
 
   // Stamina analysis (stretches above median density).
   const stamina = computeStaminaMetrics(parsed, density, speedRate, primitives);
@@ -78,7 +80,7 @@ export function computeCustomMetrics(
   // Anchor/stamina analysis (SF, SH, DH).
   let anchor;
   try {
-    anchor = computeAnchorMetrics(parsed, gridAnalysis ?? null);
+    anchor = computeAnchorMetrics(parsed, gridAnalysis ?? null, speedRate);
   } catch (err) {
     console.error("[AnchorMetrics] failed", err);
     anchor = {

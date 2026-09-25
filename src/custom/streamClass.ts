@@ -15,7 +15,7 @@
 //         · Broken 15≤p1<30% · Singles p1<15% · Technical p5≥15%
 //   JS/HS/SS (streamAnalysis classifyStreamType on-grid rows):
 //     3+押≥5% → HS · 2+押≥10% → JS · else SS
-// Stamina: max notes in any 10s / 30s sliding window (all note starts).
+// Stamina: max rows in any 10s / 30s sliding window (chords count once).
 // ============================================================
 
 import type { ParsedBeatmap } from "../types/beatmap.js";

@@ -18,7 +18,7 @@ const NO_MODS = { dt: false, ht: false, hr: false, ez: false, da: false, in: fal
 
 function oldPipeline(parsed: ParsedBeatmap, text: string, speedRate: number) {
   const sunny = calculateSunny(text, speedRate, NO_MODS, { withGraph: true });
-  const patterns = analyzePatterns(parsed, 1.0); // old: always unscaled
+  const patterns = analyzePatterns(parsed); // old: always unscaled
   const grid = analyzeGrid(parsed, undefined, speedRate);
   const custom = computeCustomMetrics(parsed, sunny, patterns, speedRate, grid);
   return { star: aggregateDifficulty(sunny, patterns, custom).finalStar, patterns, custom, grid };
@@ -26,9 +26,11 @@ function oldPipeline(parsed: ParsedBeatmap, text: string, speedRate: number) {
 
 function newPipeline(parsed: ParsedBeatmap, text: string, speedRate: number) {
   const sunny = calculateSunny(text, speedRate, NO_MODS, { withGraph: true });
-  const chart = createChart(parsed);
-  const primitives = calculatePrimitives(chart, speedRate);
-  const patterns = speedRate === 1 ? analyzePatterns(parsed, speedRate, primitives) : analyzePatterns(parsed, 1.0);
+  const rawPrimitives = calculatePrimitives(createChart(parsed), 1);
+  const primitives = speedRate === 1
+    ? rawPrimitives
+    : rawPrimitives.map((r) => ({ ...r, msPerBeat: r.msPerBeat / speedRate, beatLength: r.beatLength / speedRate }));
+  const patterns = analyzePatterns(parsed, rawPrimitives);
   const grid = analyzeGrid(parsed, undefined, speedRate);
   const custom = computeCustomMetrics(parsed, sunny, patterns, speedRate, grid, primitives);
   return { star: aggregateDifficulty(sunny, patterns, custom).finalStar, patterns, custom, grid };

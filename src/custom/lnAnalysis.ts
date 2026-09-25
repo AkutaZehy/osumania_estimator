@@ -131,8 +131,10 @@ export function computeLNMetrics(p: ParsedBeatmap, s: SunnyResult, pt: PatternSu
   let beatLength = 500;
   for (const tp of p.timingPoints) { if (tp.uninherited) { beatLength = tp.beatLength; break; } }
   const limit = beatLength * 0.25;
-  const colAllStarts: number[][] = [[], [], [], []];
-  const colNormalStarts: number[][] = [[], [], [], []];
+  // Buckets sized by the chart's key count — a hardcoded 4 threw on any
+  // note in column >= 4 and zeroed the whole custom metrics block upstream.
+  const colAllStarts: number[][] = Array.from({ length: p.columnCount }, () => []);
+  const colNormalStarts: number[][] = Array.from({ length: p.columnCount }, () => []);
   for (let i = 0; i < p.columns.length; i++) {
     const col = p.columns[i]!;
     const t = p.noteStarts[i]!;
@@ -166,7 +168,9 @@ export function computeLNMetrics(p: ParsedBeatmap, s: SunnyResult, pt: PatternSu
   const lnDen = Math.max(1, totalLN);
   const head = lnHeadTexture(lns, beatLength);
   const s_pct = (pt._lnCounts?.shields ?? 0) / lnDen * 100;
-  // Per-LN column lock: count LNs with ≥2 neighbor hits during body period
+  // Per-LN column lock: count LNs with ≥2 neighbor hits during body period.
+  // Hand pairing is a 4K convention; on wider keymodes LNs outside these
+  // pairs are skipped (count reads low rather than crashing).
   const HANDS: [number, number][] = [[0, 1], [2, 3]];
   let perLNclCount = 0;
   for (const ln of lns) {
@@ -214,14 +218,12 @@ export function computeLNMetrics(p: ParsedBeatmap, s: SunnyResult, pt: PatternSu
     reversedShieldCount: antiShields,
     columnLockCount: pt._lnCounts?.columnLocks ?? 0,
     inverseCount: pt._lnCounts?.inverses ?? 0,
-    ouroborosCount: pt._lnCounts?.ouroboros ?? 0,
     asyncReleaseCount: a,
     releaseCount: r,
     tapLNCount: tapCount,
     overlayCount: overlaysCount,
     overlapCount: overlaysCount,
     totalLN: lns.length,
-    lnStreamCount: pt._lnCounts?.lnStreams ?? 0,
     lnChordCount: head.chordLNs,
     wcJackCount: head.wcJacks,
     wcSpeedCount: head.wcSpeeds,

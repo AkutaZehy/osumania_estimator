@@ -7,10 +7,6 @@
 
 import { bisectLeft } from "./mathUtils.js";
 
-// Re-exported so consumers don't need a separate import
-import { bisectRight } from "./mathUtils.js";
-void bisectRight; // suppress unused-import warning — available for consumers
-
 // ------------------------------------------------------------
 // Shared note-tuple type
 // ------------------------------------------------------------

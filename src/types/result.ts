@@ -36,6 +36,9 @@ export interface DifficultyResult {
     /** In-game star rating from tosu (optional, only during gameplay) */
     gameStar?: number;
   };
+  /** Speed rate this analysis ran at — raw-time fields (grid cells) convert
+   *  to played time by dividing by this. */
+  speedRate: number;
   /** Raw osu text for G estimate features (optional, set by analyzeBeatmap) */
   osuText?: string;
   /** Akuta score: 11 values (0 Overall, 1-7 MSD skillsets, 8-10 extensions) */

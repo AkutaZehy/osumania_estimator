@@ -49,8 +49,6 @@ export interface JackMetrics {
   isBias: boolean;
   /** Hand bias direction: L (left-dominant), R (right-dominant), S (switching), "" (balanced) */
   handBias: "L" | "R" | "S" | "";
-  /** Vibro detection flag */
-  isVibro: boolean;
 }
 
 /** Jack class + stamina, run-extraction based (jackClass.ts) */
@@ -106,6 +104,9 @@ export interface RollTrillStats {
   rolls: string;
   /** e.g. "24×8 16×12" */
   trills: string;
+  /** Total count of 24th-division trill runs — structured counterpart of
+   *  the trills string, so consumers don't re-parse display text. */
+  trills24: number;
 }
 
 /** Tech-specific analysis */
@@ -160,7 +161,6 @@ export interface LNMetrics {
   columnLockCount: number;
   /** Inverse patterns detected (alternating LN releases) */
   inverseCount: number;
-  ouroborosCount: number;
   /** A: different head col, same tail time pairs */
   asyncReleaseCount: number;
   /** R: same head col, different tail time pairs */
@@ -172,7 +172,6 @@ export interface LNMetrics {
   /** Overlapping LN pair count */
   overlayCount: number;
   overlapCount: number;
-  lnStreamCount: number;
   lnChordCount: number;
   wcJackCount: number;
   wcSpeedCount: number;

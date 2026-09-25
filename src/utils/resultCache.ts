@@ -16,6 +16,7 @@ function deepClone<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T;
 }
 
+/** LRU cache contract: get() clones, put() takes ownership of the reference. */
 export interface ResultCache<T> {
   get(key: string): T | undefined;
   put(key: string, value: T): void;
@@ -26,6 +27,7 @@ export interface ResultCache<T> {
   readonly generation: number;
 }
 
+/** Create an LRU cache with the clone-on-read contract above. */
 export function createResultCache<T>(
   { maxSize = 100 }: { maxSize?: number } = {},
 ): ResultCache<T> {

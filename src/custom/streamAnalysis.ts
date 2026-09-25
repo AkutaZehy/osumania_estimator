@@ -6,6 +6,7 @@
 import type { ParsedBeatmap } from "../types/beatmap.js";
 import { createChart } from "../parser/chartBuilder.js";
 import { calculatePrimitives } from "../patterns/primitives.js";
+import { gradeStream } from "./gridAnalysis.js";
 import type { PrimitiveRow } from "../types/primitives.js";
 
 // ---------------------------------------------------------------------------
@@ -57,14 +58,7 @@ return "Stream";
 
 /**
  * Compute the maximum total notes in any 4-row sliding window
- * and grade the density.
- *
- * Grading scale (average notes per row):
- *   1.0       → "Single"
- *   1.0–1.25 → "Light"
- *   1.25–1.5 → "Mid"
- *   1.5–2.0  → "Dense"
- *   2.0+     → "Heavy"
+ * and grade the density. Bands come from grid/keyType (single source).
  */
 function gradeStreamDensity(primitives: PrimitiveRow[]): string | null {
   if (primitives.length === 0) return null;
@@ -85,19 +79,12 @@ function gradeStreamDensity(primitives: PrimitiveRow[]): string | null {
   const maxWindowNotes = windowCounts[idx]!;
 
   if (maxWindowNotes === 0) return "Empty";
-  const avgPerRow = maxWindowNotes / 4;
 
   // Get P50 for dual display
   const medIdx = Math.max(0, Math.floor(windowCounts.length / 2));
   const medWindowNotes = windowCounts[medIdx]!;
-  const m = maxWindowNotes.toFixed(1);
-  const d = medWindowNotes.toFixed(1);
 
-  if (avgPerRow <= 1.0) return `Single (${m}/${d})`;
-  if (avgPerRow <= 1.25) return `Light (${m}/${d})`;
-  if (avgPerRow <= 1.5) return `Mid (${m}/${d})`;
-  if (avgPerRow <= 2.0) return `Dense (${m}/${d})`;
-  return `Heavy (${m}/${d})`;
+  return gradeStream(maxWindowNotes, medWindowNotes);
 }
 
 // ---------------------------------------------------------------------------

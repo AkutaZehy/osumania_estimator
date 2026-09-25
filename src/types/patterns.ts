@@ -56,6 +56,8 @@ export interface PatternSummary {
   duration: number;
   /** Clusters filtered by importance >= 50% of top cluster */
   importantClusters: PatternCluster[];
-  /** Raw LN pattern counts (set by summary, used by lnAnalysis) */
-  _lnCounts?: { shields: number; antiShields: number; columnLocks: number; inverses: number; releases: number; lnChords?: number; wcJacks?: number; wcSpeeds?: number; lnStreams?: number; ouroboros?: number };
+  /** Raw LN pattern counts (set by summary, used by lnAnalysis). Only the
+   *  four fields summary actually produces — LN-head textures (lnChords,
+   *  wcJacks, wcSpeeds, ouroboros, …) are computed in lnAnalysis itself. */
+  _lnCounts?: { shields: number; columnLocks: number; inverses: number; releases: number };
 }

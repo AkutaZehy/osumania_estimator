@@ -161,12 +161,15 @@ function computeTier(
 export function computeAnchorMetrics(
   beatmap: ParsedBeatmap,
   gridAnalysis: GridAnalysisResult | null,
+  speedRate = 1,
 ): AnchorMetrics {
   let baseBPM = 120;
   let isJackType = false;
   if (gridAnalysis && gridAnalysis.bpmKeyTypes.length > 0) {
     const top = gridAnalysis.bpmKeyTypes.reduce((a, b) => a.cellCount > b.cellCount ? a : b);
-    baseBPM = top.bpm;
+    // gridAnalysis pre-scales bpmKeyTypes[].bpm by speedRate for display;
+    // note times below are raw, so bucket against the nominal BPM.
+    baseBPM = top.bpm / speedRate;
     const kt = top.keyType.toLowerCase();
     isJackType = kt.includes("chordjack") || kt.includes("minijack")
       || kt.includes("longjack") || kt.includes("cj") || kt.includes("mj");
@@ -180,7 +183,7 @@ export function computeAnchorMetrics(
   const allNotes = getNotesInRange(beatmap);
 
   // SF: per-column
-  const sfColPositions: number[][] = [[], [], [], []];
+  const sfColPositions: number[][] = Array.from({ length: beatmap.columnCount }, () => []);
   for (const n of allNotes) sfColPositions[n.col]!.push(Math.round(n.time / sf16));
   for (const c of sfColPositions) c.sort((a, b) => a - b);
   const sf = computeTier(sfColPositions, 4);

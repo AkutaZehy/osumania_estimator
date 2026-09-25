@@ -19,32 +19,18 @@ import { calculateSunny } from "../algorithm/sunnyRework.js";
 import { createChart } from "../parser/chartBuilder.js";
 import { calculatePrimitives } from "../patterns/primitives.js";
 import { analyzePatterns } from "../patterns/summary.js";
-import { computeDensityMetrics } from "../custom/density.js";
-import { computeCustomMetrics } from "../custom/customMetrics.js";
+import { computeDensityMetrics, computeCustomMetrics, analyzeSections, analyzeGrid } from "../custom/index.js";
 import { aggregateDifficulty } from "./difficultyAggregator.js";
-import { analyzeSections } from "../custom/sectionAnalysis.js";
-import { analyzeGrid } from "../custom/gridAnalysis.js";
 
 // ---- Cancellation support ----
 // A shared AbortSignal allows the UI to cancel a running analysis mid-flight.
-// Each major step checks the signal and throws AnalysisCancelledError if aborted.
+// Steps check the signal via signal.throwIfAborted(), which raises a
+// DOMException named "AbortError"; the catch blocks below re-throw it so
+// cancellation is never mistaken for a stage failure.
 
 // ---- Hard guards ----
 const MAX_NOTES = 30000;   // reject above: index.ts mirrors this pre-fetch
 const MAX_LNS = 15000;     // reject above (LN-heavy maps)
-// ---- Heavy degradation ----
-// Above HEAVY_NOTES the pattern-analysis stage is skipped: its sliding-window
-// clustering is the most expensive secondary subsystem, and custom metrics +
-// the grid tolerate an empty summary (tech rolls/trills just report none).
-// Core stages (Sunny, grid, custom) always run at full precision.
-const HEAVY_NOTES = 15000;
-
-export class AnalysisCancelledError extends Error {
-  constructor() {
-    super("Analysis cancelled");
-    this.name = "AnalysisCancelledError";
-  }
-}
 
 // ---- Defaults for optional / placeholder subsystems ----
 
@@ -99,7 +85,6 @@ function defaultCustomMetrics(
       imbalanceTotal: 0,
       isBias: false,
       handBias: "",
-      isVibro: false,
     },
     stream: {
       streamType: null,
@@ -113,7 +98,7 @@ function defaultCustomMetrics(
     },
     tech: {
       graceCount: 0,
-      rollTrill: { rolls: "", trills: "" },
+      rollTrill: { rolls: "", trills: "", trills24: 0 },
       dtCV: 0,
       burst: {
         singleFingerInterval: 0,
@@ -141,7 +126,6 @@ function defaultCustomMetrics(
       reversedShieldCount: 0,
       columnLockCount: 0,
       inverseCount: 0,
-      ouroborosCount: 0,
       asyncReleaseCount: 0,
       releaseCount: 0,
       tapLNCount: 0,
@@ -149,7 +133,6 @@ function defaultCustomMetrics(
       overlapCount: 0,
       totalLN: 0,
       strictLNRatio: 0,
-      lnStreamCount: 0,
       lnChordCount: 0,
       wcJackCount: 0,
       wcSpeedCount: 0,
@@ -199,6 +182,7 @@ function buildErrorResult(
 ): DifficultyResult {
   return {
     finalStar: -1,
+    speedRate: 1,
     sunny: {
       star: -1,
       numericDifficulty: -1,
@@ -359,24 +343,30 @@ export function analyzeBeatmap(
   signal?.throwIfAborted();
 
   // ---- Step 3: Pattern Analysis ----
-  // Chart + primitives are built once here and shared by both the pattern
-  // stage and the custom stage — they previously each built their own copy
-  // (createChart+calculatePrimitives is ~40-55% of the patterns stage on
-  // dense maps). Note: patterns historically ran on unscaled primitives
-  // (speedRate 1); keep that exact behavior under mod speeds by falling
-  // back to the local build when speedRate != 1.
-  const primitives = timed("chart", () => {
-    const c = createChart(beatmap);
-    return calculatePrimitives(c, opts.speedRate);
-  });
+  // Primitives are built once on the UNSCALED time base: the pattern
+  // detectors compare raw row times against msPerBeat/beatLength windows,
+  // so a scaled time base shifts detections under DT/HT and makes
+  // pattern-derived fields (mode tag, equivalentBPM halving) drift with
+  // mods. Classification is speed-invariant by design; only BPM-style
+  // display fields scale. The custom stage needs played-time windows —
+  // derive that copy by field division instead of a second
+  // createChart+calculatePrimitives pass (~55% of this stage on dense maps).
+  const rawPrimitives = timed("chart", () => calculatePrimitives(createChart(beatmap), 1));
+  const scaledPrimitives = opts.speedRate === 1
+    ? rawPrimitives
+    : rawPrimitives.map((r) => ({
+        ...r,
+        msPerBeat: r.msPerBeat / opts.speedRate,
+        beatLength: r.beatLength / opts.speedRate,
+      }));
 
-  // Heavy-map degradation: skip pattern clustering above HEAVY_NOTES (see
-  // module header). Custom metrics and the grid tolerate the empty summary.
+  // Heavy-map degradation removed: pattern detection is now O(n) (bounded
+  // detector windows) + O(P·log n) clustering, so the summary is computed at
+  // full precision for every accepted map. defaultPatternSummary remains as
+  // the error fallback below.
   let patterns: PatternSummary;
   try {
-    patterns = nNotes > HEAVY_NOTES
-      ? defaultPatternSummary(beatmap.duration, beatmap.lnRatio)
-      : timed("patterns", () => analyzePatterns(beatmap, opts.speedRate, opts.speedRate === 1 ? primitives : undefined));
+    patterns = timed("patterns", () => analyzePatterns(beatmap, rawPrimitives));
   } catch {
     patterns = defaultPatternSummary(beatmap.duration, beatmap.lnRatio);
   }
@@ -388,7 +378,7 @@ export function analyzeBeatmap(
   try {
     gridAnalysis = timed("grid", () => analyzeGrid(beatmap, signal, opts.speedRate));
   } catch (err) {
-    if (err instanceof AnalysisCancelledError) throw err;
+    if ((err as { name?: string })?.name === "AbortError") throw err;
     console.error("[GridAnalysis] failed", err);
     gridAnalysis = null;
   }
@@ -397,7 +387,7 @@ export function analyzeBeatmap(
   // ---- Step 5: Custom Metrics ----
   let custom: CustomMetrics;
   try {
-    custom = timed("custom", () => computeCustomMetrics(beatmap, sunny, patterns, opts.speedRate, gridAnalysis, primitives));
+    custom = timed("custom", () => computeCustomMetrics(beatmap, sunny, patterns, opts.speedRate, gridAnalysis, scaledPrimitives, rawPrimitives));
   } catch (err) {
     console.error("[CustomMetrics] failed", err);
     custom = defaultCustomMetrics(
@@ -415,7 +405,7 @@ export function analyzeBeatmap(
   try {
     sectionAnalysis = timed("sections", () => analyzeSections(beatmap, signal));
   } catch (err) {
-    if (err instanceof AnalysisCancelledError) throw err;
+    if ((err as { name?: string })?.name === "AbortError") throw err;
     console.error("[SectionAnalysis] failed", err);
     sectionAnalysis = null;
   }
@@ -448,6 +438,7 @@ export function analyzeBeatmap(
       lnRatio: beatmap.lnRatio,
       bpm: metaBpm,
     },
+    speedRate: opts.speedRate,
     osuText,
   };
 

@@ -27,6 +27,10 @@ function bisectRight(arr: number[], target: number): number {
 // OsuFileParser — parses .osu beatmap files
 // ============================================================
 
+/**
+ * Parse a .osu beatmap: construct with the file text, `process()` to scan,
+ * then `getParsedData()` for the ParsedBeatmap the rest of the pipeline uses.
+ */
 export class OsuFileParser {
     private osuText: string;
     private od: number = -1;

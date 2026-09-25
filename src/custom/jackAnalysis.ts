@@ -7,6 +7,7 @@ import type { JackMetrics, DensityMetrics } from "../types/custom.js";
 import type { ParsedBeatmap } from "../types/beatmap.js";
 import { createChart } from "../parser/chartBuilder.js";
 import { calculatePrimitives } from "../patterns/primitives.js";
+import { gradeJack } from "./gridAnalysis.js";
 import type { PrimitiveRow } from "../types/primitives.js";
 
 // ---------------------------------------------------------------------------
@@ -33,26 +34,16 @@ function jackColumnsBetween(
 }
 
 // ---------------------------------------------------------------------------
-// Density grading (unchanged)
+// Density grading
 // ---------------------------------------------------------------------------
 
 /**
  * Grade the jack density based on the maximum total notes found in any
- * 4-row sliding window. Higher totals mean denser jack patterns.
- *
- * Grading scale:
- *   4      → "Mini"     (1 note/row average — minijacks)
- *   5-7    → "Low"      (light jack density)
- *   8-11   → "Mid"      (moderate jacks)
- *   12-16  → "Dense"    (heavy chordjacks)
+ * 4-row sliding window. Bands come from grid/keyType (single source).
  */
 function gradeJackDensity(maxWindowNotes: number, medWindowNotes: number): string | null {
-  const m = maxWindowNotes.toFixed(1);
-  const d = medWindowNotes.toFixed(1);
-  if (maxWindowNotes <= 4) return `Mini (${m}/${d})`;
-  if (maxWindowNotes <= 7) return `Low (${m}/${d})`;
-  if (maxWindowNotes <= 11) return `Mid (${m}/${d})`;
-  return `Dense (${m}/${d})`;
+  if (maxWindowNotes <= 0) return null;
+  return gradeJack(maxWindowNotes, medWindowNotes);
 }
 
 /** Slide a 4-row window and return the 90th-percentile note count. */
@@ -340,7 +331,6 @@ export function computeJackMetrics(beatmap: ParsedBeatmap, density: DensityMetri
       imbalanceTotal: 0,
       isBias: false,
       handBias: "",
-      isVibro: false,
     };
   }
 
@@ -361,7 +351,6 @@ export function computeJackMetrics(beatmap: ParsedBeatmap, density: DensityMetri
     imbalanceTotal: jackImbalanceTotal(primitives),
     isBias: isBias(primitives),
     handBias: jackHandBias(primitives),
-    isVibro: false,
   };
 }
 

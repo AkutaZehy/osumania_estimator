@@ -8,9 +8,10 @@ import type { DensityMetrics, AnchorTier, LNMetrics } from "../types/custom.js";
 import type { PatternCluster } from "../types/patterns.js";
 import type { SectionAnalysis, SegmentCategory } from "../custom/sectionAnalysis.js";
 import type { GridAnalysisResult, CellResult } from "../custom/gridAnalysis.js";
-import { estimateDifficulty, formatAkuta, formatDanValue, extractFeaturesG, scoreTypeG, classifyTypeG, estimateDanG, formatGEstimate } from "../estimate.js";
+import { jackGradeBand, streamGradeBand } from "../custom/gridAnalysis.js";
+import { estimateDifficulty, formatAkuta, formatDanValue, extractFeaturesG, scoreTypeG, classifyTypeG, estimateDanG, formatGEstimate } from "../estimate/index.js";
 
-const DEBUG = true;
+const DEBUG = false;
 function debugLog(...args: unknown[]): void {
   if (DEBUG) console.log("[display]", ...args);
 }
@@ -122,12 +123,7 @@ function aggregateGridGrade(ga: GridAnalysisResult | null, category: "jack" | "s
     const p90Val = Math.round(wp(0.9));
     const p50Val = Math.round(wp(0.5));
 
-    let name: string;
-    if (p90Val <= 4) name = "Mini";
-    else if (p90Val <= 7) name = "Low";
-    else if (p90Val <= 11) name = "Mid";
-    else name = "Dense";
-    return `${name} (${p90Val}/${p50Val})`;
+    return `${jackGradeBand(p90Val)} (${p90Val}/${p50Val})`;
   }
 
   // Stream: use mean density (total notes / total rows), exclude sparse cells
@@ -143,14 +139,7 @@ function aggregateGridGrade(ga: GridAnalysisResult | null, category: "jack" | "s
   if (streamWeight === 0) return null;
 
   const meanDensity = streamSum / (streamWeight * 4);
-  let name: string;
-  if (meanDensity <= 1.125) name = "Single";
-  else if (meanDensity <= 1.25) name = "Light";
-  else if (meanDensity <= 1.5) name = "Mid";
-  else if (meanDensity < 2.0) name = "Dense";
-  else if (meanDensity === 2.0) name = "Full";
-  else name = "Heavy";
-  return `${name} (${meanDensity.toFixed(2)})`;
+  return `${streamGradeBand(meanDensity)} (${meanDensity.toFixed(2)})`;
 }
 
 function mrow(label: string, value: string): string {
@@ -226,6 +215,8 @@ export function showResult(result: DifficultyResult): void {
   const ga = result.gridAnalysis;
   // Keep interlude clusters for fallback display in stream type detection
   const topClusters = patterns.importantClusters ?? patterns.clusters;
+  // G estimate features (tech title replacement + dan line) — parsed once
+  const gFeatures = extractFeaturesG(osuText ?? "");
 
   // ---- Main display: key type + BPM (from grid analysis) ----
   // When VIBRO, star-rating shows "Vibro"; otherwise normal keyType + BPM
@@ -241,7 +232,6 @@ export function showResult(result: DifficultyResult): void {
       let displayType = poolType ?? mt.keyType;
 
       // G estimate tech title replacement: only when tech is top1
-      const gFeatures = extractFeaturesG(osuText ?? "");
       if (gFeatures) {
         const gScores = scoreTypeG(gFeatures);
         const gType = classifyTypeG(gScores);
@@ -280,7 +270,6 @@ export function showResult(result: DifficultyResult): void {
   setText("star-value", sunnyText);
 
   // G estimate difficulty display
-  const gFeatures = extractFeaturesG(osuText ?? "");
   const akuta = estimateDifficulty(result);
   if (gFeatures) {
     const gScores = scoreTypeG(gFeatures);

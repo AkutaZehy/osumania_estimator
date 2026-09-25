@@ -25,6 +25,9 @@ let lastModSig = "";
 let analysisId = 0;
 let totalDurationMs = 0;
 let gridStartTimeMs = 0;
+// Speed rate of the displayed analysis: grid cell times are raw chart time,
+// liveTime from tosu is played time — the playhead multiplies by this.
+let displaySpeedRate = 1;
 let abortController: AbortController | null = null;
 
 // ---- Result cache ----
@@ -49,7 +52,9 @@ function applyResult(result: DifficultyResult): void {
   // Determine total duration from section analysis or grid cells
   const sa = result.sectionAnalysis;
   const ga2 = result.gridAnalysis;
-  // Prefer grid duration (section bar uses cell range); fall back to section analysis
+  displaySpeedRate = result.speedRate ?? 1;
+  // Prefer grid duration (section bar uses cell range); fall back to section analysis.
+  // Cell times are raw chart time — onStateChange converts live (played) time.
   gridStartTimeMs = ga2 && ga2.cells.length > 0 ? ga2.cells[0]!.startTime : 0;
   totalDurationMs = (ga2 && ga2.cells.length > 0
     ? ga2.cells[ga2.cells.length - 1]!.endTime - ga2.cells[0]!.startTime
@@ -172,8 +177,10 @@ function onStateChange(msg: TosuStateMessage): void {
   // Use beatmap.time.live — available during gameplay AND preview (matches PP by Belikhun / ManiaMapAnalyser)
   const liveTime = msg.beatmap?.time?.live;
   if (liveTime != null && Number.isFinite(liveTime)) {
-    // Offset by grid start time so the playhead aligns with cell start
-    const effectiveTime = liveTime - gridStartTimeMs;
+    // liveTime is played time; the grid span is raw chart time — convert by
+    // multiplying with the analysis speed rate so DT/HT keep the playhead
+    // aligned (played_end = raw_end / rate).
+    const effectiveTime = liveTime * displaySpeedRate - gridStartTimeMs;
     const progress = Math.max(0, Math.min(1, effectiveTime / totalDurationMs));
     updateInGameBar(progress);
   }

@@ -8,6 +8,7 @@ import { CorePattern, type FoundPattern, type PatternCluster } from "../types/pa
 import type { PrimitiveRow } from "../types/primitives.js";
 import { PATTERNS_CONFIG } from "./config.js";
 import { resolveRatingMultiplier } from "./patternsDef.js";
+import { lowerBound } from "../utils/beatmapUtils.js";
 
 // ============================================================
 // Valid note divisions
@@ -94,6 +95,12 @@ function classifyPatterns(
   let totalPatterns = 0;
   const divCounts: Record<string, number> = {};
 
+  // Primitives are time-sorted; binary search each pattern window instead of
+  // filtering the whole row array per pattern (O(P·n) → O(P·log n)).
+  const times = primitives.map((r) => r.time);
+  const rowsIn = (start: number, end: number): PrimitiveRow[] =>
+    primitives.slice(lowerBound(times, start), lowerBound(times, end));
+
   for (const p of patterns) {
     totalPatterns++;
     // LN patterns (Coordination/Density/Wildcard) don't participate in speed clustering
@@ -112,7 +119,7 @@ function classifyPatterns(
     }
 
     // Find primitive rows within the pattern's time range
-    const rows = primitives.filter((r) => r.time >= p.start && r.time < p.end);
+    const rows = rowsIn(p.start, p.end);
     if (rows.length === 0) continue;
 
     // Build histogram of msPerBeat → count

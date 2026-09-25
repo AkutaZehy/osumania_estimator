@@ -60,26 +60,6 @@ export function cumulativeSum(
 }
 
 /**
- * Query the cumulative integral at an arbitrary time point q.
- *
- * Uses binary search to find the segment containing q,
- * then computes F[i] + f[i] * (q - x[i]).
- *
- * Matches the JS reference queryCumsum exactly.
- */
-export function queryCumsum(
-  q: number,
-  x: Float64Array,
-  F: Float64Array,
-  f: Float64Array,
-): number {
-  if (q <= x[0]!) return 0;
-  if (q >= x[x.length - 1]!) return F[F.length - 1]!;
-  const i = bisectRight(x, q) - 1;
-  return F[i]! + f[i]! * (q - x[i]!);
-}
-
-/**
  * Apply a symmetric sliding window smooth to a piecewise-constant function.
  *
  * Uses the cumulative integral technique: for each corner position s,
@@ -233,22 +213,6 @@ export function stepInterp(
 export function rescaleHigh(sr: number): number {
   if (sr <= 9) return sr;
   return 9 + (sr - 9) * (1 / 1.2);
-}
-
-/**
- * Find the next note in a given column after the specified time.
- */
-export function findNextNoteInColumn(
-  noteSeq: Array<[number, number, number]>,
-  col: number,
-  afterTime: number,
-): [number, number] | null {
-  for (const [c, t, e] of noteSeq) {
-    if (c === col && t >= afterTime) {
-      return [t, e];
-    }
-  }
-  return null;
 }
 
 /**

@@ -21,7 +21,7 @@ export const AGGREGATION_WEIGHTS = {
 /**
  * Normalize density metrics to a star-rating scale (~0-10+).
  *
- * Formula: (maxDensity + medianDensity * 0.5) / 4
+ * Formula: (maxDensity * 0.6 + medianDensity * 0.4) / 5
  *
  * Typical density values (notes per 1000ms window):
  *   Easy:    max 5-8    → ~1.5-2.5★
@@ -32,7 +32,6 @@ export const AGGREGATION_WEIGHTS = {
  */
 function densityToStar(custom: CustomMetrics): number {
   const { maxDensity, medianDensity } = custom.density.bothHands;
-  // Conservative formula: (max*0.6 + med*0.4) / 5
   return (maxDensity * 0.6 + medianDensity * 0.4) / 5;
 }
 

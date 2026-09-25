@@ -265,7 +265,7 @@ function divisionLabel(row: PrimitiveRow): string {
 function computeRollTrillStats(
   primitives: PrimitiveRow[],
   _patterns: PatternSummary): RollTrillStats {
-  if (primitives.length < 2) return { rolls: "", trills: '' };
+  if (primitives.length < 2) return { rolls: "", trills: '', trills24: 0 };
 
   // ---- Roll detection ----
   // max consecutive same-direction runs, keyed by division label.
@@ -396,7 +396,9 @@ function computeRollTrillStats(
     trillsStr = trillParts.join(" ");
   }
 
-  return { rolls: rollsStr, trills: trillsStr };
+  const trills24 = trillCount.get("24") ?? 0;
+
+  return { rolls: rollsStr, trills: trillsStr, trills24 };
 }
 
 // ---------------------------------------------------------------------------
@@ -420,11 +422,12 @@ export function computeTechMetrics(
   speedRate = 1,
   grid?: GridAnalysisResult,
   sharedPrimitives?: PrimitiveRow[],
+  sharedRawPrimitives?: PrimitiveRow[],
 ) {
   if (beatmap.noteStarts.length === 0) {
     return {
       graceCount: 0,
-      rollTrill: { rolls: "", trills: "" },
+      rollTrill: { rolls: "", trills: "", trills24: 0 },
       dtCV: 0,
       burst: {
 singleFingerInterval: 0,
@@ -445,23 +448,28 @@ const sfInt = singleFingerInterval(beatmap);
 const ohInt = oneHandInterval(beatmap);
 const bhInt = bothHandsInterval(beatmap);
   const graceCount = detectGraces(primitives, grid);
-  // Roll/trill stats historically ran on unscaled primitives (speedRate=1);
-  // keep that behavior when the shared set was scaled by a mod speed.
-  const rollTrill = speedRate === 1
-    ? computeRollTrillStats(primitives, patterns)
-    : computeRollTrillStats(calculatePrimitives(createChart(beatmap)), patterns);
+  // Roll/trill detection is time-base sensitive — it must run on the
+  // UNSCALED (rate-1) primitives. The analyzer passes its rate-1 build as
+  // sharedRawPrimitives; at rate 1 the shared set is already raw; standalone
+  // callers under a mod speed fall back to a local raw rebuild.
+  const rollTrillInput = sharedRawPrimitives
+    ?? (speedRate === 1 ? primitives : calculatePrimitives(createChart(beatmap)));
+  const rollTrill = computeRollTrillStats(rollTrillInput, patterns);
 
+  // Burst KPS/intervals follow the pipeline's played-time convention
+  // (same as density/jack/stamina): under DT a 500ms raw window holds
+  // speedRate× the notes of a played half-second.
   return {
     graceCount,
     rollTrill,
     dtCV: rowSpacingCV(primitives),
     burst: {
-singleFingerInterval: sfInt,
-  oneHandInterval: ohInt,
-  bothHandsInterval: bhInt,
-  singleFingerKPS: singleFingerKPS(beatmap),
-  oneHandKPS: oneHandKPS(beatmap),
-  bothHandsKPS: bothHandsKPS(beatmap),
+singleFingerInterval: sfInt / speedRate,
+  oneHandInterval: ohInt / speedRate,
+  bothHandsInterval: bhInt / speedRate,
+  singleFingerKPS: singleFingerKPS(beatmap) * speedRate,
+  oneHandKPS: oneHandKPS(beatmap) * speedRate,
+  bothHandsKPS: bothHandsKPS(beatmap) * speedRate,
     },
   };
 }

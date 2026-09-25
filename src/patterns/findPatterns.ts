@@ -178,10 +178,16 @@ function matches(
   lastNote: number,
   primitives: PrimitiveRow[],
 ): FoundPattern[] {
-  let remaining = [...primitives];
   const results: FoundPattern[] = [];
 
-  while (remaining.length > 0) {
+  // Every core/specific detector reads at most the first 8 rows of the tail
+  // (max: CoreChordstream's 8-row sparse-hand scan; appendFoundPattern reads
+  // row [n2] with n2 ≤ 8), so a 9-row window is observationally identical to
+  // slicing the whole tail off per position — without the O(n²) copies.
+  const WINDOW = 9;
+  for (let start = 0; start < primitives.length; start++) {
+    const remaining = primitives.slice(start, Math.min(start + WINDOW, primitives.length));
+    if (remaining.length === 0) break;
     appendCoreMatches(
       results,
       CorePattern.Stream,
@@ -230,8 +236,6 @@ function matches(
       remaining,
       lastNote,
     );
-
-    remaining = remaining.slice(1);
   }
 
   return results;
