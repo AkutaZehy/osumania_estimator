@@ -5,6 +5,8 @@ dist/
 # TypeScript tmpfile ignores
 *.tsbuildinfo
 *.log
+*.cpuprofile
+*.zip
 .DS_Store
 Thumbs.db
 
@@ -22,3 +24,4 @@ References/
 calib/
 maps/LN/
 maps/RFT/
+maps/Refer/

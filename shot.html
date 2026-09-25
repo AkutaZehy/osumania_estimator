@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>osumania-estimator — screenshot rig</title>
+  <link rel="stylesheet" href="styles/main.css">
+  <style>
+    /* screenshot rig: opaque dark backdrop instead of tosu's transparent window */
+    html, body { background: #14141a !important; }
+  </style>
+</head>
+<body>
+  <div id="card">
+    <!-- Status bar -->
+    <div id="status">Waiting for beatmap...</div>
+    <!-- Star rating -->
+    <div id="star-rating">--</div>
+    <div id="star-value">--</div>
+    <div id="akuta-value">--</div>
+    <!-- Map info -->
+    <div id="map-info">
+      <div class="mi-cell"><span class="mi-label">BPM</span><span id="bpm">--</span></div>
+      <div class="mi-cell"><span class="mi-label">Keys</span><span id="keys">4K</span></div>
+      <div class="mi-cell"><span class="mi-label">LN</span><span id="ln-ratio">--</span></div>
+    </div>
+    <!-- Pattern breakdown -->
+    <div id="akuta-bars" style="display:none"></div>
+
+    <div id="patterns"></div>
+    <!-- Structure grid (hidden — kept for JS compatibility) -->
+    <div id="structure-grid" style="display:none"></div>
+    <!-- Segment table (hidden — kept for JS compatibility) -->
+    <div id="segment-table" style="display:none"><div id="segment-body"></div></div>
+    <!-- Custom metrics -->
+    <div id="custom-metrics"></div>
+  </div>
+  <!-- Section bar (timeline) — outside #card so it shows during gameplay -->
+  <div id="section-bar" style="display:none">
+    <div id="time-axis"></div>
+    <div id="measure-bar-wrapper">
+      <div id="measure-bar"></div>
+    </div>
+    <div id="playhead"></div>
+  </div>
+  <!-- In-game bar (hidden by default, shown during gameplay) -->
+  <div id="ingame-bar" style="display:none">
+    <div class="ingame-track">
+      <div class="ingame-progress" id="ig-progress"></div>
+      <div class="ingame-label" id="ig-label"></div>
+      <div class="ingame-subtype" id="ig-subtype"></div>
+    </div>
+    <div class="ingame-info">
+      <span id="ig-measures"></span>
+      <span id="ig-time"></span>
+      <span id="ig-density"></span>
+    </div>
+  </div>
+  <script type="module" src="dist/shot.js"></script>
+</body>
+</html>
