@@ -1,7 +1,8 @@
 // ============================================================
 // benchmarkEntropyProbe.ts — colEntropy / switch / dtCV over the
 // Leo_Black benchmark corpus (external, READ-ONLY):
-//   D:/Users/Documents/GitHub/osumania_map_analyser/docs/data/files
+//   ../osumania_map_analyser/docs/data/files
+// (sibling checkout of the analyser repo, relative to this repo's root)
 // grouped by pattern + subPattern from file.csv.
 // All output stays inside this workspace (calib/.tmp/).
 // ============================================================
@@ -15,7 +16,7 @@ import { computeDensityMetrics } from "../src/custom/density.js";
 import { computeStaminaMetrics } from "../src/custom/staminaAnalysis.js";
 import { computeTechMetrics } from "../src/custom/techAnalysis.js";
 
-const ROOT = "D:/Users/Documents/GitHub/osumania_map_analyser/docs/data/files";
+const ROOT = "../osumania_map_analyser/docs/data/files";
 
 // ── index: name -> [pattern, subPattern] ──
 const index = new Map<string, [string, string]>();
