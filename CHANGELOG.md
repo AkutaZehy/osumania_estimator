@@ -1,5 +1,18 @@
 # Changelog
 
+## 4.4.0 (2026-10-05)
+
+### Added
+
+- **WDS0-like markers** — WDS-style `Density-Manip-Word` markers in the metric panels: `X-Jack` under the JACK `Imbal` row, `X-Stream` + `X-Speed` (two lines) under the STREAM `Imbal` row. Density sources: section-density P90 × anchor value (Jack), 3C bullet P50 (Stream), section-density P90 (Speed). Manip sources: anchor-delta grade with a forced Reg on ≥20% hand-chord maps (Jack), locked-section coverage (Stream), column alternation lock with a `trill?` flag for sparse-but-locked charts (Speed)
+- **Marker vocabulary** — density `Low / Mid / High / Full`, manip grades `Manip` (mashable) / `Reg` (regular) / `Tech` (locked, precision-demanding); e.g. `Mid-Reg-Jack`, `Full-Tech-Stream`, `Low-Manip-Speed trill?`
+- Full 8-group WDS word tables over all dan ladders (reform/regular × jack/stamina/speed/stream/tech) via `test/wdsFullTables.report.md`
+
+### Changed
+
+- STREAM panel `Brk2r` row removed (broken-stream max/median stay internal)
+- New module `wdsMarker.ts`; marker computation costs ~40–130 ms per chart
+
 ## 4.3.0 (2026-08-30)
 
 ### Added

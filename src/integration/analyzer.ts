@@ -168,6 +168,7 @@ function defaultCustomMetrics(
     jackClass: {
       className: "Actually Not Jack",
       eff: 0,
+      kps: 0,
       isJack: false,
       burstSec: 0,
       burstNotes: 0,
@@ -181,6 +182,7 @@ function defaultCustomMetrics(
       w10: 0,
       w30: 0,
     },
+    wdsMarker: { jack: "—", stream: "—", speed: "—" },
   };
 }
 

@@ -21,6 +21,7 @@ import { computeLNMetrics } from "./lnAnalysis.js";
 import { computeAnchorMetrics } from "./anchorAnalysis.js";
 import { computeJackClass } from "./jackClass.js";
 import { computeStreamClass } from "./streamClass.js";
+import { computeWdsMarker } from "./wdsMarker.js";
 
 /**
  * Compute the full custom metrics pipeline for a 4K beatmap.
@@ -97,6 +98,9 @@ export function computeCustomMetrics(
   // 切 class label + stream stamina peaks.
   const streamClass = computeStreamClass(parsed, speedRate);
 
+  // WDS0-like 三轴标记（密度-糊度-词）。
+  const wdsMarker = computeWdsMarker(parsed);
+
   return {
     density,
     equivalentBPM,
@@ -108,5 +112,6 @@ export function computeCustomMetrics(
     anchor,
     jackClass,
     streamClass,
+    wdsMarker,
   };
 }

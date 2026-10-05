@@ -151,7 +151,7 @@ function jackStreaks(rows: Row[], C: number, tol = TOL): Streak[] {
  */
 export function computeJackClass(parsed: ParsedBeatmap, speedRate = 1): JackClassInfo {
   const notJack: JackClassInfo = {
-    className: "Actually Not Jack", eff: 0, isJack: false,
+    className: "Actually Not Jack", eff: 0, kps: 0, isJack: false,
     burstSec: 0, burstNotes: 0, burstBroken: false, sumSec: 0, sumNotes: 0,
   };
   if (parsed.noteStarts.length < JACK_MIN_NOTES) return notJack;
@@ -251,6 +251,7 @@ export function computeJackClass(parsed: ParsedBeatmap, speedRate = 1): JackClas
   return {
     className: `${clusters[0]!.eff} ${type}`,
     eff: clusters[0]!.eff,
+    kps,
     isJack: true,
     burstSec, burstNotes, burstBroken, sumSec, sumNotes,
   };

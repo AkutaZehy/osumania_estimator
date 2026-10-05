@@ -1,4 +1,4 @@
-# osumania-estimator v4.3.0
+# osumania-estimator v4.4.0
 
 A tosu overlay plugin for osu!mania 4K key pattern analysis and difficulty estimation.
 
@@ -23,7 +23,7 @@ Configured via tosu settings panel. `settings.json` provides two toggles:
 
 Rendered with the actual beatmap `Camellia - Fastest Crash (inteliser) [cracked]`:
 
-![Detailed view card — headline 210 Minijack, Sunny 5.33, pattern bars and metric panels](docs/screenshot-card.png)
+![Detailed view card — headline 210 Minijack, Sunny 5.33, pattern bars, metric panels and wds0-like markers](docs/screenshot-card.png)
 
 ### Element Descriptions
 
@@ -65,7 +65,7 @@ Shield, reversed shield, column lock, attack/release, inverse, ouroboros and LN-
 
 #### JACK Panel
 
-Rows in order: Grade, Class, Stamina, Finger, Hand, Imbal, Vibro.
+Rows in order: Grade, Class, Stamina, Imbal, wds0-like, Finger, Hand, Vibro.
 
 | Field   | Meaning                                                                         |
 | ------- | ------------------------------------------------------------------------------- |
@@ -75,11 +75,12 @@ Rows in order: Grade, Class, Stamina, Finger, Hand, Imbal, Vibro.
 | Finger  | Max per-column density / max both-hands (1.0 balanced, >1.5 biased)            |
 | Hand    | Max(left,right) peak density / max both-hands (1.0 balanced, >1.5 biased)      |
 | Imbal   | 16-row / 64-row / overall hand imbalance. Direction label: L/R/S                |
+| wds0-like | WDS-style marker `Density-Manip-Jack` (e.g. `Mid-Reg-Jack`). Density = section-density P90 × anchor value (Low <8 / Mid <10 / High <12 / Full ≥12); Manip = anchor-delta grade, forced Reg on hand-chord maps (see [WDS0-like markers](#wds0-like-markers)) |
 | Vibro   | Vibro verdict + cvRate + burst/control timing. Display: `Vibro(cvRate%) Bx.xs/Cx.xs` |
 
 #### STREAM Panel
 
-Rows in order: Grade, Class, Stamina, Imbal, Brk2r, Sta L/R, Sta Alt.
+Rows in order: Grade, Class, Stamina, Imbal, wds0-like (two lines: Stream + Speed), Sta L/R, Sta Alt.
 
 | Field   | Meaning                                                                 |
 | ------- | ----------------------------------------------------------------------- |
@@ -87,9 +88,21 @@ Rows in order: Grade, Class, Stamina, Imbal, Brk2r, Sta L/R, Sta Alt.
 | Grade   | Mean notes-per-row tiers over qualifying stream segments (gridTotalNotes ≥4): Single (≤1.125) / Light (≤1.25) / Mid (≤1.5) / Dense (<2.0) / Full (=2.0) / Heavy (>2.0). Display: `Mid (1.38)` |
 | Stamina | `N (10s) / M (30s)` — max notes in any 10s / 30s sliding window          |
 | Imbal   | 16-row / 64-row / overall hand imbalance. Direction label: L/R/S        |
-| Brk2r   | Broken stream: max/median notes in any 2-row window                     |
+| wds0-like | Two lines: `Density-Manip-Stream` (manip = locked-section coverage) and `Density-Manip-Speed` (manip = column alternation lock; `trill?` appended when sparse-but-locked). See [WDS0-like markers](#wds0-like-markers) |
 | Sta L/R | SH (Single Hand) stamina — `P100 / P90=v×n / P50=v×n`                   |
 | Sta Alt | DH (Dual Hand) stamina — `P100 / P90=v×n / P50=v×n`                     |
+
+#### WDS0-like markers
+
+WDS-style three-axis markers shown in the JACK and STREAM panels, based on the 大勿段 (wds0 Dan) system by chart author wds0; the anchor-algorithm JS is ported from [Guanjing scene](https://guanjingscene.xyz/?view=refs)'s wds analysis tooling (see [Acknowledgments](#acknowledgments)). Each marker reads `Density-Manip-Word`:
+
+| Axis | Density source | Manip source |
+| ---- | -------------- | ----------- |
+| Jack (叠) | Section-density P90 × anchor value | Anchor-delta grade (anchor value >1.11 falls back to raw anchor tiers); hand-chord maps (≥20% ≥3-note rows) are graded Reg |
+| Stream (切) | 3C bullet P50 | Locked-section coverage (share of 16-beat sections with column alternation ≥35%) |
+| Speed (乱) | Section-density P90 (<7.02 Low / <9.04 Mid / else High) | Column alternation lock share; `trill?` appended when the map is sparse but locked |
+
+Density words: `Low / Mid / High / Full`. Manip grades: `Manip` (mashable) / `Reg` (regular) / `Tech` (locked, precision-demanding). Example: `Mid-Reg-Jack`, `Full-Tech-Stream`, `Low-Manip-Speed trill?`.
 
 #### TECH Panel
 
@@ -117,7 +130,7 @@ The switch metric is computed over uneven rows clustered from actual note timest
 
 ## Technical Notes
 
-### Architecture (v4.3.0)
+### Architecture (v4.4.0)
 
 The analysis pipeline is decomposed into focused modules:
 
@@ -372,6 +385,9 @@ Test maps are in `maps/` (dan packs + SV test maps). Test suites in `test/` (vit
 
 - [Sunny Rework](https://github.com/sunnyxxy/Star-Rating-Rebirth)
 - [osumania_map_analyser](https://github.com/LeoBlackMT/osumania_map_analyser)
+- [wds0 Dan](https://www.bilibili.com/opus/1237321666437054472)
+- [Guanjing scene](https://guanjingscene.xyz) 
+   — the `wds0-like` anchor-algorithm JS (`src/custom/wdsMarker.ts`) is ported from its [wds analysis tooling](https://guanjingscene.xyz/?view=refs)
 - [Interlude](https://github.com/YAVSRG/YAVSRG)
 - [Etterna](https://github.com/etternagame/etterna)
 - [tosu](https://tosu.app/)

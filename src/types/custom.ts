@@ -59,6 +59,8 @@ export interface JackClassInfo {
   className: string;
   /** Jack cadence effective BPM (dominant qualifying cluster, mod-scaled) */
   eff: number;
+  /** Cluster-internal run density: chain keys / cluster duration (key/s) */
+  kps: number;
   /** False when almost no compliant jack sections exist */
   isJack: boolean;
   /** Burst: longest single streak — seconds + notes inside it */
@@ -216,4 +218,15 @@ export interface CustomMetrics {
   jackClass: JackClassInfo;
   /** 切 class label + stream stamina peaks */
   streamClass: StreamClassInfo;
+  /** WDS0-like 三轴标记（密度-糊度-词，见 wdsMarker.ts） */
+  wdsMarker: WdsMarker;
+}
+
+/** WDS0-like 三轴标记（wdsMarker.ts） */
+export interface WdsMarker {
+  /** "Mid-Reg-Jack" 样式；"—" = 无法计算 */
+  jack: string;
+  stream: string;
+  /** trill 型带 " trill?" 后缀 */
+  speed: string;
 }

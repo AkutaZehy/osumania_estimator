@@ -362,6 +362,7 @@ export function showResult(result: DifficultyResult): void {
     mrow("Class", jc.className),
     mrow("Stamina", staminaStr),
     mrow("Imbal 4c/16c", jackImbal),
+    mrow("wds0-like", custom.wdsMarker.jack),
     mrow("Finger", j.singleFingerPressure.toFixed(2)),
     mrow("Hand", j.singleHandPressure.toFixed(2)),
     mrow("Vibro", ga?.vibroLabel ?? "No Vibro"),
@@ -377,7 +378,8 @@ export function showResult(result: DifficultyResult): void {
     mrow("Class", sc.className),
     mrow("Stamina", `${sc.w10} (10s) / ${sc.w30} (30s)`),
     mrow("Imbal 4c/16c", streamImbal),
-    mrow("Brk2r", `${s.brokenMax.toFixed(1)}/${s.brokenMed.toFixed(1)}`),
+    mrow("wds0-like", custom.wdsMarker.stream),
+    mrow("", custom.wdsMarker.speed),
     mrow("Sta L/R", anchorCellStr(custom.anchor.sh)),
     mrow("Sta Alt", anchorCellStr(custom.anchor.dh)),
   ];
