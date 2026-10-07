@@ -1,4 +1,4 @@
-# osumania-estimator v4.4.0
+# osumania-estimator v4.5.0
 
 A tosu overlay plugin for osu!mania 4K key pattern analysis and difficulty estimation.
 
@@ -75,7 +75,7 @@ Rows in order: Grade, Class, Stamina, Imbal, wds0-like, Finger, Hand, Vibro.
 | Finger  | Max per-column density / max both-hands (1.0 balanced, >1.5 biased)            |
 | Hand    | Max(left,right) peak density / max both-hands (1.0 balanced, >1.5 biased)      |
 | Imbal   | 16-row / 64-row / overall hand imbalance. Direction label: L/R/S                |
-| wds0-like | WDS-style marker `Density-Manip-Jack` (e.g. `Mid-Reg-Jack`). Density = section-density P90 × anchor value (Low <8 / Mid <10 / High <12 / Full ≥12); Manip = anchor-delta grade, forced Reg on hand-chord maps (see [WDS0-like markers](#wds0-like-markers)) |
+| wds0-like | WDS-style marker `Density-Mush-Jack` in letters (e.g. `MR-Jack-W`). Density = family-routed section-density P90 (S <8 / M <10 / L <12 / H ≥12); Mush = anchor-delta grade F/R/P, hand-chord maps (≥20% ≥3-note rows) get R + the `-W` Gults suffix (see [WDS0-like markers](#wds0-like-markers)) |
 | Vibro   | Vibro verdict + cvRate + burst/control timing. Display: `Vibro(cvRate%) Bx.xs/Cx.xs` |
 
 #### STREAM Panel
@@ -88,21 +88,21 @@ Rows in order: Grade, Class, Stamina, Imbal, wds0-like (two lines: Stream + Spee
 | Grade   | Mean notes-per-row tiers over qualifying stream segments (gridTotalNotes ≥4): Single (≤1.125) / Light (≤1.25) / Mid (≤1.5) / Dense (<2.0) / Full (=2.0) / Heavy (>2.0). Display: `Mid (1.38)` |
 | Stamina | `N (10s) / M (30s)` — max notes in any 10s / 30s sliding window          |
 | Imbal   | 16-row / 64-row / overall hand imbalance. Direction label: L/R/S        |
-| wds0-like | Two lines: `Density-Manip-Stream` (manip = locked-section coverage) and `Density-Manip-Speed` (manip = column alternation lock; `trill?` appended when sparse-but-locked). See [WDS0-like markers](#wds0-like-markers) |
+| wds0-like | Two lines: `Density-Mush-Stream` (e.g. `MR-Stream`; density B <4.75 / S / M / L / H from Stream-section P90, mush = anchor thresholds) and `Density-Mush-Speed` (e.g. `LR-Speed`, `O-Speed-T` when above the Speed cap; mush = bullet-count bands, `T`/`W` suffixes). See [WDS0-like markers](#wds0-like-markers) |
 | Sta L/R | SH (Single Hand) stamina — `P100 / P90=v×n / P50=v×n`                   |
 | Sta Alt | DH (Dual Hand) stamina — `P100 / P90=v×n / P50=v×n`                     |
 
 #### WDS0-like markers
 
-WDS-style three-axis markers shown in the JACK and STREAM panels, based on the 大勿段 (wds0 Dan) system by chart author wds0; the anchor-algorithm JS is ported from [Guanjing scene](https://guanjingscene.xyz/?view=refs)'s wds analysis tooling (see [Acknowledgments](#acknowledgments)). Each marker reads `Density-Manip-Word`:
+WDS-style three-axis markers shown in the JACK and STREAM panels, based on the 大勿段 (wds0 Dan) system by chart author wds0; the anchor algorithm follows the chain-growth spec of the official guide (see [Acknowledgments](#acknowledgments)). Each marker reads `Density-Mush-Word` in letters:
 
-| Axis | Density source | Manip source |
-| ---- | -------------- | ----------- |
-| Jack (叠) | Section-density P90 × anchor value | Anchor-delta grade (anchor value >1.11 falls back to raw anchor tiers); hand-chord maps (≥20% ≥3-note rows) are graded Reg |
-| Stream (切) | 3C bullet P50 | Locked-section coverage (share of 16-beat sections with column alternation ≥35%) |
-| Speed (乱) | Section-density P90 (<7.02 Low / <9.04 Mid / else High) | Column alternation lock share; `trill?` appended when the map is sparse but locked |
+| Axis | Name | Density letter | Mush letter |
+| ---- | ---- | -------------- | ----------- |
+| Jack | `XY-Jack[-W]` | Section-density P90 of jack passages (S <8 / M <10 / L <12 / H ≥12) | Anchor-delta grade F/R/P; hand-chord maps (≥20% ≥3-note rows) → R + `-W` (Gults) |
+| Stream | `XY-Stream` | Stream-section P90 (B <4.75 / S <6 / M <7 / L <7.5 / H ≥7.5) | Anchor thresholds F/R/P |
+| Speed | `XY-Speed[-T]` / `O-Speed[-W]` | Stream-section P50 ×2 (S <8 / M <8.5 / L <9.5; ≥9.5 → `O` prefix, out of Speed range) | Bullet-count bands F/R/P; `T` (twist, >3 bullets) and `W` (constructed) suffixes |
 
-Density words: `Low / Mid / High / Full`. Manip grades: `Manip` (mashable) / `Reg` (regular) / `Tech` (locked, precision-demanding). Example: `Mid-Reg-Jack`, `Full-Tech-Stream`, `Low-Manip-Speed trill?`.
+Density letters: `S / M / L / H`, plus `B` (below Stream density) and `O` (beyond Speed density). Mush letters: `F` (flat/mashable) / `R` (regular) / `P` (peak/locked). Example: `MR-Jack-W`, `MR-Stream`, `O-Speed-T`.
 
 #### TECH Panel
 
@@ -130,7 +130,7 @@ The switch metric is computed over uneven rows clustered from actual note timest
 
 ## Technical Notes
 
-### Architecture (v4.4.0)
+### Architecture (v4.5.0)
 
 The analysis pipeline is decomposed into focused modules:
 
@@ -386,8 +386,9 @@ Test maps are in `maps/` (dan packs + SV test maps). Test suites in `test/` (vit
 - [Sunny Rework](https://github.com/sunnyxxy/Star-Rating-Rebirth)
 - [osumania_map_analyser](https://github.com/LeoBlackMT/osumania_map_analyser)
 - [wds0 Dan](https://www.bilibili.com/opus/1237321666437054472)
-- [Guanjing scene](https://guanjingscene.xyz) 
-   — the `wds0-like` anchor-algorithm JS (`src/custom/wdsMarker.ts`) is ported from its [wds analysis tooling](https://guanjingscene.xyz/?view=refs)
+  - [Guanjing scene](https://github.com/guanjing1462-creator/guanjing-scene)
+  - `wds0-like` anchor-algorithm JS (`src/custom/wdsMarker.ts`) source from its [`spike.js`](https://github.com/guanjing1462-creator/guanjing-scene/blob/main/frontend/shared/analysis/spike.js), greatly modified in algorithm
+  - special thanks to [Guanjing](https://github.com/guanjing1462-creator) & [AquaStone](https://github.com/AquaStoneLZS)
 - [Interlude](https://github.com/YAVSRG/YAVSRG)
 - [Etterna](https://github.com/etternagame/etterna)
 - [tosu](https://tosu.app/)

@@ -1,11 +1,19 @@
 # Changelog
 
+## 4.5.0 (2026-10-06)
+
+### Changed
+
+- **WDS0-like markers reworked to the 大勿 letter vocabulary** — markers now read `XY-Jack`, `XY-Stream`, `XY-Speed` in letters (e.g. `MR-Jack-W`, `MR-Stream`, `O-Speed-T`), replacing the `Low-Manip-Jack` word form. Anchor algorithm follows the official guide's chain-growth spec (plus the site's sliding min-A as the delta baseline); density pools are routed by chart family (lock1 ≥10% = main jack); Speed density = Stream-section P50 ×2 with an `O` prefix past the 9.5 cap
+- **Marker affixes** — `-W` Gults suffix (hand-chord maps, ≥20% ≥3-note rows) on Jack and constructed charts on Speed; `-T` twist suffix (bullet count >3); `B` density prefix for Stream sections below 4.75
+- Full marker test tables over 12 chart groups (8 dan + 4 signicial) in `test/wdsGuideContrast.report.md`, with the porting/divergence notes in `test/wdsGuideContrast.test.ts`
+
 ## 4.4.0 (2026-10-05)
 
 ### Added
 
-- **WDS0-like markers** — WDS-style `Density-Manip-Word` markers in the metric panels: `X-Jack` under the JACK `Imbal` row, `X-Stream` + `X-Speed` (two lines) under the STREAM `Imbal` row. Density sources: section-density P90 × anchor value (Jack), 3C bullet P50 (Stream), section-density P90 (Speed). Manip sources: anchor-delta grade with a forced Reg on ≥20% hand-chord maps (Jack), locked-section coverage (Stream), column alternation lock with a `trill?` flag for sparse-but-locked charts (Speed)
-- **Marker vocabulary** — density `Low / Mid / High / Full`, manip grades `Manip` (mashable) / `Reg` (regular) / `Tech` (locked, precision-demanding); e.g. `Mid-Reg-Jack`, `Full-Tech-Stream`, `Low-Manip-Speed trill?`
+- **WDS0-like markers** — WDS-style `Density-Mush-Word` markers (letters, e.g. `MR-Jack-W`) in the metric panels: `X-Jack` under the JACK `Imbal` row, `X-Stream` + `X-Speed` (two lines) under the STREAM `Imbal` row. Density: family-routed section-density P90 (Jack), Stream-section P90 (Stream), Stream-section P50 ×2 with an `O` out-of-range prefix (Speed). Mush: anchor-delta grade with the `-W` Gults suffix on ≥20% hand-chord maps (Jack), anchor thresholds (Stream), bullet-count bands with `T`/`W` suffixes (Speed)
+- **Marker vocabulary** — density letters `S / M / L / H` plus `B` (below Stream) and `O` (beyond Speed); mush letters `F` (flat/mashable) / `R` (regular) / `P` (peak/locked); flags `-W` (Gults / constructed) and `-T` (twist); e.g. `MR-Jack-W`, `MR-Stream`, `O-Speed-T`
 - Full 8-group WDS word tables over all dan ladders (reform/regular × jack/stamina/speed/stream/tech) via `test/wdsFullTables.report.md`
 
 ### Changed
