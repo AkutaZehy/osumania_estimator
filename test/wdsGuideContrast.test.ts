@@ -11,7 +11,7 @@
 //      切池=全部节）；节级叠段（同列≤2C 重复对 ≥12% 节音符数）与 Stream 段（非叠段且
 //      行距中位数 ∈ [0.85,1.15]×C）只服务跨族轴——手册的"有效段"（小节验证法）未实现。
 //   3. 叠糊度 = delta = 链式A − spike-min（<0.005 F / >0.01 P / 其余 R）；hand（三押≥20% 行，
-//      分母=全部行）= Gults 规则 → R + -W 后缀。手册对叠的 F/R/P 是纯锚值阈值
+//      分母=全部行）= Gluts 规则 → R + -W 后缀。手册对叠的 F/R/P 是纯锚值阈值
 //      （F≥1.1/R[1.09,1.1)/P<1.09）——该阈值在站方锚值算法下饱和（106 图全 F），故重标。
 //   4. 切糊度 = 链式A 直套手册阈值（F≥1.11/R[1.1,1.11)/P<1.1，与站方 suggestDetailed 一致）。
 //   5. 乱密度 = Stream 段 P50 ×2（32 分音口径）对照 S<8+1/256/M<8.5/L<9.5；越界 ≥9.5 →
@@ -22,7 +22,7 @@
 //      原文口径；换算关系（minijack 4↔8 等）未定标。
 //
 // 标识含义（当前词表）：
-//   叠 `XY-Jack[-W]`      X=密度 S/M/L/H；Y=糊度 F/R/P；-W = Gults（hand→R）
+//   叠 `XY-Jack[-W]`      X=密度 S/M/L/H；Y=糊度 F/R/P；-W = Gluts（hand→R）
 //   切 `XY-Stream`        X=密度 B/S/M/L/H（B=低于切密度 4.75 的"碎"）；Y=糊度 F/R/P
 //   乱 `XY-Speed[-T|-W]`  X=密度 S/M/L 或 O（越界）；Y=糊度 F/R/P；-T 麻花 / -W 构造
 //
@@ -57,16 +57,16 @@ const SPEED_S_LINE = 8 + 1 / 256;
 const speedBand = (d: number) => (d < SPEED_S_LINE ? "S" : d < 8.5 ? "M" : d < 9.5 ? "L" : "—");
 // 切糊度：PDF 锚值阈值
 const streamLetter = (a: number) => (a >= 1.11 ? "F" : a >= 1.1 ? "R" : "P");
-// 叠糊度：deltaA 线映射大勿 F/R/P；hand（三押≥20%）= Gults 规则 → 字母 R + 后缀 -W
+// 叠糊度：deltaA 线映射大勿 F/R/P；hand（三押≥20%）= Gluts 规则 → 字母 R + 后缀 -W
 const rawJackLetter = (a: number) => (a >= 1.1 ? "F" : a >= 1.09 ? "R" : "P");
-const jackMush = (a: number, delta: number | null, tri: number): [string, string] => {
+const jackManip = (a: number, delta: number | null, tri: number): [string, string] => {
   if (tri >= 0.2) return ["R", "W"];
   if (a > 1.11 || delta == null) return [rawJackLetter(a), ""];
   return [delta < 0.005 ? "F" : delta > 0.01 ? "P" : "R", ""];
 };
 // 乱糊度（用户 2026-10-06）：字母恒为 F/R/P（PDF 子弹带：≤1/16→F、(1/16,1]→R、(1,3]→P、>3→P），
 // 特殊旗标插中间：T=麻花（弹>3）、W=构造（弹≤1/16 且 A<1.115）
-const speedMush = (a: number, bullet: number): [string, string] => {
+const speedManip = (a: number, bullet: number): [string, string] => {
   let flag = "";
   if (bullet > 3) flag = "T";
   else if (bullet <= 1 / 16 && a < 1.115) flag = "W";
@@ -146,7 +146,7 @@ async function main() {
     "",
     "标识含义：",
     "  叠 `XY-Jack[-W]`：X=叠池 P90 密度档（S<8/M[8,10)/L[10,12)/H≥12）；Y=糊度 delta 线",
-    "    （<0.005 F / >0.01 P / 其余 R）；hand（三押≥20% 行）= Gults → R + -W 后缀。",
+    "    （<0.005 F / >0.01 P / 其余 R）；hand（三押≥20% 行）= Gluts → R + -W 后缀。",
     "  切 `XY-Stream`：X=Stream 池 P90 密度档（B<4.75 碎 / S<6 / M<7 / L<7.5 / H≥7.5）；",
     "    Y=链式锚值直套手册阈值（F≥1.11 / R[1.1,1.11) / P<1.1）。",
     "  乱 `XY-Speed[-T|-W]`：X=Stream 段 P50×2 密度档（S<8+1/256 / M<8.5 / L<9.5；≥9.5 → 前缀 O，",
@@ -354,7 +354,7 @@ async function main() {
       } catch { /* 保持 — */ }
       const delta = Number.isFinite(aSpike) ? A - aSpike : null; // 聚合A − 最难窗A：锚纹理尺度局部性
       const jD = jackBand(p90Jack);
-      const [jL, jFlag] = jackMush(A, delta, tri);
+      const [jL, jFlag] = jackManip(A, delta, tri);
       const sD2 = streamBand(p90Stream);
       const sL = streamLetter(A);
       // 乱密度 = Stream 段 P50 × 2（32 分音口径）对照 8.0039/8.5/9.5，≥9.5 = 切级出档
@@ -362,7 +362,7 @@ async function main() {
       const pOut = pRaw >= 9.5; // 越过乱上限 9.5 → 密度位前缀 O（切级密度）
       const pD = pOut ? "O" : speedBand(pRaw);
       // 乱糊度：Stream 段每节弹对原始计数（过渡方案 B，用户 2026-10-06），阈值 PDF 字面
-      const [pL, pFlag] = speedMush(A, bP50);
+      const [pL, pFlag] = speedManip(A, bP50);
       const tag = f.replace(/^.*\[([^\]]+)\]\.osu$/, "$1").slice(0, 26);
       out.push({
         dan,

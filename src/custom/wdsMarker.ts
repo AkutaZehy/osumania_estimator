@@ -6,7 +6,7 @@
 //   图级 family：锁1≥10% = 主 jack。主 jack 图叠池=全部节；主 stream 图切池=全部节；
 //   节级抽取（同列≤2C 重复对 ≥12% = 叠段）仅用于跨族轴。
 //   叠：密度 = 叠池 P90 对照 S<8/M[8,10)/L[10,12)/H≥12；糊度 = delta=链式A−spike-min
-//       （<0.005 F / >0.01 P / 其余 R）；hand（三押≥20% 行，分母=全部行）= Gults → R + -W
+//       （<0.005 F / >0.01 P / 其余 R）；hand（三押≥20% 行，分母=全部行）= Gluts → R + -W
 //   切：密度 = Stream 池 P90 对照 B<4.75（碎）/S[4.75,6)/M[6,7)/L[7,7.5)/H≥7.5；
 //       糊度 = 链式A 直套 PDF 阈值（F≥1.11/R[1.1,1.11)/P<1.1）
 //   乱：密度 = Stream 段 P50 ×2 对照 S<8+1/256/M<8.5/L<9.5，≥9.5 → 前缀 O（FRP 不显示）；
@@ -82,14 +82,14 @@ const streamBand = (d: number) => (d < 4.75 ? "B" : d < 6 ? "S" : d < 7 ? "M" : 
 const speedBand = (d: number) => (d < SPEED_S_LINE ? "S" : d < 8.5 ? "M" : d < 9.5 ? "L" : "—");
 const rawJackLetter = (a: number) => (a >= 1.1 ? "F" : a >= 1.09 ? "R" : "P");
 const streamLetter = (a: number) => (a >= 1.11 ? "F" : a >= 1.1 ? "R" : "P");
-/** 叠糊度：delta 线；hand（三押≥20%，分母=全部行）= Gults → R + W 旗标 */
-const jackMush = (a: number, delta: number | null, tri: number): [string, string] => {
+/** 叠糊度：delta 线；hand（三押≥20%，分母=全部行）= Gluts → R + W 旗标 */
+const jackManip = (a: number, delta: number | null, tri: number): [string, string] => {
   if (tri >= 0.2) return ["R", "W"];
   if (a > 1.11 || delta == null) return [rawJackLetter(a), ""];
   return [delta < 0.005 ? "F" : delta > 0.01 ? "P" : "R", ""];
 };
 /** 乱糊度：Stream 段每节弹对计数档 + T/W 旗标 */
-const speedMush = (a: number, bullet: number): [string, string] => {
+const speedManip = (a: number, bullet: number): [string, string] => {
   let flag = "";
   if (bullet > 3) flag = "T";
   else if (bullet <= 1 / 16 && a < 1.115) flag = "W";
@@ -254,13 +254,13 @@ export function computeWdsMarker(parsed: ParsedBeatmap): WdsMarker {
   const tri = nRowsAll ? nRows3 / nRowsAll : 0;
 
   const jD = densBand(q(jackPool, means, 0.9));
-  const [jL, jFlag] = jackMush(chainA, delta, tri);
+  const [jL, jFlag] = jackManip(chainA, delta, tri);
   const sD = streamBand(q(streamPool, means, 0.9));
   const sL = streamLetter(chainA);
   const pRaw = p50Stream * 2; // 乱池恒为 Stream 段（跨族轴）
   const pOut = pRaw >= 9.5;
   const pD = pOut ? "O" : speedBand(pRaw);
-  const [pL, pFlag] = speedMush(chainA, bP50);
+  const [pL, pFlag] = speedManip(chainA, bP50);
 
   return {
     jack: `${jD}${jL}-Jack${jFlag ? "-" + jFlag : ""}`,
