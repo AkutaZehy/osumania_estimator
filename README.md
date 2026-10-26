@@ -1,404 +1,120 @@
-# osumania-estimator v4.5.0
+# osumania-estimator
 
-A tosu overlay plugin for osu!mania 4K key pattern analysis and difficulty estimation.
+A tosu overlay plugin that analyses osu!mania 4K beatmaps and reports key-pattern structure, pattern-class typing and difficulty estimates over the play area.
 
-By Akuta Zehy.
+By Akuta Zehy · version 4.5.0 (`metadata.txt`)
 
-## Deployment
+## Requirements
 
-Copy the entire `osumania-estimator by Akuta Zehy` folder into tosu's `static/` directory. Restart tosu or reload overlays.
+- [tosu](https://tosu.app/) — the osu! client fork this overlay targets (`CompatibleWith: tosu`).
+- Node.js 18+ to build from source; the deployed overlay itself is a static bundle.
 
-## Interface
+## Quick start
 
-### View Mode (Settings)
+Deploy the built folder `deploy/osumania-estimator by Akuta Zehy/` (index.html, metadata.txt, settings.json, styles/, dist/) into tosu's `static/` directory, then restart tosu or reload overlays.
 
-Configured via tosu settings panel. `settings.json` provides two toggles:
+To build it yourself:
 
-| Setting           | Description                                             |
-| ----------------- | ------------------------------------------------------- |
-| Show Pattern Breakdown | Toggle the key-type/pattern bars row              |
-| Show Custom Metrics    | Toggle density, jack, stream, tech, stamina, LN panels  |
+```bash
+npm install && npm run build
+```
 
-### Detailed View (card — lobby/result screen)
+The build bundles `src/index.ts` with esbuild into `dist/index.js` and copies the overlay files into `deploy/osumania-estimator by Akuta Zehy/`.
 
-Rendered with the actual beatmap `Camellia - Fastest Crash (inteliser) [cracked]`:
+## Usage
+
+### Input
+
+- **Beatmap** — the overlay fetches the loaded chart's `.osu` file from tosu (`http://localhost:24050/files/beatmap/file`) and parses it locally.
+- **Mods** — speed rate, OD flag and conversion flag (IN/HO) come from the tosu websocket payload. Any change of the mod signature (`speedRate | odFlag | cvtFlag`) re-runs the analysis; an already-analysed (chart, mod) pair is served from an in-memory LRU cache of 50 entries.
+
+### Output
+
+- **Overlay card** (lobby and result screens): effective BPM, dominant key type, the Sunny star line, the key-type bars and the metric panels.
+- **Metric panels**: BPM/DENSITY, LONG NOTE, JACK, STREAM, TECH and STAMINA — see the [metric index](#metric-index).
+- **Section bar / in-game bar**: the whole-map segment structure, colour-coded by segment type; during play the in-game bar shows the segment under the playhead.
+
+Detailed view card, rendered with `Camellia - Fastest Crash (inteliser) [cracked]`:
 
 ![Detailed view card — headline 210 Minijack, Sunny 5.33, pattern bars, metric panels and wds0-like markers](docs/screenshot-card.png)
 
-### Element Descriptions
-
-#### Main Display (top line)
-
-Shows the effective BPM and dominant key type from grid analysis (e.g. `160 Mid Jumpstream`). When the LN ratio is ≥15%, the dominant LN pool type replaces the key type. On vibro maps whose verdict is `vibro`, the key type is replaced by "Vibro" in red. BPM is `rawBPM * division / 4 * speedRate`. For SV maps with multiple BPM zones, per-cell active timing point lookup provides accurate BPM per segment.
-
-#### Sunny (second line)
-
-Sunny Rework star rating. If the algorithm returns below 0.01, a density-based estimate is shown. When the in-game star (gameStar) is available, a comparison suffix is appended: `Sunny: 4.51 (+12.3%)`.
-
-#### Key-Type / Pattern Bars
-
-Primary (grid analysis available): up to 8 bars of the map's BPM-grouped key types — abbreviated names (`CJ` Chordjack, `JS` Jumpstream, `HS` Handstream), bar width = cell share relative to the largest, with the group's BPM on the right.
-
-Fallback (no grid analysis): up to 4 interlude-cluster bars, bar width = pattern amount / max amount.
-
-#### BPM / DENSITY Panel
-
-| Field | Meaning                                                 |
-| ----- | ------------------------------------------------------- |
-| BPM   | Speed-adjusted BPM (`rawBPM * speedRate`)               |
-| Both  | `avg X / max Y` — both-hands mean and max density (notes per 1000ms window) |
-| L/R   | Left vs right hand mean density                         |
-| Cols  | Per-column mean density                                 |
-
-#### LONG NOTE Panel
-
-Shown when LN ratio > 1%, or any overlapping LN or Tap LN exists.
-
-| Field   | Meaning                                                                        |
-| ------- | ------------------------------------------------------------------------------ |
-| Ratio   | `60% (45%)` — all LN / excluding Tap LN. May append ` · Jacky` or ` · Speedy` when jack- or speed-heavy LN constructions dominate |
-| Overlap | `585 (12%)` — overlapping LN pairs / % of total LN (sweep-line O(n log n))     |
-| Tap LN  | Short LNs (<=16th note)                                                        |
-| P-Score | `CO x · DE x · WC x · TE x` — Coordination / Density / Wildcard / Technical pool scores |
-
-Shield, reverse shield, column lock, attack/release, inverse, ouroboros and LN-tree constructions are computed in `lnAnalysis.ts` and feed the pool scores, but are not displayed as separate rows.
-
-#### JACK Panel
-
-Rows in order: Grade, Class, Stamina, Imbal, wds0-like, Finger, Hand, Vibro.
-
-| Field   | Meaning                                                                         |
-| ------- | ------------------------------------------------------------------------------- |
-| Grade   | Grid-note P90 tiers (cell-weighted): Mini (≤4) / Low (≤7) / Mid (≤11) / Dense (≥12). Display: `Mini (P90/P50)` |
-| Class   | Run-extraction jack type at the dominant jack cadence: `Actually Not Jack` / `Speedjack` / `Bullet / Minijack` / `{Low\|Mid\|High} Chordjack` / `Anchor / X Chordjack` (anchor confidence ≥70). See [Jack Class System](#jack-class-system-class-row) |
-| Stamina | `burstSec（notes[, Broken]） / sumSec（notes）` — longest jack streak and total streak coverage with note counts. `Broken` marks a sub-10s peak pushed past 10s by merging streaks separated by ≤½ measure (gap time not counted) |
-| Finger  | Max per-column density / max both-hands (1.0 balanced, >1.5 biased)            |
-| Hand    | Max(left,right) peak density / max both-hands (1.0 balanced, >1.5 biased)      |
-| Imbal   | 16-row / 64-row / overall hand imbalance. Direction label: L/R/S                |
-| wds0-like | WDS-style marker `Density-Manip-Jack` in letters (e.g. `MR-Jack-W`). Density = family-routed section-density P90 (S <8 / M <10 / L <12 / H ≥12); Manip = anchor-delta grade F/R/P, hand-chord maps (≥20% ≥3-note rows) get R + the `-W` Gluts suffix (see [WDS0-like markers](#wds0-like-markers)) |
-| Vibro   | Vibro verdict + cvRate + burst/control timing. Display: `Vibro(cvRate%) Bx.xs/Cx.xs` |
-
-#### STREAM Panel
-
-Rows in order: Grade, Class, Stamina, Imbal, wds0-like (two lines: Stream + Speed), Sta L/R, Sta Alt.
-
-| Field   | Meaning                                                                 |
-| ------- | ----------------------------------------------------------------------- |
-| Class   | 切 type at the dominant row cadence: `[eff] [Full\|Dense\|Broken\|Mid] (JS\|HS\|SS)[, Jacky][, Technical]`. Singles tag → `SS`; Full + pure single-note → `Running Man`. See [Stream Class System](#stream-class-system-stream-class-row) |
-| Grade   | Mean notes-per-row tiers over qualifying stream segments (gridTotalNotes ≥4): Single (≤1.125) / Light (≤1.25) / Mid (≤1.5) / Dense (<2.0) / Full (=2.0) / Heavy (>2.0). Display: `Mid (1.38)` |
-| Stamina | `N (10s) / M (30s)` — max notes in any 10s / 30s sliding window          |
-| Imbal   | 16-row / 64-row / overall hand imbalance. Direction label: L/R/S        |
-| wds0-like | Two lines: `Density-Manip-Stream` (e.g. `MR-Stream`; density B <4.75 / S / M / L / H from Stream-section P90, manip = anchor thresholds) and `Density-Manip-Speed` (e.g. `LR-Speed`, `O-Speed-T` when above the Speed cap; manip = bullet-count bands, `T`/`W` suffixes). See [WDS0-like markers](#wds0-like-markers) |
-| Sta L/R | SH (Single Hand) stamina — `P100 / P90=v×n / P50=v×n`                   |
-| Sta Alt | DH (Dual Hand) stamina — `P100 / P90=v×n / P50=v×n`                     |
-
-#### WDS0-like markers
-
-WDS-style three-axis markers shown in the JACK and STREAM panels, based on the 大勿段 (wds0 Dan) system by chart author wds0; the anchor algorithm follows the chain-growth spec of the official guide (see [Acknowledgments](#acknowledgments)). Each marker reads `Density-Manip-Word` in letters:
-
-| Axis | Name | Density letter | Manip letter |
-| ---- | ---- | -------------- | ----------- |
-| Jack | `XY-Jack[-W]` | Section-density P90 of jack passages (S <8 / M <10 / L <12 / H ≥12) | Anchor-delta grade F/R/P; hand-chord maps (≥20% ≥3-note rows) → R + `-W` (Gluts) |
-| Stream | `XY-Stream` | Stream-section P90 (B <4.75 / S <6 / M <7 / L <7.5 / H ≥7.5) | Anchor thresholds F/R/P |
-| Speed | `XY-Speed[-T]` / `O-Speed[-W]` | Stream-section P50 ×2 (S <8 / M <8.5 / L <9.5; ≥9.5 → `O` prefix, out of Speed range) | Bullet-count bands F/R/P; `T` (twist, >3 bullets) and `W` (constructed) suffixes |
-
-Density letters: `S / M / L / H`, plus `B` (below Stream density) and `O` (beyond Speed density). Manip letters: `F` (flat/mashable) / `R` (regular) / `P` (peak/locked). Example: `MR-Jack-W`, `MR-Stream`, `O-Speed-T`.
-
-#### TECH Panel
-
-Rows appear only when non-zero.
-
-| Field    | Meaning                                                            |
-| -------- | ------------------------------------------------------------------ |
-| Interval | Single-finger spacing of the fastest burst (ms)                    |
-| KPS (P90)| Both-hands P90 keys per second                                     |
-| Graces   | Grace/flam count (cell-aware, excludes legitimate 48th-note streams) |
-| Rolls    | Max consecutive length per division (e.g. "24x16")                 |
-| Trills   | Total count per division                                           |
-
-#### STAMINA Panel
-
-| Field   | Meaning                                      |
-| ------- | -------------------------------------------- |
-| Max     | P75–P95 density band mean × longest continuous stretch above P75 |
-| Med     | P50–P75 density band mean × longest continuous stretch above P50 |
-| Med tot | Total time at/above the Med value            |
-| Ratio   | Med total time / map duration                |
-| Switch  | Max jack/stream transitions in a 16-beat window + descriptor (Steady/Mixed/Rhythmic/Intense) |
-
-The switch metric is computed over uneven rows clustered from actual note timestamps (not a fixed grid); consecutive rows sharing any column count as a jack pair, same-type pairs merge into runs, and the score is the maximum run-type transitions inside a sliding 16-beat window. LN heads participate as single notes at their start time. Descriptors: Steady ≤15, Mixed ≤25, Rhythmic ≤35, Intense >35. Low values = sustained single-mode sections (pure stream/jumpstream/jack); high values = frequent stable switching (minijack-style maps).
-
-## Technical Notes
-
-### Architecture (v4.5.0)
-
-The analysis pipeline is decomposed into focused modules:
-
-```
-                             analyzer.ts (pipeline orchestrator)
-                             ┌──────────────────────────────────────┐
-                             │ parse → Sunny → patterns → grid →    │
-                             │   custom → aggregate → section       │
-                             └──────┬───────────────┬───────────────┘
-                                    │               │
-          sectionAnalysis.ts        │    gridAnalysis.ts         vibroAnalysis.ts
-   ┌─────────────────────┐         │   ┌─────────────────────┐   ┌───────────────────┐
-   │ Segment slicing     │         │   │ Cell-level subclass │   │ 连4 detection     │
-   │ Pattern analysis    │         │   │ Pattern class.      │   │ SHFC classification│
-   │ LN subtypes         │         │   │ Jack/stream detect  │   │ canVibro algorithm │
-   │ Anomaly detection   │         │   │ LN metrics          │   │ Verdict engine     │
-   └─────────────────────┘         │   │ Grace/flam detect   │   └───────────────────┘
-                                   │   │ Cross-cell jack     │
-                                   │   │ Key type (A4 tiers) │
-                                   │   │ Vibro label         │
-                                   │   └─────────────────────┘
-                                   │
-              lnAnalysis.ts        ├── Per-cell timing lookup:
-   ┌──────────────────────┐        │   getActiveTimingPoint(time)
-   │ LN metrics           │        │   → correct BPM for SV maps
-   │ Pool scores (CO/DE/  │        │     with multiple BPM zones
-   │   WC/TE)             │        │
-   │ Release difficulty   │        └── Grade helpers:
-   └──────────────────────┘            gradeJack(), gradeStream()
-                                   │
-        anchorAnalysis.ts           │
-   ┌──────────────────────┐        │
-   │ SF/SH/DH stamina     │        │
-   │ Bridge/P100 tolerance│        │
-   │ Strict P90/P50       │        │
-   └──────────────────────┘        │
-                                   │
-   jackAnalysis.ts                 │    streamAnalysis.ts
-   ┌──────────────────────┐        │    ┌──────────────────────┐
-   │ Jack-specific metrics│        │    │ Stream classification│
-   │ Finger/Hand pressure │        │    │ Grade / Imbalance    │
-   │ Hand bias (L/R/S)   │        │    │ Broken stream        │
-   └──────────────────────┘        │    │ Hand bias (L/R/S)    │
-                                   │    └──────────────────────┘
-                                   │
-        jackClass.ts                    streamClass.ts
-   ┌──────────────────────┐        ┌──────────────────────┐
-   │ Jack class typing    │        │ 切 class typing       │
-   │ Burst/sum stamina    │        │ 10s/30s peaks        │
-   └──────────────────────┘        └──────────────────────┘
-                                   │
-                          ┌────────┴──────────┐
-                          │  customMetrics     │
-                          │  (aggregator)      │
-                          └───────────────────┘
-```
-
-### Division-Based Grid
-
-The map is divided into a beat grid where each cell spans one row (4 notes in 4K). Each cell is classified by:
-
-- **Subdivision**: how many notes per beat (denom 2, 4, 6, 8, 12, etc.)
-- **Pattern**: detected via column analysis (jack, chord, trill, roll, etc.)
-- **Category**: stream (<=2 cols/row), jack (same-col density), LN, break
-- **Effective BPM**: `cellRawBPM * denom / 4 * speedRate`
-
-### Switch Metric (gridSwitch)
-
-The switch metric measures how frequently the map alternates between jack-type and stream-type rows, distinguishing sustained single-mode sections (pure stream / jumpstream) from frequent stable switching (chordjack-style maps).
-
-1. **Uneven rows**: All rice notes (LN heads included as single notes at their start time) are clustered into rows by actual timestamps (≤8ms apart merge into one row) — not a fixed grid.
-2. **J/S pairing**: Consecutive rows sharing any column → J (jack), otherwise S (stream). Lenient: single-column jacks and chord overlaps both count.
-3. **Runs**: Consecutive same-type pairs merge into runs.
-4. **Sliding window**: A 16-beat window (16 × beatLength) slides across the map; `gridSwitch` = max run-type transitions inside any window.
-
-Descriptor thresholds: **Steady** ≤15, **Mixed** ≤25, **Rhythmic** ≤35, **Intense** >35. Displayed in the STAMINA panel as `Switch` (e.g. `54 (Intense)`).
-
-### Jack Class System (Class row)
-
-Run-extraction jack typing at the map's dominant jack cadence (effective BPM). This is the metric surfaced by the JACK panel's `Class` and `Stamina` rows (introduced v4.3, replacing the Purity/Anchor rows).
-
-1. **Segments**: grid-analysis jack cells; statistics restricted to the dominant effBPM group plus secondaries holding ≥10% of jack cells.
-2. **Link**: two *adjacent* rows (no row in between) sharing a column, spaced ≈ the jack cadence. Adjacency is what distinguishes a jack from a same-column repeat across a 切 (switch) structure.
-3. **Chain**: maximal consecutive links per column form x连 (2连 bullet, 3+, …). Chordjacks with intervening rows are excluded by design (covered by the anchor/both-hands metrics).
-4. **Stats** pooled over qualifying clusters: run-length buckets (2 / 3-4 / 5-7 / 8+), key-weighted average run length `Σx²nₓ/Σxnₓ`, 5+-run key share, longest run.
-5. **Class decision**:
-   - no compliant sections → `Actually Not Jack`
-   - streak coverage ≥25% but intensity (keys/s, 10s peak) below threshold → `Speedjack` (fragmented jack grind)
-   - anchor confidence (`k5+ key share × avg run depth × 5-run presence` product) ≥70 → `Anchor / X Chordjack`
-   - 3+-run key share <15% → `Bullet / Minijack` (2-run dominant)
-   - otherwise `{Low|Mid|High} Chordjack` by jack run keys per second (<8 / <15 / ≥15)
-6. **Stamina row**: burst = longest single streak; when the best streak is <10s, streaks separated by ≤½ measure merge into groups (gap time not counted) and the max is re-taken — if that merge crosses 10s the value is tagged `Broken`. Sum = total streak seconds over unique covered rows plus their note count.
-
-Streak tolerance rules: a single non-jack row transition is tolerated (must be resolved by the next jack transition); two consecutive non-jack transitions, an empty cadence slot, or an off-grid (切键) row break the streak. LN heads participate as plain starts.
-
-### Stream Class System (STREAM Class row)
-
-Interval-distribution typing at the map's dominant row cadence — the 切 (switch) analogue of the jack Class (introduced v4.3, replacing the Type row).
-
-1. **Cadences**: row-interval clusters (greedy ±15%); the dominant cluster plus secondaries holding ≥10% of row intervals at eff≥60. Pairs are assigned dominance-first; harmonic sub-clusters never override the dominant grid.
-2. **间隔 buckets** — per column, consecutive same-column hits spaced exactly k×C (±10%) with every intervening beat occupied:
-   `间隔0` (adjacent rows — jack content mixed in) · `间隔1` (2C = 1/2 分度, two-column trill) · `间隔2` (3C = 3/4 分度, three-column cycle) · `间隔3` (4C = 1 分度) · `间隔4+` · `非整数` (off-grid ratios, e.g. dotted 1.5C or SV sections).
-3. **Tags**: Jacky (间隔0 >1%) · Full (间隔1 ≥50%) · Dense (45–50% 且 间隔1+2 >80%) · Broken (15–30%) · Singles (<15%) · Technical (非整数 ≥15%).
-4. **Type**: on-grid row composition — 3+押 rows ≥5% → `HS`; 2+押 rows ≥10% → `JS`; otherwise pure single-note → `SS`. The Singles tag forces `SS`; `Full` + `SS` → `Running Man`.
-5. **Class string**: `[eff] [Full|Dense|Broken|Mid] (JS|HS|SS)[, Jacky][, Technical]` (e.g. `175 Mid JS, Technical`).
-6. **Stamina row**: maximum note count inside any sliding 10s / 30s window (all note starts, no extra conditions).
-
-### Key Type System (A4 tiers)
-
-Segments are classified into 5 tiers based on 4×4 grid total notes:
-
-| Tier    | Grid Notes | Type                 |
-| ------- | ---------- | -------------------- |
-| Mini    | ≤5         | Minijack             |
-| Low     | 6-7        | Low Chordjack        |
-| Mid     | 8-10       | Mid Chordjack        |
-| High    | ≥11        | High Chordjack       |
-| SS      | —          | Single/Stream hybrid |
-
-Main type selection uses BPM grouping (effBPM matching at double speed for jack→stream correlation), adjacent-level merge (Full→High→Mid→Low→Minijack), and adaptive N (raw BPM <150 or stream <200 → N=30, else N=50). Tier-based priority: High > Mid > Low > SS, with HS > JS within tier.
-
-### SV Map Support (Per-Cell Timing)
-
-Maps with scroll velocity changes (multiple uninherited timing points at different BPMs) no longer use only the first global timing point. Each grid cell looks up the active timing point at its start time via internal helpers (`getActiveTimingPoint`, `getActiveBPM`, `getActiveBeatLength` in `gridAnalysis.ts`).
-
-This ensures accurate BPM assignment for sections at different tempos within the same map.
-
-### Anchor / Stamina Analysis
-
-Measures single-finger (SF), single-hand (SH), and dual-hand (DH) stamina by detecting consecutive-note segments in 16th-note positions:
-
-| Tier | Tolerance | Description |
-|------|-----------|-------------|
-| **P100** | Bridge (gap≤2 bridged by 4 consecutive notes) | Worst-case endurance |
-| **P90** | Strict (consecutive only) | 90th percentile segment length |
-| **P50** | Strict (consecutive only) | Median segment length |
-
-Display format: `P100 / P90=v×n / P50=v×n` (values in measures, `—` = no qualifying segment).
-
-**SF** segments are per-column. **SH** segments merge left-hand (cols 0+1) and right-hand (cols 2+3). **DH** segments merge four paired column combinations (0+2, 1+3, 1+2, 0+3).
-
-BPM scaling: jack-type maps use base BPM for SF and 2× base for SH/DH; stream-type maps halve SF BPM and use base for SH/DH.
-
-Since v4.3 the SF tier is computed for calibration only and is no longer displayed (the JACK `Stamina` row shows run-based stamina instead); SH and DH remain visible in the STREAM panel as `Sta L/R` / `Sta Alt`.
-
-### Division ↔ BPM Mapping
-
-| Div  | Type  | Effective BPM formula |
-| ---- | ----- | --------------------- |
-| 1    | 4th   | `cellBPM / 4`         |
-| 2    | 8th   | `cellBPM / 2`         |
-| 3    | 12th  | `cellBPM * 3/4`       |
-| 4    | 16th  | `cellBPM`             |
-| 6    | 24th  | `cellBPM * 1.5`       |
-| 8    | 32nd  | `cellBPM * 2`         |
-| >9.5 | 48th+ | grace (flam/anchor) category |
-
-### Vibro Detection
-
-Custom-built vibro analyzer replacing the former Etterna MinaCalc-based detection (MinaCalc WASM is still loaded in `index.html` but no longer referenced by the analysis code):
-
-1. **连4 detection**: Finds same-column 4+ note sequences with trill-aware gap tolerance
-2. **SHFC classification**: Each sequence classified as Single / Hand / Full / Common based on column occupancy density
-3. **canVibro validation**: Per-type adjacency check using column pattern analysis with anti-mash filtering and complex split handling
-4. **Verdict**: "vibro" when weighted canVibro rate > 35% at ≥150 BPM with per-type qualifying thresholds
-
-Vibro verdict and burst/control timing breakdown are displayed in the JACK panel's `Vibro` row (borderline verdicts show as `Vibro Suspicious` there). The main display shows "Vibro" in red when the verdict is `vibro`.
-
-### Grace Detection (Cell-Aware)
-
-Grace/flam detection now uses per-cell subdivision context. For cells with known subdivision, only gaps below 55% of the expected interval AND below 50ms are flagged, preventing legitimate 48th-note streams from being counted as graces. Null-subdivision cells and no-grid fallback retain the original 50ms absolute threshold.
-
-### LN Pool Scores
-
-LN metrics include four pool scores. Every component is a per-LN participation
-rate (share of the chart's LNs exhibiting the pattern), and each pool is a
-weighted average of its components (weights sum to 1), so all four scores are
-confidence-like proportions in 0-100 on one scale and comparable at the argmax
-that picks the displayed type. Common-mode textures on modern chord-LN charts
-(LN-chord heads, raw overlay) are deliberately down-weighted — they carry no
-discriminative signal.
-
-| Pool | Formula | Description |
-| ---- | ------- | ----------- |
-| CO   | `0.7·overlay + 0.2·inverse + 0.1·column-lock` | LN overlap/coordination texture |
-| DE   | `0.5·inverse + 0.3·LN-chord + 0.2·tapLN` | Inverse/chord/tap-LN density texture |
-| WC   | `0.45·wc-jack + 0.45·wc-speed + 0.1·shield` | Jack/speed textures between LN heads (cadence-gated: jack ≤1 beat, speed ≤1/2 beat head intervals) |
-| TE   | `0.5·release + 0.2·stagger + 0.15·shield + 0.15·column-lock` | Release/technique texture: release = LN whose end group holds ≥2 LNs with different starts (staggered tails); stagger = same-start/different-end pair rate |
-
-Component sources: overlay/tapLN, LN-chord/wc-jack/wc-speed, and the release
-participation count are computed from parsed LN data in `lnAnalysis.ts`;
-shield/column-lock/inverse come from the pattern stage
-(`summary.ts._lnCounts`).
-
-### Hand Bias
-
-Hand bias metrics use a unified 1.0-balanced scale with directional labels:
-- **Finger**: `4 * maxCol / bothHands` (1.0 balanced, >1.5 biased)
-- **Hand**: `2 * maxHand / bothHands` (1.0 balanced, >1.5 biased)
-- **Imbalance**: `2 * max/sum` (1.0 balanced, 2.0 = one-sided)
-- **Direction**: L (left-dominant), R (right-dominant), S (switching)
-
-Jack imbalance uses 16r/64r windows; stream imbalance excludes jack rows.
-
-### Algorithm Layers
-
-- **Sunny Rework** — 6 strain components, weighted percentile aggregation, LN pool scores
-- **Grid Analysis** — Beat-grid cell classification, A4 tier key type system, BPM-first main selection
-- **Pattern Detection** — Interlude sliding-window, 6 core + 22+ specific patterns
-- **Custom Metrics** — Beat-grid density, speed, stamina, tech analysis, anchor (SF/SH/DH) analysis, hand bias, LN pools
-- **Vibro Detection** — Custom 连4 + SHFC + canVibro pipeline
-
-### MOD Support
-
-Mod changes trigger a live re-analysis (no manual refresh needed):
-
-- **Speed mods**: DT/NC (1.5x), HT (0.75x), lazer custom rates (e.g. DC via `speed_change`), and the tosu `rate` field take priority. BPM and other time-based metrics scale by `speedRate`. The pattern/key-type stage runs on the speed-scaled beat length, so pattern-card and segment-table BPM are effective BPM (`rawBPM * speedRate`, same convention as the BPM/DENSITY panel); beat-relative detection windows scale with tempo.
-- **Conversion mods**: IN (tap→hold) and HO (hold→tap) re-run the parser with the converted chart so all downstream analysis (patterns, grid, sections, custom) sees the modded notes.
-- **OD mods**: HR/EZ are detected (`odFlag`) for difficulty weighting.
-
-The mod signature is `speedRate | odFlag | cvtFlag`, and any signature change re-triggers analysis — including toggling back to no-mod.
-
-### Performance
-
-Analysis pipeline optimized for sub-second execution on most maps:
-
-- Pre-cached `_notes` / `_rowNotes` in grid cells to eliminate repeated `getNotesInRange` calls
-- Sweep-line O(n log n) LN overlap detection (was O(n²))
-- End-time grouping O(k) A/R detection
-- `lowerBound` binary search for boundary lookups
-- Single-pass O(n) run/interval extraction in the jack and switch class scanners (per qualifying cadence)
-- Heavy map guard at 30000 notes
-- LRU result cache (50 entries, keyed by `md5|modSignature`): revisiting a
-  previously-seen (map, mod) pair skips the HTTP fetch and the full pipeline;
-  map switches and mod toggles still re-analyze live (gate unchanged), hits
-  just resolve instantly. Memory-only, cleared on overlay reload.
-
-### Build & Test
+### Settings
+
+Two checkboxes in tosu's overlay settings (`settings.json`):
+
+| Setting | Effect |
+| --- | --- |
+| Show Pattern Breakdown | Toggle the key-type / pattern bars row |
+| Show Custom Metrics | Toggle the BPM/DENSITY, LONG NOTE, JACK, STREAM, TECH and STAMINA panels |
+
+## Metric index
+
+Definitions, thresholds and terminology live in the [glossary](docs/glossary.md); this table only locates each metric.
+
+| Metric | Unit | Range | Definition |
+| --- | --- | --- | --- |
+| BPM | BPM | chart value; `BPM (min-max)` on variable-speed charts | [顶部其余字段](docs/glossary.md#顶部其余字段) |
+| 主键型 / 键型条 | enum | `Minijack`, `Low/Mid Chordjack`, `Mid Jumpstream`, … | [键型表](docs/glossary.md) |
+| Sunny | stars | ≥ 0; shows `Sunny: 4.51 (+12.3%)` against the in-game star | [顶部其余字段](docs/glossary.md#顶部其余字段) |
+| LN 面占比 | % | 0–100 (strict share ≤ total share) | [顶部其余字段](docs/glossary.md#顶部其余字段) |
+| LN 图池分 CO/DE/WC/TE | points | 0–100, relative between the four pools | [LONG NOTE](docs/glossary.md#long-note-面板) |
+| 面重叠 Overlap / 短面 Tap LN | pairs·% / count | ≥ 0 | [LONG NOTE](docs/glossary.md#long-note-面板) |
+| 双手 / 单手 / 各列密度 | keys per second | ≥ 0 over a 1 s sliding window | [BPM / DENSITY](docs/glossary.md#bpm--density-面板) |
+| JACK 密度档 Grade | enum | Mini / Low / Mid / Dense | [JACK](docs/glossary.md#jack-面板) |
+| JACK 分类 Class | enum | Actually Not Jack / Speedjack / Bullet·Minijack / Low·Mid·High Chordjack / Anchor·X Chordjack | [JACK](docs/glossary.md#jack-面板) |
+| JACK 耐力 Stamina | s + notes | ≥ 0, longest streak / total coverage | [JACK](docs/glossary.md#jack-面板) |
+| 失衡度 Imbal 4c/16c | ratio | 1.0 balanced – 2.0 fully one-sided | [Imbal 4c/16c](docs/glossary.md#imbal-4c16c) |
+| 单指压力 Finger / 单手压力 Hand | ratio | 1.0 balanced – 4.0 / 2.0 fully one-sided | [Finger / Hand](docs/glossary.md#finger--hand) |
+| wds0-like 标记 | letters | `XY-Jack[-W]`, `XY-Stream`, `XY-Speed[-T\|-W]` | [wds0-like](docs/glossary.md#wds0-like) |
+| Vibro | % + s | No Vibro / Vibro Suspicious / Vibro | [Vibro](docs/glossary.md#vibro) |
+| STREAM 密度档 Grade | enum | Single / Light / Mid / Dense / Full / Heavy | [STREAM](docs/glossary.md#stream-面板) |
+| STREAM 分类 Class | string | `{eff} {Full\|Dense\|Broken\|Mid} (JS\|HS\|SS)[, Jacky][, Technical]` | [STREAM](docs/glossary.md#stream-面板) |
+| STREAM 耐力 Stamina | notes | max notes in any 10 s / 30 s window | [STREAM](docs/glossary.md#stream-面板) |
+| 锚切耐力 Sta L/R、Sta Alt | measures | `P100 / P90=v×n / P50=v×n` | [Sta L/R / Sta Alt](docs/glossary.md#sta-lr--sta-alt) |
+| 同指最小间隔 Interval | ms | ≥ 0 | [TECH](docs/glossary.md#tech-面板) |
+| 持续键速 KPS (P90) | keys per second | ≥ 0 | [TECH](docs/glossary.md#tech-面板) |
+| 滑键 Graces | count | ≥ 0 | [TECH](docs/glossary.md#tech-面板) |
+| 滚键 Rolls / 快速交互 Trills | length×count | ≥ 0 | [TECH](docs/glossary.md#tech-面板) |
+| 峰值 / 中位密度段 Max、Med | density×s | ≥ 0 | [STAMINA](docs/glossary.md#stamina-面板) |
+| 中位以上总时长 Med tot / 主难覆盖率 Ratio | s / % | ≥ 0 / 0–100 | [STAMINA](docs/glossary.md#stamina-面板) |
+| 叠切切换频率 Switch | count | ≥ 0 (saturates at 10+), 16-beat (64-row in 4K) window | [STAMINA](docs/glossary.md#stamina-面板) |
+
+## Known limitations
+
+- **4K only.** The key-type, grid and pattern algorithms assume a 4-column chart; other key counts are out of scope.
+- **Very dense charts are skipped.** A chart with more than 30000 notes, or more than 15000 long notes, is reported as skipped instead of analysed.
+- **LN pool scores are not a difficulty number.** They express relative probability between the four pools, so only their ordering is meaningful.
+- **Without grid analysis the output degrades.** The key-type bars fall back to up to 4 interlude-cluster bars, and the density grades fall back to a 4-row sliding-window tier.
+- **Sunny falls back to a density estimate.** Below a 0.01 algorithm result the star is estimated from density, and the comparison against the in-game star is then omitted.
+- **Anchor stamina shows two of the three tiers.** The single-hand and dual-hand tiers are displayed (`Sta L/R`, `Sta Alt`); the single-finger tier is computed for calibration and stays internal.
+
+## Docs
+
+- [docs/glossary.md](docs/glossary.md) — the single source of truth for metric definitions, thresholds and terminology.
+- [docs/ALGORITHM.md](docs/ALGORITHM.md) — how each number is produced: formulas, thresholds and their source locations.
+- [CHANGELOG.md](CHANGELOG.md) — version history.
+
+## Build & test
 
 ```bash
-npm install && npm run build     # esbuild → dist/index.js
-npm run typecheck                # TypeScript type checking
-npm test                         # Vitest suite
+npm install && npm run build     # esbuild → dist/index.js, then copied into deploy/
+npm run typecheck                # tsc --noEmit
+npm test                         # vitest
 npm run bench                    # perf benchmark (npm run bench:stages for per-stage breakdown)
 ```
 
-Output: `deploy/osumania-estimator by Akuta Zehy/`
+Test maps live in `maps/`, vitest suites in `test/*.test.ts`; the remaining files in `test/` and `scripts/` are one-off diagnostic and benchmark scripts.
 
-Test maps are in `maps/` (dan packs + SV test maps). Test suites in `test/` (vitest suites live under `test/*.test.ts`; the rest are one-off diagnostic scripts). Perf/verification one-offs live in `scripts/` (`bench.ts`, `verify*.ts`).
+## Acknowledgments
 
-### Acknowledgments
+- [Sunny Rework](https://github.com/sunnyxxy/Star-Rating-Rebirth) — star rating algorithm
+- [osumania_map_analyser](https://github.com/LeoBlackMT/osumania_map_analyser) — reference implementation
+- [wds0 Dan](https://www.bilibili.com/opus/1237321666437054472) — wds0-like marker system
+- [Guanjing Scene](https://github.com/guanjing1462-creator/guanjing-scene) — anchor algorithm reference ([web](https://guanjingscene.xyz/))
+- [Interlude](https://github.com/YAVSRG/YAVSRG) · [Etterna](https://github.com/etternagame/etterna) · [tosu](https://tosu.app/) · [osu](https://github.com/ppy/osu)
 
-References:
+Thanks to [sunnyxxy](https://github.com/sunnyxxy/), [Leo_Black](https://github.com/LeoBlackMT), [wds0](https://osu.ppy.sh/users/8771622), [Guanjing](https://github.com/guanjing1462-creator) & [AquaStone](https://github.com/AquaStoneLZS), and [FutureLK](https://osu.ppy.sh/users/24038353).
 
-- [Sunny Rework](https://github.com/sunnyxxy/Star-Rating-Rebirth)
-- [osumania_map_analyser](https://github.com/LeoBlackMT/osumania_map_analyser)
-- [wds0 Dan](https://www.bilibili.com/opus/1237321666437054472)
-- [Guanjing Scene](https://github.com/guanjing1462-creator/guanjing-scene) - [web click this](https://guanjingscene.xyz/)
-- [Interlude](https://github.com/YAVSRG/YAVSRG)
-- [Etterna](https://github.com/etternagame/etterna)
-- [tosu](https://tosu.app/)
-- [osu](https://github.com/ppy/osu)
+## License
 
-Special Thanks To:
-
-- [Sunnyxxy](https://github.com/sunnyxxy/): Sunny Rework
-- [Leo_Black](https://github.com/LeoBlackMT): osumania_map_analyser, benchmark
-- [wds0](https://osu.ppy.sh/users/8771622): wds0 dan & wds0 docs
-- [Guanjing](https://github.com/guanjing1462-creator) & [AquaStone](https://github.com/AquaStoneLZS): Guanjing Scene, wds0 implement reference
-  - `wds0-like` anchor-algorithm JS (`src/custom/wdsMarker.ts`) source from its [`spike.js`](https://github.com/guanjing1462-creator/guanjing-scene/blob/main/frontend/shared/analysis/spike.js), greatly modified in algorithm
-- [WlLK](https://osu.ppy.sh/users/24038353): plugin test and feedback.
+This repository ships no license file. Treat the code as all-rights-reserved and contact the author before reuse.
