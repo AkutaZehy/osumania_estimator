@@ -166,7 +166,7 @@
 
 | English（abbr.） | English（full name） | 中文译法 | 算法定义 | 注释 |
 |---|---|---|---|---|
-| Stamina | Jack Stamina | 叠耐力 | `{最长段秒}s ({段内音符}[, Broken]) / {全段合计秒}s ({合计音符})`<br>最长段允许半小节间隔无条件合并，时长与音符累积、间隔不计 | Broken = 单段 <10s 合并后越过 10s 的标记；改显示格式须同步 `danClassEcho.ts` |
+| Stamina | Jack Stamina | 叠耐力 | `{最长段秒}s ({段内音符}[, Broken]) / {全段合计秒}s ({合计音符})`<br>最长段允许半小节间隔无条件合并，时长与音符累积、间隔不计 | Broken = 单段 <10s 合并后越过 10s 的标记；改显示格式须同步 `src/ui/display.ts` |
 
 ### Imbal 4c/16c
 
