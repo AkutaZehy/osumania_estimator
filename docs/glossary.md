@@ -6,20 +6,42 @@
 
 在写 README、面板文案、文档、commit 涉及术语前，先读本表对齐译法与口径。
 
+语言约定：本表是仓库里唯一允许中文的文件。README、docs/ALGORITHM.md、CHANGELOG 与代码注释一律英文；中文叫法只在本表出现。
+
 算法定义来源：`src/custom/*.ts` 当前实现；与测试表的口径差异在注释中标明。
 
 部分主流译法参见：[vsrg-en-to-zh common.md](https://github.com/inuiyumegan/vsrg-en-to-zh-localization-reference/blob/main/common.md) 
 
 ---
 
-## 键型表（BPM / DENSITY 上方主显示区）
+## 体系名词（英文名 + 代码名）
+
+中文叫法只在本表出现。英文文档（README / ALGORITHM / CHANGELOG / 代码注释）一律用下表 English 列；代码标识符可保留下表 Code 列的历史名字，不再重命名。
+
+| 中文 | English | Code | 说明 |
+|---|---|---|---|
+| 大勿段 / 勿段 | wds0 Dan | `computeWdsMarker` | wds0 的作品体系；wds0 为人名，保持首字母小写 |
+| 切 | stream | — | 切系 = stream family |
+| 连4 / 连 4 | bullet-4 | `findLian4` | 同列 4 连序列；代码名保留拼音 |
+| x连 | x-bullet | 链长字段 | 同列连续链接的长度，如 4 连 = bullet-4 |
+| 间隔0 … 间隔4+ | interval(0) … interval(4+) | `bucket[0..4]` | interval(4+) 是开区间（gap ≥ 4） |
+| 非整数 | off-grid | `bucket[5]` | 不在任何合格 cadence 网格上的间隔 |
+| 分度 | subdivision | `sf16` / `sh16` | 英文举例直接写音符值（8th / dotted 8th / quarter） |
+| 键型 / 主键型 / 键型条 | pattern / dominant pattern / pattern bars | `keyType` / `bpmKeyTypes` | 代码标识符保留 keyType |
+| 叠切切换频率 | jack/stream switch frequency | `gridSwitch` | |
+
+---
+
+## 键型表 / Pattern table（BPM / DENSITY 上方主显示区）
+
+英文名：键型 = pattern，主键型 = dominant pattern，键型条 = pattern bars。
 
 顶行显示 `{BPM} {主键型}`：
 1. 主键型取 bpmKeyTypes 聚合后的主导非 LN 键型；
 2. 面占比 ≥15% 时可被 LN Pool 全名覆盖；
 3. Vibro 判定时整行替换为 `Vibro`。
 
-下方键型条列出各键型占比与其等效 BPM（最多 8 条，缩写 CJ / JS / HS）。
+下方键型条（pattern bars）列出各键型占比与其等效 BPM（最多 8 条）。缩写规则：Chordjack→CJ、Jumpstream→JS、Handstream→HS；Minijack 与 Single Stream 保持全称。
 
 键型判定流程：
 1. 谱面按拍切格（cell）；
@@ -91,7 +113,7 @@
 
 | English（abbr.） | English（full name） | 中文译法 | 算法定义 | 注释 |
 |---|---|---|---|---|
-| Vibro | Vibro | 秒杀 / vibro | 连 4 序列检测 + canVibro 速率按 S/H/F/C 分型，verdict = vibro 时顶行替换为 `Vibro` | 详细标签见 JACK 面板 Vibro 行 |
+| Vibro | Vibro | 秒杀 / vibro | bullet-4 序列检测 + canVibro 速率按 S/H/F/C 分型，verdict = vibro 时顶行替换为 `Vibro` | 代码名 `findLian4`；详细标签见 JACK 面板 Vibro 行 |
 
 ### 顶部其余字段
 
@@ -147,9 +169,9 @@
 
 **叠分类**：`{eff} {类型}`
 
-- 连 = 相邻行共享同列
+- 连（link）= 相邻行共享同列
 - 簇 = 间隔 ±15% 贪心（主导簇 + 份额 ≥10% 且 eff≥60 的次簇）
-- 链 = 同列 x 连
+- 链 = 同列 x-bullet（连续链接长度）
 - streak = 主导 cadence 上的连续叠行流（容忍单次非叠转换）
 
 经由 47 图标定，按照分类法，使用下述 5 种术语。
@@ -180,7 +202,7 @@
 |---|---|---|---|---|
 | Gluts | Gluts | 搯键 | hand 规则（三押 ≥20%）触发的 `-W` 后缀形态 | MR-Jack-W 即最标准的 Gluts；在本仓库中泛指手感接近 2-2-2-2 的标准耐叠 |
 
-**大勿段式标记（叠）**：`XY-Jack[-W]`
+**wds0 Dan marker — Jack（大勿段式标记，叠）**：`XY-Jack[-W]`
 - X = 叠池 P90 密度位（键/s）：S<8 / M<10 / L<12 / H≥12
 - Y = manip 位 F/R/P
   - delta = 链式锚值 
@@ -199,7 +221,7 @@
 
 ### Vibro
 
-**Vibro 判定**：同列 4+ 连击序列（连 4）检测
+**Vibro 判定**：同列 4+ 连续音符序列（bullet-4）检测，代码名 `findLian4`
 
 - canVibro = 同手邻列在该序列格点上成对补位（pattern 校验，权值 = valid/total）
 
@@ -207,8 +229,8 @@
 
 | English（abbr.） | English（full name） | 中文译法 | 算法定义 | 注释 |
 |---|---|---|---|---|
-| No Vibro | No Vibro | 不能 Vibro | 无连 4 | |
-| Vibro Suspicious | Vibro Suspicious | 可能能 Vibro | 有连 4 但不达标 | |
+| No Vibro | No Vibro | 不能 Vibro | 无 bullet-4 | |
+| Vibro Suspicious | Vibro Suspicious | 可能能 Vibro | 有 bullet-4 但不达标 | |
 | Vibro | Vibro | 能 Vibro | canVibro 加权率 >35% 且 BPM ≥150 且至少一类达标 | `Vibro(rate%) B x.xs/C x.xs`<br> | 判定成立时顶行同步替换 |
 
 具体分为 S/H/F/C 四类，它们仅参与 Vibro 判定计算，不显示。
@@ -220,11 +242,11 @@
 | F | Full | 满 Vibro | n≥10 且率>50% | 四列上全是键的 Vibro（满锚）|
 | C | Common | 其他常见 Vibro | n≥5 且率>70% | 其余 Vibro，如三列上是键的 Vibro、并不分在同一只手上的 Vibro 等|
 
-具有两个计算指标，显示 `B x.xs/C x.xs` = 两类连 4 各自覆盖的总时长，仅 verdict=vibro 时显示：
+具有两个计算指标，显示 `B x.xs/C x.xs` = 两类 bullet-4 各自覆盖的总时长，仅 verdict=vibro 时显示：
 
 | English（abbr.） | English（full name） | 中文译法 | 算法定义 | 注释 |
 |---|---|---|---|---|
-| B(VB) | Vibro Burst (Time) | 爆发 | B（爆发）= 纯单列连 4，或他列与主列同格对齐（步长偏移 <15% / >85% 占优） | 整齐的 Vibro（V 速） |
+| B(VB) | Vibro Burst (Time) | 爆发 | B（爆发）= 纯单列 bullet-4，或他列与主列同格对齐（步长偏移 <15% / >85% 占优） | 整齐的 Vibro（V 速） |
 | C(VC) | Vibro Control (Time) | 控制 | C（控制）= 他列错位补在半步附近（步长偏移 35–65% 占优） | 歪的 Vibro（打准） |
 
 ## STREAM 面板
@@ -245,7 +267,7 @@
 **Stream Class（切分类）**：`{eff} {档} {JS\|HS\|SS}[, Jacky][, Technical]`
 - eff：等效 BPM（4 分度）
 - 密度前缀
-  - 间隔桶（k−1，k=dt/C 且链完整）：0=同列相邻（叠混入）、1=2C、2=3C、3=4C、4+=更宽、5=非整数间隔
+  - interval 桶（k−1，k=dt/C 且链完整）：interval(0)=同列相邻（叠混入）、interval(1)=2C（8 分音符）、interval(2)=3C（附点 8 分）、interval(3)=4C（4 分音符）、interval(4+)=更宽（gap ≥ 4，开区间）、off-grid=不在任何合格 cadence 网格上（bucket 5，即 Technical 标签的 p5）
   - p1≥50 Full
   - 45≤p1<50 且 p1+p2>80 Dense
   - 15≤p1<30 Broken
@@ -283,25 +305,34 @@
 |---|---|---|---|---|
 | manip | manipulation | 糊键 | 通过锚值定义可糊度 | |
 
-**大勿段式标记（切）**：`XY-Stream`
+**wds0 Dan marker — Stream（大勿段式标记，切）**：`XY-Stream`
 - X = Stream 池 P90 密度位（键/s）：B<4.75（碎）/ S<6 / M<7 / L<7.5 / H≥7.5
 - Y = manip 位：链式锚值 A 直套 PDF 阈值：F≥1.11 / 1.11>R≥1.10 / P<1.10
 
 主 stream 图切池=全部节。
 
-**大勿段式标记（乱）**：`XY-Speed[-T\|-W]`
+**wds0 Dan marker — Speed（大勿段式标记，乱）**：`XY-Speed[-T\|-W]`
 - X = Stream 段 P50×2：S<8+1/256 / M<8.5 / L<9.5 / ≥9.5 → O（此时 F/R/P 不显示）
 - Y = manip 位：Stream 段每节弹对计数档 F≤1/16 / 1/16<R≤1 / 1<P≤3 / P>3
 - 旗标后置
   - T=麻花（子弹密度>3）
   - W=构造（子弹密度≤1/16 且 A<1.115）
 
-### Sta L/R / Sta Alt
+### Sta L/R / Sta DH
+
+英文名：SH = `Anchor Stamina — Single Hand`，DH = `Anchor Stamina — Dual Hand`。英文名不含 stream，原因见下方口径说明。
 
 | English（abbr.） | English（full name） | 中文译法 | 算法定义 | 注释 |
 |---|---|---|---|---|
 | Sta L/R | Anchor Stamina — Single Hand | 锚切耐力（左/右手） | SH：左/右手各自 1/16 分度位置序列的锚段检测，显示 `P100 / P90=v×n / P50=v×n` | 值单位 = 小节 |
-| Sta Alt | Anchor Stamina — Altering | 双手切耐力 | DH：交替/配对指位的锚段检测，同上格式 | 桥接容差：gap=1 恒续、gap=2 需后续 4 连、gap≥3 断<br>P100 用容差，P90/P50 严格 |
+| Sta DH | Anchor Stamina — Dual Hand | 双手切耐力 | DH：四组跨手列对（0+2 / 1+3 / 1+2 / 0+3）各自的位置序列，同上格式 | 桥接容差：gap=1 恒续、gap=2 需后续 4 个连续位置、gap≥3 断<br>P100 用容差，P90/P50 严格 |
+
+口径说明：
+- 输入是全部音符起始时间 + LN 结束时间，不经 jack/stream 过滤，叠键混入不打断；
+- SH 只要求该手每个 16 分格有击键（手内双押只推进一格）；DH 只要求该对任一列有击键；
+- 因此它测的是“持续击键段”，不是切键持续段，也不是长按时长（LN 中段不进格点）；
+- 分辨率随主导键型变化：叠类图 SH/DH 用 2× BPM，其余用原 BPM；
+- SF（单指档）只计算不显示，供标定。
 
 ---
 
@@ -326,7 +357,7 @@
 | Med | Median Density Stretch | 中位密度段 | 中位 4 行密度及最长维持时长 | |
 | Med tot | Total Time Above Median | 中位以上总时长 | 密度高于中位段的累计时长（秒） | |
 | Ratio | Median Ratio | 主难覆盖率 | 中位以上时长 ÷ 全图时长 | |
-| Switch | Switch Frequency | 叠切切换频率 | 16 拍窗（4K 下即 64 行）内 jack↔stream 翻转峰值；grid 分析可用时附档位标签 Steady / Mixed / Rhythmic / Intense | 10+ 饱和；0 侧 = 纯流/trill |
+| Switch | Switch Frequency | 叠切切换频率 | 16 拍窗（4K 下即 64 行）内 jack↔stream 翻转峰值；grid 分析可用时附档位标签 Steady / Mixed / Rhythmic / Intense | 无饱和：gridSwitch 为 16 拍窗内翻转数（无上限），回退的 switchFrequency 为 16 行窗内翻转数（上限 15）；0 侧 = 纯流/trill |
 
 ---
 
