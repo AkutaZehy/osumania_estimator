@@ -2,6 +2,8 @@
 
 How the numbers behind the overlay are produced. Every formula, threshold and unit below is stated together with the source location it comes from (`file:line`). Terminology and translations live in [glossary.md](glossary.md); the panel field names and display formats are listed in the [README metric index](../README.md#metric-index).
 
+Line references were refreshed in the change that translated the source comments (commit `902b6b4`). They are pointers, not contracts: translating a comment block or adding a line above them shifts every number that follows.
+
 ## Pipeline
 
 `src/integration/analyzer.ts` orchestrates the stages, in this order:
@@ -12,7 +14,7 @@ How the numbers behind the overlay are produced. Every formula, threshold and un
 | Sunny | `analyzer.ts:348` | `src/algorithm/sunnyRework.ts` — 6 bar components (Jbar, Xbar, Pbar, Abar, Rbar, C/Ks, `sunnyRework.ts:21`), weighted percentile aggregation |
 | chart / primitives | `analyzer.ts:369` | one `createChart` + `calculatePrimitives` pair, shared by the pattern and custom stages |
 | patterns | `analyzer.ts:376-382` | `src/patterns/*`: 6 core patterns (`patternsDef.ts:31-38`) + 20 4K-specific ones (`patternsDef.ts:851-900`); rating multipliers in `src/patterns/config.ts:41-48` |
-| grid | `analyzer.ts:390` | `src/custom/gridAnalysis.ts` — beat grid, key type, switch metric, vibro label |
+| grid | `analyzer.ts:390` | `src/custom/gridAnalysis.ts` — beat grid, dominant pattern, switch metric, vibro label |
 | custom | `analyzer.ts:401` | `src/custom/customMetrics.ts` — density, jack, stream, tech, stamina, anchor, LN pools, wds markers |
 | aggregate | `analyzer.ts:412` | `src/integration/difficultyAggregator.ts` — Sunny + custom → final star |
 | sections | `analyzer.ts:417` | `src/custom/sectionAnalysis.ts` — segment bar / in-game bar |
@@ -21,7 +23,7 @@ Module ownership:
 
 | Module | Owns |
 | --- | --- |
-| `src/custom/gridAnalysis.ts` | beat grid, cell classification, key type tiers, main key type, switch metric, per-cell timing |
+| `src/custom/gridAnalysis.ts` | beat grid, cell classification, pattern tiers, dominant pattern, switch metric, per-cell timing |
 | `src/custom/lnAnalysis.ts` | LN metrics, LN pool scores, release difficulty |
 | `src/custom/jackAnalysis.ts` | finger/hand pressure, multi-scale hand imbalance, jack density grade |
 | `src/custom/streamAnalysis.ts` | stream imbalance, broken-stream detection |
@@ -29,7 +31,7 @@ Module ownership:
 | `src/custom/streamClass.ts` | stream class typing, 10 s / 30 s stamina peaks |
 | `src/custom/anchorAnalysis.ts` | SF / SH / DH anchor stamina tiers |
 | `src/custom/techAnalysis.ts` | grace detection, row-spacing CV, single-finger interval, KPS, rolls/trills |
-| `src/custom/vibroAnalysis.ts` | 连4 detection, SHFC classification, canVibro, verdict |
+| `src/custom/vibroAnalysis.ts` | bullet-4 detection, SHFC classification, canVibro, verdict |
 | `src/custom/wdsMarker.ts` | wds0-like marker computation |
 | `src/custom/density.ts` | sliding-window density (both hands, per hand, per column) |
 | `src/custom/sectionAnalysis.ts` | segment slicing, pattern analysis, LN subtypes, anomaly detection |
@@ -75,9 +77,9 @@ Descriptor (`gridAnalysis.ts:1923-1926`): **Steady** ≤15, **Mixed** ≤25, **R
 
 `src/custom/jackClass.ts`. Output: the JACK panel `Class` and `Stamina` rows.
 
-1. **Rows and links** — two *adjacent* rows (no row in between) sharing a column form a link (`jackClass.ts:43-57`, `jackClass.ts:59-69`); adjacency is what separates a jack from a same-column repeat across a 切 structure.
+1. **Rows and links** — two *adjacent* rows (no row in between) sharing a column form a link (`jackClass.ts:43-57`, `jackClass.ts:59-69`); adjacency is what separates a jack from a same-column repeat across a stream structure.
 2. **Cadence clusters** — link intervals are sorted and split greedily whenever the next interval exceeds 1.15× the running mean (`jackClass.ts:71-89`); clusters with fewer than 4 links are dropped (`jackClass.ts:88`). A link joins a cluster when it stays within ±18 % of the cluster centre (`jackClass.ts:27`, `jackClass.ts:95`). The dominant cluster plus secondaries holding ≥10 % of the links at effective BPM ≥60 are used (`jackClass.ts:38-39`, `jackClass.ts:166`); a cadence's effective BPM is `round(15000 / cadence_ms)` (`jackClass.ts:79`).
-3. **Chains** — maximal consecutive links per column give the x连 lengths (`jackClass.ts:92-118`); chords with intervening rows are excluded by construction.
+3. **Chains** — maximal consecutive links per column give the x-bullet lengths (`jackClass.ts:92-118`); chords with intervening rows are excluded by construction.
 4. **Streaks** — contiguous jack runs on a qualifying cadence, with a ±18 % interval tolerance and a tolerated single non-jack row transition (`jackClass.ts:27`, `jackClass.ts:119-151`).
 5. **Pooled statistics** — over all qualifying clusters (`jackClass.ts:211-230`):
    - `keys` = Σ chain lengths, `p3` = share of keys in 3+-run chains, `k5p` = share of keys in 5+-run chains, `avgKey` = Σx²nₓ / Σxnₓ,
@@ -97,28 +99,28 @@ Descriptor (`gridAnalysis.ts:1923-1926`): **Steady** ≤15, **Mixed** ≤25, **R
 
 `src/custom/streamClass.ts`. Output: the STREAM panel `Class` and `Stamina` rows.
 
-1. **Cadences** — row intervals are counted, then split greedily whenever the next interval exceeds 1.15× the running mean; clusters with fewer than 4 rows are dropped (`streamClass.ts:49-73`). The dominant cluster plus secondaries with ≥10 % share at effective BPM ≥60 are used (`streamClass.ts:30-31`, `streamClass.ts:88`); a cadence's effective BPM is `round(15000 / cadence_ms)` (`streamClass.ts:63`). Charts with fewer than 20 notes produce no class (`streamClass.ts:81`).
-2. **间隔 buckets** — per column, consecutive same-column hits spaced exactly k×C (±10 % tolerance, `streamClass.ts:27`) with every intervening beat occupied (`streamClass.ts:103-156`):
+1. **Cadences** — row intervals are counted, then split greedily whenever the next interval exceeds 1.15× the running mean; clusters with fewer than 4 rows are dropped (`streamClass.ts:50-74`). The dominant cluster plus secondaries with ≥10 % share at effective BPM ≥60 are used (`streamClass.ts:31-32`, `streamClass.ts:89`); a cadence's effective BPM is `round(15000 / cadence_ms)` (`streamClass.ts:64`). Charts with fewer than 20 notes produce no class (`streamClass.ts:82`).
+2. **Interval buckets** — per column, consecutive same-column hits spaced exactly k×C (±10 % tolerance, `streamClass.ts:28`) with every intervening beat occupied (`streamClass.ts:104-157`):
 
    | Bucket | Meaning |
    | --- | --- |
-   | 间隔0 | adjacent rows (jack content mixed in) |
-   | 间隔1 | 2C = 1/2 分度, two-column trill |
-   | 间隔2 | 3C = 3/4 分度, three-column cycle |
-   | 间隔3 | 4C = 1 分度 |
-   | 间隔4+ | wider gaps |
-   | 非整数 | off-grid ratios (dotted intervals, SV sections) |
+   | `interval(0)` | adjacent rows (jack content mixed in) |
+   | `interval(1)` | 2C = 8th note, two-column trill |
+   | `interval(2)` | 3C = dotted 8th, three-column cycle |
+   | `interval(3)` | 4C = quarter note |
+   | `interval(4+)` | wider gaps; open-ended (gap ≥ 4) |
+   | `off-grid` | dt on no qualifying cadence grid (±10 %, bucket 5; dotted intervals, SV sections) |
 
-3. **Tags** (`streamClass.ts:160-167`) — Jacky: 间隔0 >1 %; Full: 间隔1 ≥50 %; Dense: 45 ≤ 间隔1 < 50 and 间隔1+2 >80 %; Broken: 15 ≤ 间隔1 < 30 %; Singles: 间隔1 <15 %; Technical: 非整数 ≥15 %.
-4. **Row composition** on the dominant grid (`streamClass.ts:169-186`) — rows with ≥3 notes ≥5 % → `HS`, rows with ≥2 notes ≥10 % → `JS`, otherwise `SS`; the Singles tag forces `SS`.
-5. **Class string** (`streamClass.ts:187-193`) — `{eff} {Full|Dense|Broken|Mid} (JS|HS|SS)[, Jacky][, Technical]`; `Full` + `SS` is displayed as `Running Man` (`streamClass.ts:192`).
-6. **Stamina row** — maximum note count inside any sliding 10 s / 30 s window (`streamClass.ts:195-203`).
+3. **Tags** (`streamClass.ts:161-168`) — Jacky: `interval(0)` >1 %; Full: `interval(1)` ≥50 %; Dense: 45 ≤ `interval(1)` < 50 and `interval(1)`+`interval(2)` >80 %; Broken: 15 ≤ `interval(1)` < 30 %; Singles: `interval(1)` <15 %; Technical: `off-grid` ≥15 %.
+4. **Row composition** on the dominant grid (`streamClass.ts:170-187`) — rows with ≥3 notes ≥5 % → `HS`, rows with ≥2 notes ≥10 % → `JS`, otherwise `SS`; the Singles tag forces `SS`.
+5. **Class string** (`streamClass.ts:188-194`) — `{eff} {Full|Dense|Broken|Mid} (JS|HS|SS)[, Jacky][, Technical]`; `Full` + `SS` is displayed as `Running Man` (`streamClass.ts:193`).
+6. **Stamina row** — maximum note count inside any sliding 10 s / 30 s window (`streamClass.ts:196-204`).
 
-## Key type system
+## Pattern system
 
-Grid tiers (`gridAnalysis.ts:556-559`):
+The top row shows `{BPM} {dominant pattern}`. Grid tiers (`gridAnalysis.ts:556-559`):
 
-| Grid notes | Key type |
+| Grid notes | Pattern |
 | --- | --- |
 | ≤5 | Minijack |
 | 6–7 | Low Chordjack |
@@ -129,13 +131,13 @@ Stream run classification by average notes per row (`gridAnalysis.ts:1374-1398`)
 
 Run-level density grade (`gridAnalysis.ts:1404-1418`): Single ≤1.125, Light ≤1.25, Mid ≤1.5, Dense <2.0, Full =2.0, Heavy >2.0 — displayed as `Mid (1.38)`.
 
-Main key type selection (`gridAnalysis.ts:1698-1806`):
+Dominant pattern selection (`gridAnalysis.ts:1698-1806`):
 
 - **Merge** — adjacent tiers only: Full→High→Mid→Low for both families, High→Mid→Low→Minijack for the jack family, plus the stream cascade (`gridAnalysis.ts:1706-1719`).
-- **Effective BPM** — jack types count double (`gridAnalysis.ts:1758-1760`).
+- **Effective BPM** — jack patterns count double (`gridAnalysis.ts:1758-1760`).
 - **Tier priority** — HS > JS > CJ inside one tier (`gridAnalysis.ts:1761-1768`).
-- **Adaptive N** — a candidate needs 30 merged cells when the raw BPM <150, 30 cells for non-jack types below 200 BPM, and 50 cells otherwise (`gridAnalysis.ts:1777-1781`). The first candidate in effective-BPM/tier order that meets N wins (`gridAnalysis.ts:1783`); without a candidate the fallback picks the highest-BPM group with the most cells (`gridAnalysis.ts:1786-1803`).
-- **Share** — the winner's percentage is relative to the non-LN cells (`gridAnalysis.ts:1804-1806`); LN key types never take the main slot (`gridAnalysis.ts:1720`).
+- **Adaptive N** — a candidate needs 30 merged cells when the raw BPM <150, 30 cells for non-jack patterns below 200 BPM, and 50 cells otherwise (`gridAnalysis.ts:1777-1781`). The first candidate in effective-BPM/tier order that meets N wins (`gridAnalysis.ts:1783`); without a candidate the fallback picks the highest-BPM group with the most cells (`gridAnalysis.ts:1786-1803`).
+- **Share** — the winner's percentage is relative to the non-LN cells (`gridAnalysis.ts:1804-1806`); LN patterns never take the main slot (`gridAnalysis.ts:1720`).
 
 ## SV maps (per-cell timing)
 
@@ -143,7 +145,13 @@ Charts with scroll velocity changes resolve their timing point per cell instead 
 
 ## Anchor / stamina analysis
 
-`src/custom/anchorAnalysis.ts` measures single-finger (SF), single-hand (SH) and dual-hand (DH) stamina on 16th-note positions.
+`src/custom/anchorAnalysis.ts` measures single-finger (SF), single-hand (SH) and dual-hand (DH) stamina over 16th-note positions. The panel shows SH as `Sta L/R` and DH as `Sta DH`; SF is computed for calibration and never displayed.
+
+Input is every note start plus every LN end, with no jack/stream filter, so stacked notes inside a hand neither break nor advance the chain twice: a chord row occupies one slot. The metric therefore measures a **continuous run of occupied 16th slots** — sustained presses, not alternating stream, and not the duration an LN is held (only its head and tail enter the grid).
+
+- **SH** merges left hand (columns 0+1) and right hand (columns 2+3) (`anchorAnalysis.ts:188-193`): the hand must hold a hit on every 16th slot.
+- **DH** merges four cross-hand column pairs — 0+2, 1+3, 1+2, 0+3 (`anchorAnalysis.ts:195-202`): the pair must hold a hit on every 16th slot. The centre pair (1+2) is the classic two-hand trill.
+- **SF** segments are per column (`anchorAnalysis.ts:183-186`).
 
 | Tier | Rule | Meaning |
 | --- | --- | --- |
@@ -151,23 +159,20 @@ Charts with scroll velocity changes resolve their timing point per cell instead 
 | P90 | strict, consecutive only (`anchorAnalysis.ts:68-95`) | 90th percentile segment length |
 | P50 | strict, consecutive only | median segment length |
 
-- **SF** segments are per column (`anchorAnalysis.ts:183-186`).
-- **SH** merges left hand (columns 0+1) and right hand (columns 2+3) (`anchorAnalysis.ts:188-193`).
-- **DH** merges four paired column combinations: 0+2, 1+3, 1+2, 0+3 (`anchorAnalysis.ts:195-202`).
-- **BPM scaling** (`anchorAnalysis.ts:175-178`) — jack-type charts use base BPM for SF and 2× base for SH/DH; stream-type charts halve the SF BPM and use base for SH/DH.
+- **BPM scaling** (`anchorAnalysis.ts:175-178`) — jack-type charts use base BPM for SF and 2× base for SH/DH; stream-type charts halve the SF BPM and use base for SH/DH. A chart's SH/DH values therefore depend on its dominant pattern.
 - Values are measures; the panel shows `P100 / P90=v×n / P50=v×n`, with `—` where no segment qualifies (`display.ts:163-169`).
 
 ## Vibro detection
 
 `src/custom/vibroAnalysis.ts`.
 
-1. **连4 detection** — same-column sequences of 4+ notes with a gap tolerance of `beatMs / 4 + 10` ms and trill awareness (`vibroAnalysis.ts:172-227`, called at `vibroAnalysis.ts:42`).
+1. **bullet-4 detection** — same-column sequences of 4+ notes with a gap tolerance of `beatMs / 4 + 10` ms and trill awareness (`vibroAnalysis.ts:172-227`, called at `vibroAnalysis.ts:42`). The code keeps the name `findLian4`.
 2. **SHFC classification** — per sequence, the column occupancy density `d` over the sequence grid decides the type (`vibroAnalysis.ts:77-85`): F when ≥4 columns reach 0.6, S when one column is dense and ≥3 columns stay ≤0.3, H when one hand pair is dense and the other is not, C otherwise.
 3. **canVibro** — the same-hand neighbour column has to fill every other position of the sequence; the weight is `valid / total` (`vibroAnalysis.ts:87-99`).
 4. **Verdict** (`vibroAnalysis.ts:113-125`) — `vibro` when the weighted canVibro rate >35 % at ≥150 BPM and at least one type qualifies: H with ≥5 sequences at >60 %, F with ≥10 at >50 %, C with ≥5 at >70 %, S with ≥5 at >50 %.
 5. **Burst vs control** (`vibroAnalysis.ts:101-110`) — other-column offsets aligned to the sequence grid (<15 % or >85 % of the step) count as burst, offsets in the 35–65 % band as control; the panel shows the covered time of each.
 
-The JACK panel shows the verdict and timing (`display.ts:368`); a `vibro` verdict replaces the key type in the top row (`display.ts:234-236`).
+The JACK panel shows the verdict and timing (`display.ts:368`); a `vibro` verdict replaces the dominant pattern in the top row (`display.ts:234-236`).
 
 ## Grace detection
 
@@ -197,7 +202,7 @@ Related tech metrics:
 
 Components: `ov` overlapping LN pairs (`lnAnalysis.ts:188`), `i` inverse LNs (`lnAnalysis.ts:183`), `c` LNs with ≥2 hits in the neighbouring column during their body (`lnAnalysis.ts:169-182`), `ch` multi-note LN heads (`lnAnalysis.ts:184`), `wj`/`ws` wc-jack and wc-speed head textures (`lnAnalysis.ts:185-186`), `tp` tap LNs (`lnAnalysis.ts:187`), `s` shields (`lnAnalysis.ts:168`), `rel` LNs in a staggered release group (`lnAnalysis.ts:195-205`), `r` async release pairs (`lnAnalysis.ts:206`).
 
-The top row replaces the key type with the dominant pool name when the chart's LN ratio is ≥15 % and the winning pool scores at least 15 points (`display.ts:69`, `display.ts:72-84`, `display.ts:238`). The scores express relative probability between the pools, not difficulty.
+The top row replaces the dominant pattern with the winning pool name when the chart's LN ratio is ≥15 % and the winning pool scores at least 15 points (`display.ts:69`, `display.ts:72-84`, `display.ts:238`). The scores express relative probability between the pools, not difficulty.
 
 ## Hand bias
 
@@ -210,7 +215,7 @@ The top row replaces the key type with the dominant pool name when the chart's L
 
 `src/tosu/mods.ts`, applied in `src/index.ts:135-145`.
 
-- **Speed** — the tosu `rate` field wins, then lazer `speed_change`, then the mod codes (DT/NC = 1.5, HT/DC = 0.75) (`mods.ts:185-191`). Time-based metrics scale with the speed rate; the pattern and key-type stage runs on the speed-scaled beat length, so the displayed BPM is the effective one.
+- **Speed** — the tosu `rate` field wins, then lazer `speed_change`, then the mod codes (DT/NC = 1.5, HT/DC = 0.75) (`mods.ts:185-191`). Time-based metrics scale with the speed rate; the pattern stage runs on the speed-scaled beat length, so the displayed BPM is the effective one.
 - **OD** — HR and EZ are detected as `odFlag` (`mods.ts:192-195`).
 - **Conversion** — IN takes precedence over HO (`mods.ts:197-200`); the parser is re-run on the converted chart so every stage sees it (`analyzer.ts:271-284`).
 - **Signature** — `speedRate | odFlag | cvtFlag` (`mods.ts:210`); any change re-triggers the analysis (`index.ts:70`).
@@ -227,4 +232,12 @@ The top row replaces the key type with the dominant pool name when the chart's L
 
 ## wds0-like markers
 
-`src/custom/wdsMarker.ts` computes the `XY-Jack` / `XY-Stream` / `XY-Speed` markers shown in the JACK and STREAM panels: rows are built from the chart (`wdsMarker.ts:33-43`), the dominant cadence is measured (`wdsMarker.ts:46-61`), and the chart is split into sections for the density/manip letters (`wdsMarker.ts:63-73`, `wdsMarker.ts:100`). The letter vocabulary, the density bands and the manip thresholds are defined in the [glossary](glossary.md#wds0-like).
+`src/custom/wdsMarker.ts` computes the `XY-Jack` / `XY-Stream` / `XY-Speed` markers shown in the JACK and STREAM panels, following the **wds0 Dan** system by chart author wds0 (see the [glossary](glossary.md#wds0-like) for the bilingual term table): rows are built from the chart (`wdsMarker.ts:42-52`), the dominant cadence is measured (`wdsMarker.ts:55-70`), and the chart is split into sections for the density/manip letters (`wdsMarker.ts:72-82`, `wdsMarker.ts:109`).
+
+| Axis | Marker | Density letter | Manip letter |
+| --- | --- | --- | --- |
+| Jack | `XY-Jack[-W]` | jack-pool P90: S <8 / M <10 / L <12 / H ≥12 | chain-A delta against a spike-min baseline: F <0.005 / R in between / P >0.01 (A >1.11 falls back to the A thresholds 1.10 / 1.09); 3+ note rows ≥20 % force R plus `-W` (Gluts) |
+| Stream | `XY-Stream` | stream-pool P90: B <4.75 / S <6 / M <7 / L <7.5 / H ≥7.5 | chain A against the PDF thresholds: F ≥1.11 / R ≥1.10 / P <1.10 |
+| Speed | `XY-Speed[-T\|-W]` | stream-section P50 ×2: S <8+1/256 / M <8.5 / L <9.5; ≥9.5 prefixes `O` and drops the F/R/P letter | per-section bullet count: F ≤1/16 / R ≤1 / P ≤3 / P >3; suffixes `T` (twist, >3) and `W` (constructed, ≤1/16 with A <1.115) |
+
+Chart family: lock1 ≥10 % marks a main-jack chart, whose jack pool is the whole chart; a main-stream chart uses the whole chart as its stream pool. Section-level extraction (same-column repeats ≤2C at ≥12 %) feeds the cross-family axes only.
