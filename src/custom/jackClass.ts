@@ -8,12 +8,12 @@
 //
 // Definition (per design sessions 2026-08):
 //   link    = two ADJACENT rows sharing a column (no row in between)
-//   cluster = greedy ±15% grouping of link intervals; dominant cluster
-//             + secondaries with ≥10% share and eff≥60 (过渡段规则)
-//   chain   = maximal consecutive links on one column → x连
+//   cluster = greedy +/-15% grouping of link intervals; dominant cluster
+//             + secondaries with >=10% share and eff>=60 (transition rule)
+//   chain   = maximal consecutive links on one column -> x-bullet
 //   streak  = continuous jack-row flow; tolerates a single non-jack
 //             transition; broken by two consecutive non-jack rows, an
-//             empty row slot, or an off-grid (切键) row
+//             empty row slot, or an off-grid (switch) row
 // ============================================================
 
 import type { ParsedBeatmap } from "../types/beatmap.js";
@@ -36,7 +36,7 @@ const DENSITY_LOW = 8;          // chordjack density bands (key/s)
 const DENSITY_HIGH = 15;
 const ANCHOR_CONF_MIN = 70;     // anchor prefix threshold (product confidence)
 const SECONDARY_MIN_SHARE = 0.10;
-const SECONDARY_MIN_EFF = 60;   // 非主导簇须达到 jack 速度域
+const SECONDARY_MIN_EFF = 60;   // a non-dominant cluster must reach the jack speed range
 
 const clamp01 = (x: number) => Math.max(0, Math.min(1, x));
 
@@ -88,7 +88,7 @@ function clusterIntervals(links: Link[]): Cluster[] {
   return out.filter((c) => c.count >= 4);
 }
 
-/** Maximal same-column chains (x连) at a cadence. */
+/** Maximal same-column chains (x-bullet) at a cadence. */
 function chainsAt(links: Link[], center: number): Array<{ startRow: number; len: number }> {
   const perCol = new Map<number, number[]>();
   for (const l of links) {
@@ -114,7 +114,7 @@ function chainsAt(links: Link[], center: number): Array<{ startRow: number; len:
  * Jack-row streaks at a cadence: adjacent rows spaced ≈C, jack when rows
  * share a column. A single non-jack transition is tolerated (resolved by
  * the next jack); broken by two consecutive non-jack rows, an empty row
- * slot (dt≈2C), or an off-grid row (切键).
+ * slot (dt≈2C), or an off-grid row (switch).
  */
 function jackStreaks(rows: Row[], C: number, tol = TOL): Streak[] {
   const streaks: Streak[] = [];

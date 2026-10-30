@@ -1,28 +1,37 @@
 // ============================================================
-// WDS0-like marker — 大勿段式三轴标记（叠 Jack / 切 Stream / 乱 Speed）
-// 口径与 test/wdsGuideContrast.test.ts 一致（用户 2026-10-06 定稿）：
-//   锚值 = 手册 4.1.2.1 链式生长（t 网格 L/16..L/1024、步 {t/16,t/8,t/4}、调和权重 ΣC=-0.06），
-//          另算 spike-min（站方滑窗 min-A）作 delta 基准。
-//   图级 family：锁1≥10% = 主 jack。主 jack 图叠池=全部节；主 stream 图切池=全部节；
-//   节级抽取（同列≤2C 重复对 ≥12% = 叠段）仅用于跨族轴。
-//   叠：密度 = 叠池 P90 对照 S<8/M[8,10)/L[10,12)/H≥12；糊度 = delta=链式A−spike-min
-//       （<0.005 F / >0.01 P / 其余 R）；hand（三押≥20% 行，分母=全部行）= Gluts → R + -W
-//   切：密度 = Stream 池 P90 对照 B<4.75（碎）/S[4.75,6)/M[6,7)/L[7,7.5)/H≥7.5；
-//       糊度 = 链式A 直套 PDF 阈值（F≥1.11/R[1.1,1.11)/P<1.1）
-//   乱：密度 = Stream 段 P50 ×2 对照 S<8+1/256/M<8.5/L<9.5，≥9.5 → 前缀 O（FRP 不显示）；
-//       糊度 = Stream 段每节弹对计数档（≤1/16 F / (1/16,1] R / (1,3] P / >3 P）；
-//       旗标 T（麻花：计数>3）/ W（构造：≤1/16 且 A<1.115）后置
-//   Stream 段 = 非叠段且节内行距中位数 ∈ [0.85,1.15]×C（半速叠段、倍速单点段均不入池）
+// wds0-like marker — the three-axis wds0 Dan marker (jack / stream / speed)
+// Calibration matches test/wdsGuideContrast.test.ts (fixed 2026-10-06):
+//   anchor = guide 4.1.2.1 chain growth (t grid L/16..L/1024, steps {t/16,t/8,t/4},
+//            harmonic weight sum C=-0.06), plus a spike-min anchor (the site's
+//            sliding min-A) used as the delta baseline.
+//   chart family: lock1 >= 10% = main jack. Main-jack charts use the whole chart as
+//   the jack pool, main-stream charts use the whole chart as the stream pool;
+//   section extraction (same-column repeats <= 2C at >= 12% = jack section) feeds
+//   the cross-family axes only.
+//   Jack: density = jack pool P90 against S<8 / M[8,10) / L[10,12) / H>=12;
+//         manip = delta = chain A - spike-min
+//         (<0.005 F / >0.01 P / the rest R); hand rule (3+ rows >= 20% of all rows)
+//         = Gluts -> R + the -W suffix
+//   Stream: density = stream pool P90 against B<4.75 (broken) / S[4.75,6) / M[6,7)
+//           / L[7,7.5) / H>=7.5; manip = chain A against the PDF thresholds
+//           (F>=1.11 / R[1.1,1.11) / P<1.1)
+//   Speed: density = stream-section P50 x2 against S<8+1/256 / M<8.5 / L<9.5;
+//          >= 9.5 gets the O prefix and no F/R/P letter; manip = per-section bullet
+//          count band (<=1/16 F / (1/16,1] R / (1,3] P / >3 P); suffixes
+//          T (twist: count > 3) and W (constructed: <= 1/16 and A < 1.115)
+//   Stream section = a non-jack section whose median row spacing lies in
+//   [0.85,1.15] x C (half-speed jack sections and double-speed single-note
+//   sections never enter a pool)
 // ============================================================
 
 import type { ParsedBeatmap } from "../types/beatmap.js";
 
 export interface WdsMarker {
-  /** "MR-Jack-W" 样式；"—" = 无法计算 */
+  /** "MR-Jack-W" form; "—" = not computable */
   jack: string;
-  /** "MR-Stream" 样式 */
+  /** "MR-Stream" form */
   stream: string;
-  /** "SR-Speed" / "O-Speed-W" 样式 */
+  /** "SR-Speed" / "O-Speed-W" form */
   speed: string;
 }
 
@@ -42,7 +51,7 @@ function buildRows(parsed: ParsedBeatmap): Row[] {
   return [...byT].sort((x, y) => x[0] - y[0]).map(([t, a]) => ({ t, a, n: a.filter(Boolean).length }));
 }
 
-/** 主导行 cadence：±15% 贪心簇（count≥4 取最大簇中心） */
+/** Dominant row cadence: greedy +/-15% clusters, largest cluster with count>=4 */
 function dominantCadence(rows: Row[]): number | null {
   if (rows.length < 8) return null;
   const gaps: number[] = [];
@@ -72,7 +81,7 @@ function splitSegments(rows: Row[]): Array<[number, number]> {
   return segs;
 }
 
-/** 帐篷失衡 U = 1 − |max−2·min|/max（空手 0） */
+/** Tent imbalance U = 1 - |max-2*min|/max (0 for an empty hand) */
 function tent(max: number, min: number): number {
   return max === 0 ? 0 : 1 - Math.abs(max - 2 * min) / max;
 }
@@ -82,13 +91,13 @@ const streamBand = (d: number) => (d < 4.75 ? "B" : d < 6 ? "S" : d < 7 ? "M" : 
 const speedBand = (d: number) => (d < SPEED_S_LINE ? "S" : d < 8.5 ? "M" : d < 9.5 ? "L" : "—");
 const rawJackLetter = (a: number) => (a >= 1.1 ? "F" : a >= 1.09 ? "R" : "P");
 const streamLetter = (a: number) => (a >= 1.11 ? "F" : a >= 1.1 ? "R" : "P");
-/** 叠糊度：delta 线；hand（三押≥20%，分母=全部行）= Gluts → R + W 旗标 */
+/** Jack manip: delta line; hand rule (3+ rows >= 20% of all rows) = Gluts -> R plus the W flag */
 const jackManip = (a: number, delta: number | null, tri: number): [string, string] => {
   if (tri >= 0.2) return ["R", "W"];
   if (a > 1.11 || delta == null) return [rawJackLetter(a), ""];
   return [delta < 0.005 ? "F" : delta > 0.01 ? "P" : "R", ""];
 };
-/** 乱糊度：Stream 段每节弹对计数档 + T/W 旗标 */
+/** Speed manip: per-section bullet-count band plus the T/W flags */
 const speedManip = (a: number, bullet: number): [string, string] => {
   let flag = "";
   if (bullet > 3) flag = "T";
@@ -106,7 +115,7 @@ export function computeWdsMarker(parsed: ParsedBeatmap): WdsMarker {
   const segs = splitSegments(rows);
   if (!segs.length) return empty;
 
-  // 音符时间/列前缀计数（绝对时间）
+  // Note times and column prefix counts (absolute time)
   const times: number[] = [], cols: number[] = [];
   for (const [ss, ee] of segs) {
     for (const r of rows) {
@@ -123,7 +132,7 @@ export function computeWdsMarker(parsed: ParsedBeatmap): WdsMarker {
     pc[ci]![i + 1] = pc[ci]![i + 1]! + 1;
   }
 
-  // 链式锚值 A（手册 4.1.2.1）+ spike-min 锚值（delta 基准）
+  // Chain anchor A (guide 4.1.2.1) plus the spike-min anchor (delta baseline)
   let chainA = Infinity;
   {
     let wSumU = 0, wSum = 0;
@@ -185,7 +194,7 @@ export function computeWdsMarker(parsed: ParsedBeatmap): WdsMarker {
   if (!Number.isFinite(chainA)) return empty;
   const delta = Number.isFinite(aSpike) ? chainA - aSpike : null;
 
-  // 分节：密度、叠/Stream 段分类、弹对
+  // Sections: density, jack/stream section typing, bullet pairs
   const sectionMs = 64 * C;
   const means: number[] = [], jackMeans: number[] = [], streamMeans: number[] = [], streamBullets: number[] = [];
   for (const [ss, ee] of segs) {
@@ -228,7 +237,7 @@ export function computeWdsMarker(parsed: ParsedBeatmap): WdsMarker {
   const sb = [...streamBullets].sort((a, b) => a - b);
   const bP50 = sb.length ? sb[Math.floor(sb.length / 2)]! : 0;
 
-  // 图级 family：锁1≥10% = 主 jack
+  // Chart family: lock1 >= 10% = main jack
   let k1 = 0, kTot = 0;
   for (let col = 0; col < 4; col++) {
     const ts = rows.filter((r) => r.a[col]).map((r) => r.t);
@@ -241,11 +250,11 @@ export function computeWdsMarker(parsed: ParsedBeatmap): WdsMarker {
   }
   const isJackChart = kTot > 0 && k1 / kTot >= 0.1;
 
-  // 池路由：主 jack 图叠池=全部节；主 stream 图切池=全部节（与测试表一致）
+  // Pool routing: main-jack charts use every section as the jack pool, main-stream charts every section as the stream pool (matches the test tables)
   const jackPool = isJackChart ? means : jackMeans;
   const streamPool = isJackChart ? streamMeans : means;
 
-  // 三押行占比（分母=全部行）
+  // Share of 3+ note rows (denominator: all rows)
   let nRowsAll = 0, nRows3 = 0;
   for (const r of rows) {
     if (r.n >= 1) nRowsAll++;
@@ -257,7 +266,7 @@ export function computeWdsMarker(parsed: ParsedBeatmap): WdsMarker {
   const [jL, jFlag] = jackManip(chainA, delta, tri);
   const sD = streamBand(q(streamPool, means, 0.9));
   const sL = streamLetter(chainA);
-  const pRaw = p50Stream * 2; // 乱池恒为 Stream 段（跨族轴）
+  const pRaw = p50Stream * 2; // the speed pool is always the stream sections (cross-family axis)
   const pOut = pRaw >= 9.5;
   const pD = pOut ? "O" : speedBand(pRaw);
   const [pL, pFlag] = speedManip(chainA, bP50);

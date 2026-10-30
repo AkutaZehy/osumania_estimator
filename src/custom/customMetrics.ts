@@ -95,10 +95,10 @@ export function computeCustomMetrics(
   // Jack class (type label) + burst/sum stamina.
   const jackClass = computeJackClass(parsed, speedRate);
 
-  // 切 class label + stream stamina peaks.
+  // Stream class label + stream stamina peaks.
   const streamClass = computeStreamClass(parsed, speedRate);
 
-  // WDS0-like 三轴标记（密度-糊度-词）。
+  // wds0-like three-axis marker (density-manip-word).
   const wdsMarker = computeWdsMarker(parsed);
 
   return {

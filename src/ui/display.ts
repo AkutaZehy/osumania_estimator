@@ -179,14 +179,14 @@ const CAT_COLORS: Record<SegmentCategory, string> = {
 /** Sub-type color map for structure grid / segment table badges */
 const SUBTYPE_COLORS: Record<string, string> = {
   // Stream sub-types
-  single:   "#2980b9",  // 乱 — light blue
-  bulk:     "#2980b9",  // 乱 — light blue
+  single:   "#2980b9",  // stream — light blue
+  bulk:     "#2980b9",  // stream — light blue
   js:       "#1a5276",  // JumpStream — blue
   hs:       "#1a5276",  // HandStream — blue
   brokenjs: "#1f618d",  // BrokenJS — between
   // Jack sub-types
-  "cj-low":  "#d35400", // Low CJ — orange (易误判stream)
-  "cj-high": "#922b21", // High CJ — red (明显jack)
+  "cj-low":  "#d35400", // Low CJ — orange (often misread as stream)
+  "cj-high": "#922b21", // High CJ — red (clearly jack)
   minijack:  "#27ae60", // MiniJack — green (jacky tech)
 };
 
@@ -372,7 +372,7 @@ export function showResult(result: DifficultyResult): void {
   const streamImbal = `${s.imbalance4r.toFixed(2)}/${s.imbalance16r.toFixed(2)}${streamDir}`;
   const sc = custom.streamClass;
   // Row order aligned with the JACK panel: Grade, Class, Stamina, Imbal —
-  // stream-only rows (Brk2r, Sta L/R, Sta Alt) move to the back.
+  // stream-only rows (Brk2r, Sta L/R, Sta DH) move to the back.
   const streamItems = [
     mrow("Grade", aggregateGridGrade(ga, "stream") ?? s.densityGrade ?? "Unknown"),
     mrow("Class", sc.className),
@@ -381,7 +381,7 @@ export function showResult(result: DifficultyResult): void {
     mrow("wds0-like", custom.wdsMarker.stream),
     mrow("", custom.wdsMarker.speed),
     mrow("Sta L/R", anchorCellStr(custom.anchor.sh)),
-    mrow("Sta Alt", anchorCellStr(custom.anchor.dh)),
+    mrow("Sta DH", anchorCellStr(custom.anchor.dh)),
   ];
   r.push(col("STREAM", ...streamItems));
   r.push(`</div>`);

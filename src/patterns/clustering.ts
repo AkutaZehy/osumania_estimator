@@ -13,7 +13,7 @@ import { resolveRatingMultiplier } from "./patternsDef.js";
 // Valid note divisions
 // ============================================================
 
-/** Valid note divisions: 1 (4分), 2 (8分), 3 (12分), 4 (16分), 6 (24分), 8 (32分) */
+/** Valid note divisions: 1 (4th), 2 (8th), 3 (12th), 4 (16th), 6 (24th), 8 (32nd) */
 const VALID_DIVISIONS = [1, 2, 3, 4, 6, 8] as const;
 
 // ============================================================
@@ -48,14 +48,14 @@ function patternAmount(sortedStartsEnds: Array<[number, number]>): number {
 
 // Division bands (asymmetric — wider for 24th/32nd to catch timing variance, BPM 150-300)
 const DIVISION_BANDS: Array<[number, number, number]> = [
-  [0.75, 1.5, 1],   // 4分度
-  [1.5,  2.75, 2],   // 8分度
-  [2.75, 3.5, 3],   // 12分度
-  [3.5,  4.8, 4],   // 16分度 (standard)
-  [4.8,  7.0, 6],   // 24分度
-  [7.0,  9.5, 8],   // 32分度
+  [0.75, 1.5, 1],   // 4th
+  [1.5,  2.75, 2],   // 8th
+  [2.75, 3.5, 3],   // 12th
+  [3.5,  4.8, 4],   // 16th (standard)
+  [4.8,  7.0, 6],   // 24th
+  [7.0,  9.5, 8],   // 32nd
 ];
-const GRACE_THRESHOLD = 9.5;  // 48分度及以上 → grace
+const GRACE_THRESHOLD = 9.5;  // 48th and above -> grace
 
 /** Assign a raw division estimate to the nearest valid division using band-based lookup. */
 function nearestValidDivision(raw: number): number {

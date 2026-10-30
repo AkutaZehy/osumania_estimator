@@ -335,15 +335,15 @@ html, body {
 .c-break  { background: #2c2c2c; }
 
 /* Stream sub-type colors */
-.c-stream-single { background: #2980b9; }   /* 乱/Single/Bulk — light blue */
-.c-stream-bulk   { background: #2980b9; }   /* 乱/Single/Bulk — light blue */
+.c-stream-single { background: #2980b9; }   /* stream / Single / Bulk — light blue */
+.c-stream-bulk   { background: #2980b9; }   /* stream / Single / Bulk — light blue */
 .c-stream-js     { background: #1a5276; }   /* JumpStream — current blue */
 .c-stream-hs     { background: #1a5276; }   /* HandStream — current blue */
 .c-stream-brokenjs { background: #1f618d; } /* BrokenJS — between */
 
 /* Jack sub-type colors */
-.c-jack-cj-low   { background: #d35400; }  /* Low CJ — orange (易误判stream) */
-.c-jack-cj-high  { background: #922b21; }  /* High CJ — red (明显jack) */
+.c-jack-cj-low   { background: #d35400; }  /* Low CJ — orange (often misread as stream) */
+.c-jack-cj-high  { background: #922b21; }  /* High CJ — red (clearly jack) */
 .c-jack-minijack { background: #27ae60; }  /* MiniJack — green (jacky tech) */
 
 /* Anomaly dots */

@@ -441,7 +441,7 @@ function computeBeatStructure(
  * "Main jack passages" = jack cells at the dominant effective-BPM group,
  * selected the same way as mainKeyType (highest effBPM first, must pass the
  * cell-count threshold, else most-cells group). This excludes slower
- * jumpjack/双押 cells (e.g. subdiv-2 at low effBPM) whose both-hand chords
+ * jumpjack / 2-note cells (e.g. subdiv-2 at low effBPM) whose both-hand chords
  * would otherwise inflate the value beyond the real chordjack passages.
  *
  * Per segment: both-hand step ratio × 4 (0-4). Aggregation: cell-weighted
@@ -1393,8 +1393,8 @@ function classifyStreamDensity(notes: number, maxBeat: number): string {
   if (avg >= 1.5) return "High Jumpstream";     // 1.5~2 → High JS
   if (avg > 1.25 + 0.001) return "Mid Jumpstream"; // >1.25~1.5 → Mid JS
   if (Math.abs(avg - 1.25) < 0.001) return "Low Jumpstream"; // ≈1.25 → Low JS
-  if (avg >= 1.125) return "High Stream";       // 1.125~1.25 → 大乱
-  return "Single Stream";                        // <1.125 → 单乱
+  if (avg >= 1.125) return "High Stream";       // 1.125..1.25 -> high single stream
+  return "Single Stream";                        // < 1.125 -> single stream
 }
 
 /**

@@ -1,11 +1,11 @@
 // ============================================================
-// Vibro Analysis — 连4 + canVibro + SHFC classification
+// Vibro Analysis — bullet-4 + canVibro + SHFC classification
 // ============================================================
 
 import { lowerBound, upperBound } from "../utils/beatmapUtils.js";
 
 export interface VibroResult {
-  /** Total 连4 sequences found */
+  /** Total bullet-4 sequences found */
   totalLian4: number;
   /** Per-type breakdown */
   types: { S: number; H: number; F: number; C: number };
@@ -167,7 +167,7 @@ export function analyzeVibro(notes: Note[], bpm: number): VibroResult {
 
 // ========== Internal helpers ==========
 
-// ========== 连4 detection ==========
+// ========== bullet-4 detection ==========
 
 function findLian4(colNotes: number[][], beatMs: number) {
   const maxGap = beatMs / 4 + 10;

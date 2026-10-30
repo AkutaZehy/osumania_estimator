@@ -200,7 +200,7 @@ function computeBeatStructure(
  * Detect minijacks: same column on 2+ consecutive beat rows, BUT only if
  * no other column's note appears between the two rows.
  *
- * "连续的两行" = consecutive beat rows at 1/n resolution.
+ * "Two consecutive rows" = consecutive beat rows at 1/n resolution.
  * If a note from another column exists at 1/2n resolution between them,
  * the jack is broken → not a minijack.
  *

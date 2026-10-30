@@ -1,20 +1,21 @@
 // ============================================================
-// Stream (切) Class & Stream Stamina — run/interval extraction on
-// the dominant row cadence, per the 切 STA design sessions.
+// Stream Class & Stream Stamina — run/interval extraction on
+// the dominant row cadence, per the stream STA design sessions.
 //
 // Class  = "[eff] [Full|Dense|Broken|Mid] (JS|HS|SS)[, Jacky][, Technical]"
-//          Singles tag → "SS" (no modifier); Full+SS → "Running Man"
+//          Singles tag -> "SS" (no modifier); Full+SS -> "Running Man"
 //   link    = two ADJACENT rows sharing a column (no row between)
-//   cadence = greedy ±15% clusters of row intervals; dominant cluster +
-//             secondaries (share≥10%, eff≥60); dominance-first assignment
-//   间隔 buckets (k−1, k = dt/C on-grid, chain-intact only):
-//     0 = same-column adjacent rows (jack 混入), 1 = 2C (1/2 分度),
-//     2 = 3C (3/4 分度), 3 = 4C (1 分度), 4+ = wider
-//   非整数  = dt not on any qualifying cadence grid (±10%)
-//   tags: Jacky p0>1% · Full p1≥50% · Dense 45≤p1<50 ∧ p1+p2>80%
-//         · Broken 15≤p1<30% · Singles p1<15% · Technical p5≥15%
+//   cadence = greedy +/-15% clusters of row intervals; dominant cluster +
+//             secondaries (share>=10%, eff>=60); dominance-first assignment
+//   interval buckets (k-1, k = dt/C on-grid, chain-intact only):
+//     interval(0) = same-column adjacent rows (jack mixed in)
+//     interval(1) = 2C (8th note), interval(2) = 3C (dotted 8th),
+//     interval(3) = 4C (quarter note), interval(4+) = any wider gap (>= 4)
+//   off-grid = dt not on any qualifying cadence grid (+/-10%), bucket 5
+//   tags: Jacky p0>1% · Full p1>=50% · Dense 45<=p1<50 and p1+p2>80%
+//         · Broken 15<=p1<30% · Singles p1<15% · Technical p5>=15%
 //   JS/HS/SS (streamAnalysis classifyStreamType on-grid rows):
-//     3+押≥5% → HS · 2+押≥10% → JS · else SS
+//     3+ note rows >=5% -> HS · 2+ note rows >=10% -> JS · else SS
 // Stamina: max notes in any 10s / 30s sliding window (all note starts).
 // ============================================================
 
@@ -73,8 +74,8 @@ function rowCadenceClusters(rows: Row[]): Cluster[] {
 }
 
 /**
- * Compute the 切 Class label and 10s/30s stream stamina peaks.
- * speedRate scales note times into played time (DT=1.5 → faster).
+ * Compute the stream Class label and 10s/30s stream stamina peaks.
+ * speedRate scales note times into played time (DT=1.5 -> faster).
  */
 export function computeStreamClass(parsed: ParsedBeatmap, speedRate = 1): StreamClassInfo {
   const empty: StreamClassInfo = { className: "—", eff: 0, w10: 0, w30: 0 };
@@ -101,7 +102,7 @@ export function computeStreamClass(parsed: ParsedBeatmap, speedRate = 1): Stream
   };
 
   // ---- interval buckets per column ----
-  const bucket = [0, 0, 0, 0, 0, 0]; // 间隔0/1/2/3/4+/非整数
+  const bucket = [0, 0, 0, 0, 0, 0]; // interval(0)/1/2/3/4+ then off-grid (bucket 5)
   for (let col = 0; col < parsed.columnCount; col++) {
     const times: number[] = [];
     for (let i = 0; i < parsed.noteStarts.length; i++) {
@@ -130,7 +131,7 @@ export function computeStreamClass(parsed: ParsedBeatmap, speedRate = 1): Stream
         break;
       }
       if (done) continue;
-      // pass 2: k=1 (间隔0) — on some cadence grid AND truly adjacent rows
+      // pass 2: k=1 (interval(0)) — on some cadence grid AND truly adjacent rows
       let onGrid = false;
       for (const c of use) {
         if (Math.abs(dt - c.center) <= c.center * TOL) { onGrid = true; break; }
@@ -151,7 +152,7 @@ export function computeStreamClass(parsed: ParsedBeatmap, speedRate = 1): Stream
         if (!hasRowBetween) bucket[0]!++;
         continue;
       }
-      bucket[5]!++; // 非整数间隔
+      bucket[5]!++; // off-grid interval
     }
   }
   const tot = bucket.reduce((s, v) => s + v, 0);

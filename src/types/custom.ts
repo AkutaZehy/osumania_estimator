@@ -73,7 +73,7 @@ export interface JackClassInfo {
   sumNotes: number;
 }
 
-/** Stream Stamina peaks + 切 class label (streamClass.ts) */
+/** Stream Stamina peaks + stream class label (streamClass.ts) */
 export interface StreamClassInfo {
   /** e.g. "175 Mid JS, Technical"; "—" when no data */
   className: string;
@@ -216,17 +216,17 @@ export interface CustomMetrics {
   anchor: AnchorMetrics;
   /** Jack type class + burst/sum stamina */
   jackClass: JackClassInfo;
-  /** 切 class label + stream stamina peaks */
+  /** Stream class label + stream stamina peaks */
   streamClass: StreamClassInfo;
-  /** WDS0-like 三轴标记（密度-糊度-词，见 wdsMarker.ts） */
+  /** wds0-like three-axis marker (density-manip-word; see wdsMarker.ts) */
   wdsMarker: WdsMarker;
 }
 
-/** WDS0-like 三轴标记（wdsMarker.ts） */
+/** wds0-like three-axis marker (wdsMarker.ts) */
 export interface WdsMarker {
-  /** "Mid-Reg-Jack" 样式；"—" = 无法计算 */
+  /** "MR-Jack-W" form; "—" = not computable */
   jack: string;
   stream: string;
-  /** trill 型带 " trill?" 后缀 */
+  /** trill form carries a " trill?" suffix */
   speed: string;
 }
