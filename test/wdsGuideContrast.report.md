@@ -1,25 +1,24 @@
-# 大勿段标记对照 — 12 表
+# wds0 Dan marker comparison — 12 tables
 
-本表是《大勿段游玩指南及标准规范文件》+ 观景台实现的移植后调整版本，非忠实实现：
-锚值核心（帐篷失衡 U、多窗 min-A）来自 guanjing-scene 的 spike.js；分带与词表取自《指南》5.4；
-再按本仓语料与体感标注本地重校准。与原版的差异（链式锚值、图级 family 密度池、叠糊度 delta 线、
-乱密度 Stream 段 P50×2、弹对计数档）详见 test/wdsGuideContrast.test.ts 文件头。
+This set is a locally recalibrated version of the wds0 Dan play guide and standard specification plus the Guanjing Scene implementation; it is not a faithful port. The anchor core (tent imbalance U, multi-window min-A) comes from the guanjing-scene `spike.js`; the density bands and the letter vocabulary come from guide section 5.4; both were recalibrated against this repo's corpus and hands-on labels. The differences from the original (chain anchor, chart-level family density pools, jack manip delta line, speed density as stream-section P50 x2, bullet-count bands) are listed at the top of `test/wdsGuideContrast.test.ts`.
 
-标识含义：
-  叠 `XY-Jack[-W]`：X=叠池 P90 密度档（S<8/M[8,10)/L[10,12)/H≥12）；Y=糊度 delta 线
-    （<0.005 F / >0.01 P / 其余 R）；hand（三押≥20% 行）= Gluts → R + -W 后缀。
-  切 `XY-Stream`：X=Stream 池 P90 密度档（B<4.75 碎 / S<6 / M<7 / L<7.5 / H≥7.5）；
-    Y=链式锚值直套手册阈值（F≥1.11 / R[1.1,1.11) / P<1.1）。
-  乱 `XY-Speed[-T|-W]`：X=Stream 段 P50×2 密度档（S<8+1/256 / M<8.5 / L<9.5；≥9.5 → 前缀 O，
-    FRP 不显示）；Y=Stream 段每节弹对计数档（≤1/16 F / (1/16,1] R / (1,3] P / >3 P）；
-    -T 麻花（计数>3）/ -W 构造（计数≤1/16 且 A<1.115）后置。
-密度单位 = 4 行滑窗均值（主导 cadence 归一的 16 拍节），非手册的键密度/规范密度原文口径。
-osu星 = Sunny Rework 1×。段位：reform 1st..10th=1..10, Epsilon=15；regular Reg-N=N, Ex-N=10+N,
-Final=20；signicial Stage 0..XIV=0..14, Last Stage=15。
+Marker key:
+  Jack `XY-Jack[-W]`: X = jack-pool P90 density band (S<8 / M[8,10) / L[10,12) / H>=12);
+    Y = manip delta line (<0.005 F / >0.01 P / the rest R); hand rule (3+ rows >= 20%)
+    = Gluts -> R plus the -W suffix.
+  Stream `XY-Stream`: X = stream-pool P90 density band (B<4.75 broken / S<6 / M<7 /
+    L<7.5 / H>=7.5); Y = chain anchor against the guide thresholds
+    (F>=1.11 / R[1.1,1.11) / P<1.1).
+  Speed `XY-Speed[-T|-W]`: X = stream-section P50 x2 density band (S<8+1/256 / M<8.5 /
+    L<9.5; >=9.5 prefixes O and drops the F/R/P letter); Y = per-section bullet-count
+    band (<=1/16 F / (1/16,1] R / (1,3] P / >3 P); suffixes -T (twist, count > 3) and
+    -W (constructed, count <= 1/16 and A < 1.115).
+Density unit = 4-row sliding-window mean over 16-beat sections normalised to the dominant cadence, not the guide's raw key-density or normalised-density wording.
+osu star = Sunny Rework at 1x. Tiers: reform 1st..10th = 1..10, Epsilon = 15; regular Reg-N = N, Ex-N = 10+N, Final = 20; signicial Stage 0..XIV = 0..14, Last Stage = 15.
 
-## 叠 Reform Jack（reform dans/jack）
+## Jack — Reform (reform dans/jack)
 
-| 谱面 | BPM | osu星 | 段位 | 主叠键型 | 主切键型 | 大勿叠名称 | 切名称 | 乱名称 |
+| Chart | BPM | osu star | Tier | Dominant jack pattern | Dominant stream pattern | wds0 jack | wds0 stream | wds0 speed |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | Miracle Chance ~ 1st ~ (Ma | 186 | 2.46 | 1 | 47 Low Chordjack | 93 Mid JS, Jacky | MF-Jack | HF-Stream | O-Speed-W |
 | Flashes ~ 2nd ~ (Marathon) | 180 | 3.72 | 2 | Actually Not Jack | 180 SS | SF-Jack | MR-Stream | LP-Speed |
@@ -37,9 +36,9 @@ Final=20；signicial Stage 0..XIV=0..14, Last Stage=15。
 | Aquaris ~ Delta ~ (Maratho | 182 | 7.81 | 14 | 182 Mid Chordjack | 182 Mid HS, Jacky | MR-Jack-W | SR-Stream | O-Speed-W |
 | Rose Quartz ~ Epsilon ~ (M | 190 | 8.76 | 15 | 190 High Chordjack | 190 Mid HS, Jacky | LR-Jack-W | HR-Stream | O-Speed-W |
 
-## 叠 Regular Jack（regular dans/jack）
+## Jack — Regular (regular dans/jack)
 
-| 谱面 | BPM | osu星 | 段位 | 主叠键型 | 主切键型 | 大勿叠名称 | 切名称 | 乱名称 |
+| Chart | BPM | osu star | Tier | Dominant jack pattern | Dominant stream pattern | wds0 jack | wds0 stream | wds0 speed |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | Reg-0 Map-1 Ikitoshi ikeru | 174 | 2.52 | 0 | 87 Speedjack | 87 Broken JS, Jacky | SR-Jack | SR-Stream | O-Speed-T |
 | Reg-1 Map-1 Rex Incognito  | 145 | 3.52 | 1 | Actually Not Jack | 73 Full JS | SF-Jack | SF-Stream | O-Speed-W |
@@ -63,9 +62,9 @@ Final=20；signicial Stage 0..XIV=0..14, Last Stage=15。
 | Extra-9 crazy_tek (DJ Nori | 175 | 8.85 | 19 | 175 High Chordjack | 175 Mid HS, Jacky | LR-Jack-W | HR-Stream | O-Speed-W |
 | Extra-Final Infinity Heave | 180 | 9.72 | 20 | 180 High Chordjack | 180 Mid HS, Jacky | HR-Jack-W | BR-Stream | LP-Speed-T |
 
-## 切 Reform Stamina（reform dans/stamina）
+## Stream — Reform (reform dans/stamina)
 
-| 谱面 | BPM | osu星 | 段位 | 主叠键型 | 主切键型 | 大勿叠名称 | 切名称 | 乱名称 |
+| Chart | BPM | osu star | Tier | Dominant jack pattern | Dominant stream pattern | wds0 jack | wds0 stream | wds0 speed |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | Tommorow Perfume ~ 1st ~ ( | 170 | 3.45 | 1 | Actually Not Jack | 170 Broken JS | SF-Jack | MF-Stream | O-Speed-T |
 | Eternal Drain ~ 2nd ~ (Mar | 149 | 3.60 | 2 | Actually Not Jack | 149 Mid JS | SF-Jack | SP-Stream | O-Speed-T |
@@ -83,9 +82,9 @@ Final=20；signicial Stage 0..XIV=0..14, Last Stage=15。
 | Future Dominators ~ Delta  | 273 | 8.00 | 14 | Actually Not Jack | 273 Full HS | SF-Jack | MF-Stream | O-Speed-T |
 | Hitsugi to Futago ~ Epsilo | 215 | 8.88 | 15 | Actually Not Jack | 323 Mid JS | SF-Jack | LF-Stream | SP-Speed-T |
 
-## 切 Regular Stream（regular dans/stream）
+## Stream — Regular (regular dans/stream)
 
-| 谱面 | BPM | osu星 | 段位 | 主叠键型 | 主切键型 | 大勿叠名称 | 切名称 | 乱名称 |
+| Chart | BPM | osu star | Tier | Dominant jack pattern | Dominant stream pattern | wds0 jack | wds0 stream | wds0 speed |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | Reg-0 Map-4 White Eternity | 178 | 3.07 | 0 | 44 Speedjack | 89 Full JS | SF-Jack | MF-Stream | O-Speed-W |
 | Reg-1 Map-4 KING  dONGsHAO | 166 | 3.28 | 1 | 83 Speedjack | 83 Full HS | SF-Jack | HR-Stream | O-Speed-W |
@@ -109,9 +108,9 @@ Final=20；signicial Stage 0..XIV=0..14, Last Stage=15。
 | Extra-9 Deadly force - Put | 305 | 9.26 | 19 | Actually Not Jack | 305 Full HS | SF-Jack | HF-Stream | O-Speed |
 | Extra-Final Runengon  tera | 320 | 9.44 | 20 | Actually Not Jack | 320 Full HS | SF-Jack | LR-Stream | O-Speed-T |
 
-## 乱 Reform Speed（reform dans/speed）
+## Speed — Reform (reform dans/speed)
 
-| 谱面 | BPM | osu星 | 段位 | 主叠键型 | 主切键型 | 大勿叠名称 | 切名称 | 乱名称 |
+| Chart | BPM | osu star | Tier | Dominant jack pattern | Dominant stream pattern | wds0 jack | wds0 stream | wds0 speed |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | Shelter ~ 1st ~ (Marathon) | 100 | 3.17 | 1 | Actually Not Jack | 100 Dense HS | SF-Jack | SF-Stream | O-Speed |
 | Snow Storm ~ 2nd ~ (Marath | 180 | 3.51 | 2 | Actually Not Jack | 180 Broken SS | SF-Jack | SF-Stream | O-Speed |
@@ -131,9 +130,9 @@ Final=20；signicial Stage 0..XIV=0..14, Last Stage=15。
 | Volcanic ~ Delta ~ (Marath | 191 | 7.90 | 14 | 96 Anchor / Low Chordjack | 382 SS | MF-Jack | HP-Stream | LF-Speed-W |
 | Mario Paint ~ Epsilon ~ (M | 155 | 9.08 | 15 | Actually Not Jack | 465 SS | SF-Jack | LF-Stream | SF-Speed |
 
-## 乱 Regular Speed（regular dans/speed）
+## Speed — Regular (regular dans/speed)
 
-| 谱面 | BPM | osu星 | 段位 | 主叠键型 | 主切键型 | 大勿叠名称 | 切名称 | 乱名称 |
+| Chart | BPM | osu star | Tier | Dominant jack pattern | Dominant stream pattern | wds0 jack | wds0 stream | wds0 speed |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | Reg-0 Map-3 Yi Meng Qian X | 172 | 3.05 | 0 | Actually Not Jack | 86 Mid JS, Jacky, Technical | SF-Jack | BF-Stream | MP-Speed-T |
 | Reg-1 Map-3 Break  XingRen | 96 | 2.86 | 1 | Actually Not Jack | 192 Broken SS | SF-Jack | BF-Stream | SF-Speed |
@@ -157,9 +156,9 @@ Final=20；signicial Stage 0..XIV=0..14, Last Stage=15。
 | Extra-9 Shuuten  Hinaka_Yu | 222 | 9.08 | 19 | 111 Speedjack | 444 SS | SF-Jack | LR-Stream | LF-Speed-W |
 | Extra-Final Kizuato (1.3x) | 225 | 9.72 | 20 | Actually Not Jack | 450 SS | SF-Jack | SR-Stream | LR-Speed |
 
-## 技 Reform Tech（reform dans/tech）
+## Tech — Reform (reform dans/tech)
 
-| 谱面 | BPM | osu星 | 段位 | 主叠键型 | 主切键型 | 大勿叠名称 | 切名称 | 乱名称 |
+| Chart | BPM | osu star | Tier | Dominant jack pattern | Dominant stream pattern | wds0 jack | wds0 stream | wds0 speed |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | Want U 2 ~ 1st ~ (Marathon | 142 | 3.03 | 1 | Actually Not Jack | 71 Full HS | SF-Jack | LF-Stream | O-Speed-W |
 | Vermillion ~ 2nd ~ (Marath | 143 | 3.22 | 2 | Actually Not Jack | 143 Broken JS, Jacky | SF-Jack | SR-Stream | O-Speed-T |
@@ -177,9 +176,9 @@ Final=20；signicial Stage 0..XIV=0..14, Last Stage=15。
 | Crescent Moon Boss Battle  | 181 | 8.19 | 14 | Actually Not Jack | 334 SS, Technical | SF-Jack | SR-Stream | O-Speed-T |
 | Forgotten ~ Epsilon ~ (Mar | 350 | 9.13 | 15 | 175 Mid Chordjack | 175 Full HS | SF-Jack | MR-Stream | O-Speed-W |
 
-## 技 Regular Tech（regular dans/tech）
+## Tech — Regular (regular dans/tech)
 
-| 谱面 | BPM | osu星 | 段位 | 主叠键型 | 主切键型 | 大勿叠名称 | 切名称 | 乱名称 |
+| Chart | BPM | osu star | Tier | Dominant jack pattern | Dominant stream pattern | wds0 jack | wds0 stream | wds0 speed |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | Reg-0 Map-2 Rambling Pleat | 118 | 2.35 | 0 | Actually Not Jack | 118 Mid JS, Jacky, Technical | SF-Jack | SF-Stream | O-Speed |
 | Reg-1 Map-2 Koiseyo Otome  | 220 | 3.28 | 1 | 55 Speedjack | 110 Broken JS, Jacky | SF-Jack | MR-Stream | O-Speed-T |
@@ -203,9 +202,9 @@ Final=20；signicial Stage 0..XIV=0..14, Last Stage=15。
 | Extra-9 Nhelv  tera | 195 | 9.10 | 19 | 195 Low Chordjack | 195 Mid HS, Technical | SF-Jack | MF-Stream | O-Speed |
 | Extra-Final NEURO-CLOUD-9  | 200 | 9.86 | 20 | Actually Not Jack | 429 SS, Technical | SF-Jack | SR-Stream | LP-Speed |
 
-## 叠 Signicial（signicial dans/jack）
+## Jack — Signicial (signicial dans/jack)
 
-| 谱面 | BPM | osu星 | 段位 | 主叠键型 | 主切键型 | 大勿叠名称 | 切名称 | 乱名称 |
+| Chart | BPM | osu star | Tier | Dominant jack pattern | Dominant stream pattern | wds0 jack | wds0 stream | wds0 speed |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | Stage I - Dweller's Empty  | 120 | 2.20 | 1 | 60 Speedjack | 60 Mid HS, Jacky | SF-Jack | MF-Stream | O-Speed-W |
 | Stage II - Sayonara Hatsuk | 178 | 2.71 | 2 | 89 Speedjack | 89 Mid HS, Jacky | SR-Jack-W | LF-Stream | O-Speed |
@@ -223,9 +222,9 @@ Final=20；signicial Stage 0..XIV=0..14, Last Stage=15。
 | Stage XIV - Nijiiro Kekkai | 148 | 7.87 | 14 | 148 Anchor / High Chordjack | 148 Broken HS, Jacky | LR-Jack-W | HR-Stream | O-Speed-W |
 | Last Stage - GOODTEK | 190 | 8.81 | 15 | 190 High Chordjack | 190 Mid HS, Jacky | LR-Jack-W | HR-Stream | O-Speed-W |
 
-## 技 Signicial（signicial dans/tech）
+## Tech — Signicial (signicial dans/tech)
 
-| 谱面 | BPM | osu星 | 段位 | 主叠键型 | 主切键型 | 大勿叠名称 | 切名称 | 乱名称 |
+| Chart | BPM | osu star | Tier | Dominant jack pattern | Dominant stream pattern | wds0 jack | wds0 stream | wds0 speed |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | Stage I - Analogy (TV Size | 136 | 2.74 | 1 | 68 Speedjack | 136 Broken JS | SR-Jack | SR-Stream | O-Speed-T |
 | Stage II - IONIZATION | 185 | 2.57 | 2 | 92 Speedjack | 92 Mid SS | SF-Jack | SF-Stream | SF-Speed |
@@ -243,9 +242,9 @@ Final=20；signicial Stage 0..XIV=0..14, Last Stage=15。
 | Stage XIV - Sulfide (Cut V | 170 | 7.95 | 14 | 170 Speedjack | 340 Broken JS, Technical | SF-Jack | MR-Stream | LP-Speed-T |
 | Last Stage - POLYBIUS GB S | 238 | 8.72 | 15 | Actually Not Jack | 238 Mid HS, Technical | SF-Jack | MR-Stream | O-Speed-W |
 
-## 乱 Signicial（signicial dans/speed）
+## Speed — Signicial (signicial dans/speed)
 
-| 谱面 | BPM | osu星 | 段位 | 主叠键型 | 主切键型 | 大勿叠名称 | 切名称 | 乱名称 |
+| Chart | BPM | osu star | Tier | Dominant jack pattern | Dominant stream pattern | wds0 jack | wds0 stream | wds0 speed |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | Stage I - I Can Fly in The | 149 | 3.17 | 1 | Actually Not Jack | 149 Broken JS | SF-Jack | SP-Stream | O-Speed-T |
 | Stage II - AXION | 160 | 3.33 | 2 | Actually Not Jack | 160 SS | SF-Jack | BF-Stream | LP-Speed |
@@ -263,9 +262,9 @@ Final=20；signicial Stage 0..XIV=0..14, Last Stage=15。
 | Stage XIV - Tojita Sekai ( | 205 | 8.21 | 14 | Actually Not Jack | 410 SS | MF-Jack | HF-Stream | LF-Speed-W |
 | Last Stage - Disconnected  | 155 | 9.09 | 15 | Actually Not Jack | 466 SS | SF-Jack | SP-Stream | MF-Speed-W |
 
-## 切 Signicial（signicial dans/stamina）
+## Stream — Signicial (signicial dans/stamina)
 
-| 谱面 | BPM | osu星 | 段位 | 主叠键型 | 主切键型 | 大勿叠名称 | 切名称 | 乱名称 |
+| Chart | BPM | osu star | Tier | Dominant jack pattern | Dominant stream pattern | wds0 jack | wds0 stream | wds0 speed |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | Stage I - Dummy! - Remix ( | 140 | 2.95 | 1 | Actually Not Jack | 140 Broken JS | SF-Jack | SF-Stream | O-Speed-W |
 | Stage II - Sky is the Limi | 148 | 3.24 | 2 | Actually Not Jack | 148 Mid HS | SF-Jack | MF-Stream | O-Speed-T |
